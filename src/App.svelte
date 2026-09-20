@@ -55,7 +55,7 @@
 	/** Fenêtre d'alimentation : index sélectionné, et action en attente de confirmation. */
 	let powerOpen = $state(params.get('power') === '1');
 	let powerIndex = $state(0);
-	let powerPending = $state<PowerAction | null>(null);
+	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
 
 	const libraryGames = $derived(view(filter, sort));
 	const selected = $derived(
@@ -156,8 +156,10 @@
 	/** Fenêtre d'alimentation : liste, puis confirmation de l'action choisie. */
 	async function handlePower(action: Action) {
 		const count = powerPending ? 2 : POWER_ENTRIES.length;
-		if (action === 'up') powerIndex = Math.max(0, powerIndex - 1);
-		else if (action === 'down') powerIndex = Math.min(count - 1, powerIndex + 1);
+		// Les entrées sont côte à côte : gauche/droite d'abord, mais haut/bas
+		// répondent aussi — personne ne doit se retrouver coincé.
+		if (action === 'left' || action === 'up') powerIndex = Math.max(0, powerIndex - 1);
+		else if (action === 'right' || action === 'down') powerIndex = Math.min(count - 1, powerIndex + 1);
 		else if (action === 'cancel') {
 			if (powerPending) {
 				powerPending = null;
