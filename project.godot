@@ -1,0 +1,77 @@
+; Configuration du projet Interface Console
+; Généré et maintenu à la main : voir CLAUDE.md
+
+config_version=5
+
+[application]
+
+config/name="Interface Console"
+config/description="Interface de type console (10-foot UI) pilotée à la manette."
+run/main_scene="res://scenes/main.tscn"
+config/features=PackedStringArray("4.4", "GL Compatibility")
+config/icon="res://icon.svg"
+
+[autoload]
+
+GameLibrary="*res://scripts/autoload/game_library.gd"
+Launcher="*res://scripts/autoload/launcher.gd"
+InputManager="*res://scripts/autoload/input_manager.gd"
+Settings="*res://scripts/autoload/settings.gd"
+CoverFetcher="*res://scripts/autoload/cover_fetcher.gd"
+
+[display]
+
+window/size/viewport_width=1920
+window/size/viewport_height=1080
+window/size/mode=3
+window/stretch/mode="canvas_items"
+window/stretch/aspect="expand"
+
+[gui]
+
+theme/default_font_multichannel_signed_distance_field=true
+
+[input]
+
+ui_accept={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194309,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":4194310,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":32,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":0,"pressed":false)]
+}
+ui_cancel={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194305,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":1,"pressed":false)]
+}
+ui_options={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194332,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":4194305,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":4194306,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":77,"pressed":false),Object(InputEventKey,"device":-1,"physical_keycode":79,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":6,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":4,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":2,"pressed":false)]
+}
+ui_search={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194333,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":3,"pressed":false)]
+}
+ui_left={
+"deadzone": 0.65,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194319,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":13,"pressed":false),Object(InputEventJoypadMotion,"device":-1,"axis":0,"axis_value":-1.0)]
+}
+ui_right={
+"deadzone": 0.65,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194321,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":14,"pressed":false),Object(InputEventJoypadMotion,"device":-1,"axis":0,"axis_value":1.0)]
+}
+ui_up={
+"deadzone": 0.65,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194320,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":11,"pressed":false),Object(InputEventJoypadMotion,"device":-1,"axis":1,"axis_value":-1.0)]
+}
+ui_down={
+"deadzone": 0.65,
+"events": [Object(InputEventKey,"device":-1,"physical_keycode":4194322,"pressed":false),Object(InputEventJoypadButton,"device":-1,"button_index":12,"pressed":false),Object(InputEventJoypadMotion,"device":-1,"axis":1,"axis_value":1.0)]
+}
+ui_quit_shell={
+"deadzone": 0.5,
+"events": [Object(InputEventKey,"device":-1,"alt_pressed":true,"ctrl_pressed":true,"physical_keycode":81,"pressed":false)]
+}
+
+[rendering]
+
+renderer/rendering_method="gl_compatibility"
+renderer/rendering_method.mobile="gl_compatibility"
+environment/defaults/default_clear_color=Color(0.043, 0.047, 0.063, 1)

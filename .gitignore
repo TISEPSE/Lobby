@@ -1,0 +1,8 @@
+node_modules/
+dist/
+build/
+.godot/
+src-tauri/target/
+prototype-web/node_modules/
+prototype-web/dist/
+prototype-web/src-tauri/target/

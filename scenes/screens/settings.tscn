@@ -1,0 +1,112 @@
+[gd_scene load_steps=10 format=3]
+
+[ext_resource type="Script" path="res://scripts/screens/settings.gd" id="1_set"]
+[ext_resource type="PackedScene" path="res://scenes/components/top_bar.tscn" id="2_top"]
+[ext_resource type="PackedScene" path="res://scenes/components/folder_browser.tscn" id="3_browser"]
+[ext_resource type="PackedScene" path="res://scenes/components/virtual_keyboard.tscn" id="4_kb"]
+[ext_resource type="PackedScene" path="res://scenes/components/help_bar.tscn" id="5_help"]
+[ext_resource type="PackedScene" path="res://scenes/components/avatar_picker.tscn" id="6_avatar"]
+[ext_resource type="PackedScene" path="res://scenes/components/boot_video_picker.tscn" id="7_video"]
+[ext_resource type="PackedScene" path="res://scenes/components/scan_results.tscn" id="8_scan"]
+[ext_resource type="Script" path="res://scripts/components/metadata_fetcher.gd" id="9_meta"]
+
+[node name="Settings" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_set")
+
+[node name="Page" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Safe" type="MarginContainer" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Layout" type="VBoxContainer" parent="Safe"]
+layout_mode = 2
+
+[node name="TopBar" parent="Safe/Layout" instance=ExtResource("2_top")]
+layout_mode = 2
+
+[node name="PageScroll" type="ScrollContainer" parent="Safe/Layout"]
+layout_mode = 2
+size_flags_vertical = 3
+horizontal_scroll_mode = 0
+follow_focus = true
+
+[node name="PageContent" type="VBoxContainer" parent="Safe/Layout/PageScroll"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="GapTop" type="Control" parent="Safe/Layout/PageScroll/PageContent"]
+layout_mode = 2
+
+[node name="PageTitle" type="Label" parent="Safe/Layout/PageScroll/PageContent"]
+layout_mode = 2
+text = "Paramètres"
+
+[node name="GapTitle" type="Control" parent="Safe/Layout/PageScroll/PageContent"]
+layout_mode = 2
+
+[node name="Columns" type="HBoxContainer" parent="Safe/Layout/PageScroll/PageContent"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Categories" type="VBoxContainer" parent="Safe/Layout/PageScroll/PageContent/Columns"]
+layout_mode = 2
+
+[node name="Detail" type="PanelContainer" parent="Safe/Layout/PageScroll/PageContent/Columns"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="DetailMargin" type="MarginContainer" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail"]
+layout_mode = 2
+
+[node name="DetailLayout" type="VBoxContainer" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail/DetailMargin"]
+layout_mode = 2
+
+[node name="SectionTitle" type="Label" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail/DetailMargin/DetailLayout"]
+layout_mode = 2
+
+[node name="SectionHint" type="Label" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail/DetailMargin/DetailLayout"]
+layout_mode = 2
+autowrap_mode = 3
+
+[node name="GapRows" type="Control" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail/DetailMargin/DetailLayout"]
+layout_mode = 2
+
+[node name="Rows" type="VBoxContainer" parent="Safe/Layout/PageScroll/PageContent/Columns/Detail/DetailMargin/DetailLayout"]
+layout_mode = 2
+size_flags_horizontal = 3
+
+[node name="Status" type="Label" parent="Safe/Layout"]
+layout_mode = 2
+
+[node name="HelpBar" parent="Safe/Layout" instance=ExtResource("5_help")]
+layout_mode = 2
+
+[node name="FolderBrowser" parent="." instance=ExtResource("3_browser")]
+
+[node name="Keyboard" parent="." instance=ExtResource("4_kb")]
+
+[node name="AvatarPicker" parent="." instance=ExtResource("6_avatar")]
+
+[node name="BootVideoPicker" parent="." instance=ExtResource("7_video")]
+
+[node name="ScanResults" parent="." instance=ExtResource("8_scan")]
+
+[node name="MetadataFetcher" type="Node" parent="."]
+script = ExtResource("9_meta")

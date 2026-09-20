@@ -1,0 +1,79 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/components/virtual_keyboard.gd" id="1_kb"]
+
+[node name="VirtualKeyboard" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+visible = false
+script = ExtResource("1_kb")
+
+[node name="Scrim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Dialog" type="Panel" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+offset_left = -560.0
+offset_top = -340.0
+offset_right = 560.0
+offset_bottom = 340.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Dialog"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Dialog/Margin"]
+layout_mode = 2
+
+[node name="Title" type="Label" parent="Dialog/Margin/Content"]
+layout_mode = 2
+
+[node name="Field" type="Panel" parent="Dialog/Margin/Content"]
+custom_minimum_size = Vector2(0, 78)
+layout_mode = 2
+
+[node name="Text" type="Label" parent="Dialog/Margin/Content/Field"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+vertical_alignment = 1
+clip_text = true
+
+[node name="Gap" type="Control" parent="Dialog/Margin/Content"]
+layout_mode = 2
+
+[node name="Keys" type="GridContainer" parent="Dialog/Margin/Content"]
+layout_mode = 2
+size_flags_horizontal = 4
+columns = 10
+
+[node name="GapActions" type="Control" parent="Dialog/Margin/Content"]
+layout_mode = 2
+
+[node name="Actions" type="HBoxContainer" parent="Dialog/Margin/Content"]
+layout_mode = 2
+size_flags_horizontal = 4
+
+[node name="Help" type="Label" parent="Dialog/Margin/Content"]
+layout_mode = 2
+horizontal_alignment = 1

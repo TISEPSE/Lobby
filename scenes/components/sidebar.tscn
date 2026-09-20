@@ -1,0 +1,107 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/components/sidebar.gd" id="1_side"]
+
+[node name="Sidebar" type="Control"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+script = ExtResource("1_side")
+
+[node name="Scrim" type="ColorRect" parent="."]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Panel" type="Panel" parent="."]
+anchors_preset = 9
+anchor_bottom = 1.0
+offset_right = 420.0
+grow_horizontal = 1
+grow_vertical = 2
+
+[node name="Margin" type="MarginContainer" parent="Panel"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+
+[node name="Content" type="VBoxContainer" parent="Panel/Margin"]
+layout_mode = 2
+
+[node name="Header" type="HBoxContainer" parent="Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="Avatar" type="Panel" parent="Panel/Margin/Content/Header"]
+custom_minimum_size = Vector2(56, 56)
+layout_mode = 2
+size_flags_vertical = 4
+clip_children = 2
+
+[node name="AvatarImage" type="TextureRect" parent="Panel/Margin/Content/Header/Avatar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 6
+visible = false
+mouse_filter = 2
+
+[node name="Initial" type="Label" parent="Panel/Margin/Content/Header/Avatar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "J"
+
+[node name="Identity" type="VBoxContainer" parent="Panel/Margin/Content/Header"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Name" type="Label" parent="Panel/Margin/Content/Header/Identity"]
+layout_mode = 2
+text = "Joueur"
+
+[node name="Stat" type="Label" parent="Panel/Margin/Content/Header/Identity"]
+layout_mode = 2
+
+[node name="GapHeader" type="Control" parent="Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="Entries" type="VBoxContainer" parent="Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="Spacer" type="Control" parent="Panel/Margin/Content"]
+layout_mode = 2
+size_flags_vertical = 3
+mouse_filter = 2
+
+[node name="Status" type="HBoxContainer" parent="Panel/Margin/Content"]
+layout_mode = 2
+
+[node name="PadIcon" type="TextureRect" parent="Panel/Margin/Content/Status"]
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="PadLabel" type="Label" parent="Panel/Margin/Content/Status"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Help" type="Label" parent="Panel/Margin/Content"]
+layout_mode = 2
+text = "B  Fermer"

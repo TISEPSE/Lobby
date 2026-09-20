@@ -1,0 +1,117 @@
+[gd_scene load_steps=2 format=3]
+
+[ext_resource type="Script" path="res://scripts/components/top_bar.gd" id="1_top"]
+
+[node name="TopBar" type="Control"]
+custom_minimum_size = Vector2(0, 72)
+mouse_filter = 2
+script = ExtResource("1_top")
+
+[node name="Left" type="HBoxContainer" parent="."]
+anchors_preset = 4
+anchor_top = 0.5
+anchor_bottom = 0.5
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Avatar" type="Panel" parent="Left"]
+custom_minimum_size = Vector2(64, 64)
+layout_mode = 2
+size_flags_vertical = 4
+clip_children = 2
+
+[node name="AvatarImage" type="TextureRect" parent="Left/Avatar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+expand_mode = 1
+stretch_mode = 6
+visible = false
+mouse_filter = 2
+
+[node name="Initial" type="Label" parent="Left/Avatar"]
+anchors_preset = 15
+anchor_right = 1.0
+anchor_bottom = 1.0
+grow_horizontal = 2
+grow_vertical = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+text = "J"
+
+[node name="Identity" type="VBoxContainer" parent="Left"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="NameRow" type="HBoxContainer" parent="Left/Identity"]
+layout_mode = 2
+
+[node name="Profile" type="Label" parent="Left/Identity/NameRow"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "Joueur"
+
+[node name="Badge" type="PanelContainer" parent="Left/Identity/NameRow"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="BadgeLabel" type="Label" parent="Left/Identity/NameRow/Badge"]
+layout_mode = 2
+horizontal_alignment = 1
+vertical_alignment = 1
+
+[node name="StatRow" type="HBoxContainer" parent="Left/Identity"]
+layout_mode = 2
+
+[node name="StatIcon" type="TextureRect" parent="Left/Identity/StatRow"]
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="Stat" type="Label" parent="Left/Identity/StatRow"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Center" type="HBoxContainer" parent="."]
+anchors_preset = 8
+anchor_left = 0.5
+anchor_top = 0.5
+anchor_right = 0.5
+anchor_bottom = 0.5
+grow_horizontal = 2
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Right" type="HBoxContainer" parent="."]
+anchors_preset = 6
+anchor_left = 1.0
+anchor_top = 0.5
+anchor_right = 1.0
+anchor_bottom = 0.5
+grow_horizontal = 0
+grow_vertical = 2
+mouse_filter = 2
+
+[node name="Pads" type="HBoxContainer" parent="Right"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="PadIcon" type="TextureRect" parent="Right/Pads"]
+layout_mode = 2
+size_flags_vertical = 4
+expand_mode = 1
+stretch_mode = 5
+mouse_filter = 2
+
+[node name="PadCount" type="Label" parent="Right/Pads"]
+layout_mode = 2
+size_flags_vertical = 4
+
+[node name="Clock" type="Label" parent="Right"]
+layout_mode = 2
+size_flags_vertical = 4
+text = "00:00"

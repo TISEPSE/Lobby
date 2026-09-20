@@ -1,0 +1,34 @@
+# Session « console » : démarre l'interface sur le premier terminal, comme le
+# fait gamescope-session sur le Steam Deck.
+#
+#   sudo cp interface-console.service /etc/systemd/system/
+#   sudo systemctl enable --now interface-console.service
+#
+# Remplacer User= et Group= par le compte qui doit lancer les jeux.
+
+[Unit]
+Description=Interface Console (session Gamescope)
+After=systemd-user-sessions.service plymouth-quit-wait.service
+Conflicts=getty@tty1.service
+After=getty@tty1.service
+
+[Service]
+Type=simple
+User=joueur
+Group=joueur
+PAMName=login
+TTYPath=/dev/tty1
+TTYReset=yes
+TTYVHangup=yes
+StandardInput=tty
+StandardOutput=journal
+StandardError=journal
+Environment=XDG_RUNTIME_DIR=/run/user/1000
+ExecStart=/usr/local/bin/interface-console
+# Une sortie volontaire (menu Alimentation > Quitter l'interface) ne doit pas
+# relancer l'interface en boucle : on ne redémarre que sur un vrai plantage.
+Restart=on-failure
+RestartSec=2
+
+[Install]
+WantedBy=graphical.target
