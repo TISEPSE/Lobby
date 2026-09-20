@@ -27,7 +27,7 @@
 	const SECTIONS: Section[] = ['home', 'library', 'search', 'settings'];
 	const FILTERS: Filter[] = ['all', 'favorites', 'recent'];
 	const SORTS: Sort[] = ['title', 'recent', 'playtime'];
-	const COLUMNS = 7;
+	const COLUMNS = 8;
 
 	/* Outil de développement, comme le `--capture` de la version Godot :
 	   `?screen=detail&index=3` ouvre directement un écran pour la capture. */
@@ -206,6 +206,14 @@
 		if (powerOpen) return handlePower(action);
 		// Le bouton Options ouvre l'alimentation depuis n'importe quel écran.
 		if (action === 'menu') return openPower();
+		// L1 / R1 passent d'un onglet à l'autre sans remonter dans la barre.
+		if (action === 'prev' || action === 'next') {
+			const step = action === 'next' ? 1 : -1;
+			const at = SECTIONS.indexOf(section);
+			opened = null;
+			optionsOpen = false;
+			return goToSection(SECTIONS[Math.min(SECTIONS.length - 1, Math.max(0, at + step))]);
+		}
 		if (optionsOpen) return handleOptions(action);
 		if (opened) return handleDetail(action);
 		if (onTabs) return handleTabs(action);
@@ -248,10 +256,10 @@
 						label: isFavorite(selected.id) ? 'Retirer des favoris' : 'Ajouter aux favoris',
 						icon: 'star',
 					},
-					{ id: 'art', label: "Changer l'affiche", icon: 'image', hint: 'Jaquette, artwork ou bannière' },
-					{ id: 'update', label: 'Mettre à jour', icon: 'download', hint: 'Confié à Steam' },
-					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart', hint: 'Confié à Steam' },
-					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash', hint: 'Confié à Steam' },
+					{ id: 'art', label: "Changer l'affiche", icon: 'image' },
+					{ id: 'update', label: 'Mettre à jour', icon: 'download' },
+					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
+					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
 				]
 			: []
 	);

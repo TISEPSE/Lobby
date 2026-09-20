@@ -17,7 +17,10 @@ export type Action =
 	| 'options'
 	| 'search'
 	/** Bouton Options (PlayStation) / Menu (Xbox) : l'alimentation. */
-	| 'menu';
+	| 'menu'
+	/** Gâchettes hautes L1/LB et R1/RB : on change d'onglet. */
+	| 'prev'
+	| 'next';
 
 const ENGAGE = 0.65;
 const RELEASE = 0.4;
@@ -30,6 +33,8 @@ const BUTTONS: Record<number, Action> = {
 	1: 'cancel',
 	2: 'options',
 	3: 'search',
+	4: 'prev',
+	5: 'next',
 	9: 'menu',
 	12: 'up',
 	13: 'down',
@@ -49,6 +54,10 @@ const KEYS: Record<string, Action> = {
 	x: 'options',
 	y: 'search',
 	m: 'menu',
+	PageUp: 'prev',
+	PageDown: 'next',
+	a: 'prev',
+	e: 'next',
 };
 
 type Listener = (action: Action) => void;

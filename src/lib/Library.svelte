@@ -29,18 +29,19 @@
 </script>
 
 <section class="library">
-	<h1>Bibliothèque</h1>
-
-	<div class="tabs">
-		{#each filters as entry}
-			<span class="tab" class:active={entry === filter}>{FILTER_LABELS[entry]}</span>
-		{/each}
-	</div>
-
-	<p class="count">
-		{FILTER_LABELS[filter]} : {games.length}
-		<span class="sort">Trier par : {SORT_LABELS[sort]}</span>
-	</p>
+	<!-- Tout l'en-tête tient sur une ligne : la place gagnée va à la mosaïque. -->
+	<header class="head">
+		<h1>Bibliothèque</h1>
+		<div class="tabs">
+			{#each filters as entry}
+				<span class="tab" class:active={entry === filter}>{FILTER_LABELS[entry]}</span>
+			{/each}
+		</div>
+		<p class="count">
+			{games.length} jeux
+			<span class="sort">· Trier par : {SORT_LABELS[sort]}</span>
+		</p>
+	</header>
 
 	<div class="viewport">
 		<div class="grid" style="--columns: {columns}; --row: {row}">
@@ -67,21 +68,27 @@
 		z-index: 1;
 		display: flex;
 		flex-direction: column;
-		height: calc(100% - 110px);
-		padding: 2vh var(--safe-x) var(--safe-y);
+		height: 100%;
+		padding: 1.5vh var(--safe-x) calc(var(--safe-y) + 30px);
+	}
+
+	.head {
+		display: flex;
+		align-items: baseline;
+		gap: 30px;
+		margin-bottom: 18px;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(32px, 3.4vw, 56px);
+		font-size: clamp(28px, 2.4vw, 40px);
 		font-weight: 700;
 		letter-spacing: -0.02em;
 	}
 
 	.tabs {
 		display: flex;
-		gap: 26px;
-		margin-top: 12px;
+		gap: 24px;
 	}
 
 	.tab {
@@ -97,9 +104,7 @@
 	}
 
 	.count {
-		display: flex;
-		gap: 28px;
-		margin: 14px 0 18px;
+		margin: 0 0 0 auto;
 		font-size: 17px;
 		color: var(--text-dim);
 	}

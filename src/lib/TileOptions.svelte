@@ -30,36 +30,52 @@
 </div>
 
 <style>
-	/* La largeur est animée : ce sont les tuiles suivantes qui s'écartent. */
+	/* Le panneau est un tiroir qui sort de la tuile : il se colle à son bord
+	   droit, reprend sa hauteur, son contour et ses coins, et pousse les tuiles
+	   suivantes en animant sa largeur. Tuile et panneau forment un seul bloc. */
 	.panel {
 		flex: 0 0 auto;
 		width: 0;
 		overflow: hidden;
-		align-self: stretch;
+		/* Annule l'espacement de la rangée, la marge d'écartement de la tuile
+		   sélectionnée, et le contour : la jonction devient invisible. */
+		margin-left: calc(
+			-18px - var(--tile) * (var(--tile-focus-scale) - 1) / 2 - 3px
+		);
+		height: calc(var(--tile) * 1.5 * var(--tile-focus-scale));
+		align-self: flex-end;
+		border-radius: 0 var(--radius) var(--radius) 0;
+		background: linear-gradient(100deg, #10141a 0%, #0c0f14 100%);
+		box-shadow:
+			inset 3px 0 0 rgba(34, 211, 102, 0.25),
+			0 0 0 3px var(--accent),
+			0 0 34px 6px var(--accent-soft),
+			0 26px 60px rgba(0, 0, 0, 0.6);
 		transition: width var(--normal) var(--ease);
 	}
 
 	.panel.open {
-		width: 320px;
+		width: 330px;
 	}
 
 	.inner {
 		display: flex;
 		flex-direction: column;
 		justify-content: center;
-		gap: 8px;
-		width: 320px;
+		gap: 10px;
+		width: 330px;
 		height: 100%;
-		padding: 14px 14px 14px 20px;
+		/* Décalé de la largeur du raccord : le contenu commence après la tuile. */
+		padding: 16px 16px 16px 26px;
 	}
 
 	.row {
 		display: flex;
 		align-items: center;
 		gap: 14px;
-		padding: 12px 14px;
+		padding: 11px 14px;
 		border-radius: var(--radius);
-		background: rgba(255, 255, 255, 0.05);
+		background: rgba(255, 255, 255, 0.04);
 		transition:
 			background var(--fast) var(--ease),
 			box-shadow var(--fast) var(--ease),
@@ -69,17 +85,15 @@
 	.row.selected {
 		background: rgba(255, 255, 255, 0.12);
 		transform: translateX(3px);
-		box-shadow:
-			0 0 0 2px var(--accent),
-			0 0 22px 4px var(--accent-soft);
+		box-shadow: inset 0 0 0 2px var(--accent);
 	}
 
 	.mark {
 		display: grid;
 		place-items: center;
 		flex: 0 0 auto;
-		width: 40px;
-		height: 40px;
+		width: 38px;
+		height: 38px;
 		border-radius: 50%;
 		background: rgba(255, 255, 255, 0.07);
 	}
@@ -89,8 +103,8 @@
 	}
 
 	.mark img {
-		width: 20px;
-		height: 20px;
+		width: 19px;
+		height: 19px;
 		opacity: 0.9;
 	}
 

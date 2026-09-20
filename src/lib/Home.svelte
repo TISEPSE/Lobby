@@ -39,6 +39,7 @@
 			<button
 				class="tile"
 				class:selected={i === index}
+				class:joined={i === index && optionsOpen}
 				style="--i: {i}"
 				aria-current={i === index}
 			>
@@ -129,6 +130,13 @@
 			box-shadow var(--normal) var(--ease),
 			margin var(--normal) var(--ease);
 		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
+	}
+
+	/* Quand le tiroir d'options est sorti, la tuile lui donne la main : plus
+	   d'arrondi ni de contour de ce côté, les deux ne font qu'un. */
+	.tile.joined {
+		border-top-right-radius: 0;
+		border-bottom-right-radius: 0;
 	}
 
 	/* La tuile agrandie écarte ses voisines au lieu de passer par-dessus. */
