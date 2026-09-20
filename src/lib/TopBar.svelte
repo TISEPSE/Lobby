@@ -2,9 +2,10 @@
 	import type { Section } from './types';
 
 	/**
-	 * Barre du haut : profil à gauche, sections au centre, manettes et heure à
-	 * droite. Tout ce qui s'y affiche vient de données réelles — pas
-	 * d'indicateur décoratif.
+	 * Barre du haut, dans l'esprit d'un tableau de bord de console : profil à
+	 * gauche, sections en pastilles au centre, état de la machine à droite.
+	 * Tout ce qui s'y affiche vient de données réelles — pas d'indicateur
+	 * décoratif.
 	 */
 	let {
 		section,
@@ -24,12 +25,14 @@
 		avatar?: string;
 	} = $props();
 
-	const SECTIONS: { id: Section; label: string }[] = [
-		{ id: 'home', label: 'Accueil' },
-		{ id: 'library', label: 'Bibliothèque' },
-		{ id: 'search', label: 'Recherche' },
-		{ id: 'settings', label: 'Réglages' },
+	const SECTIONS: { id: Section; label: string; icon: string }[] = [
+		{ id: 'home', label: 'Accueil', icon: 'home' },
+		{ id: 'library', label: 'Bibliothèque', icon: 'library' },
+		{ id: 'search', label: 'Recherche', icon: 'search' },
+		{ id: 'settings', label: 'Réglages', icon: 'settings' },
 	];
+
+	const current = $derived(SECTIONS.find((entry) => entry.id === section));
 </script>
 
 <header class="top">
@@ -41,21 +44,28 @@
 				{profileName.charAt(0).toUpperCase()}
 			{/if}
 		</div>
-		<div>
+		<div class="identity">
 			<div class="name">{profileName}</div>
-			<div class="stat">{gamesCount} jeux installés</div>
+			<div class="stat">{gamesCount} jeux</div>
 		</div>
 	</div>
 
 	<nav class="sections" class:focused>
 		{#each SECTIONS as entry}
-			<span class="section" class:active={entry.id === section}>{entry.label}</span>
+			<span class="pill" class:active={entry.id === section} title={entry.label}>
+				<img src="/assets/icons/{entry.icon}.svg" alt={entry.label} />
+			</span>
 		{/each}
+		<!-- Le nom de la section ne s'affiche que lorsque la barre a la main :
+		     sinon il double le titre de l'écran juste en dessous. -->
+		{#if focused && current}
+			<span class="current">{current.label}</span>
+		{/if}
 	</nav>
 
 	<div class="right">
 		{#if pads > 0}
-			<span class="pads">
+			<span class="chip">
 				<img src="/assets/icons/controller.svg" alt="" />
 				{pads}
 			</span>
@@ -72,7 +82,8 @@
 		align-items: center;
 		justify-content: space-between;
 		gap: 32px;
-		padding: var(--safe-y) var(--safe-x) 0;
+		height: 110px;
+		padding: 0 var(--safe-x);
 	}
 
 	.profile {
@@ -84,14 +95,16 @@
 	.avatar {
 		display: grid;
 		place-items: center;
-		width: 46px;
-		height: 46px;
+		width: 52px;
+		height: 52px;
 		overflow: hidden;
 		border-radius: 50%;
 		background: var(--accent);
 		color: #06210f;
-		font-size: 24px;
+		font-size: 26px;
 		font-weight: 700;
+		/* Anneau fin autour de l'avatar : le repère « profil » d'une console. */
+		box-shadow: 0 0 0 3px rgba(34, 211, 102, 0.22);
 	}
 
 	.avatar img {
@@ -100,8 +113,12 @@
 		object-fit: cover;
 	}
 
+	.identity {
+		line-height: 1.25;
+	}
+
 	.name {
-		font-size: 22px;
+		font-size: 21px;
 		font-weight: 600;
 	}
 
@@ -110,51 +127,90 @@
 		color: var(--text-dim);
 	}
 
+	/* Les sections sont des pastilles, comme sur un tableau de bord de console. */
 	.sections {
 		display: flex;
-		gap: 28px;
-		padding: 6px 18px;
-		border-radius: var(--radius);
-		transition: background var(--fast) var(--ease);
+		align-items: center;
+		gap: 14px;
+		padding: 8px 14px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.04);
+		transition:
+			background var(--fast) var(--ease),
+			box-shadow var(--fast) var(--ease);
 	}
 
-	/* La barre n'a de halo que lorsque la sélection y est montée. */
 	.sections.focused {
-		background: var(--surface);
+		background: rgba(255, 255, 255, 0.09);
 		box-shadow: 0 0 0 2px var(--accent-soft);
 	}
 
-	.section {
-		font-size: 17px;
-		color: var(--text-dim);
-		padding-bottom: 6px;
-		border-bottom: 2px solid transparent;
-		transition: color var(--fast) var(--ease);
+	.pill {
+		display: grid;
+		place-items: center;
+		width: 46px;
+		height: 46px;
+		border-radius: 50%;
+		background: rgba(255, 255, 255, 0.06);
+		transition:
+			background var(--fast) var(--ease),
+			transform var(--fast) var(--ease);
 	}
 
-	.section.active {
-		color: var(--text);
-		border-color: var(--accent);
+	.pill img {
+		width: 24px;
+		height: 24px;
+		opacity: 0.7;
+		transition: opacity var(--fast) var(--ease);
+	}
+
+	.pill.active {
+		background: var(--accent);
+		transform: scale(1.06);
+	}
+
+	.pill.active img {
+		opacity: 1;
+		/* L'icône passe en sombre sur la pastille d'accent. */
+		filter: brightness(0) saturate(100%) invert(8%) sepia(24%) saturate(1200%) hue-rotate(96deg);
+	}
+
+	.current {
+		padding: 0 10px 0 6px;
+		font-size: 17px;
+		font-weight: 600;
+		white-space: nowrap;
+		animation: reveal 180ms var(--ease) both;
+	}
+
+	@keyframes reveal {
+		from {
+			opacity: 0;
+			transform: translateX(-6px);
+		}
 	}
 
 	.right {
 		display: flex;
 		align-items: center;
-		gap: 20px;
+		gap: 16px;
 	}
 
-	.pads {
+	.chip {
 		display: flex;
 		align-items: center;
 		gap: 8px;
-		font-size: 18px;
+		padding: 7px 14px;
+		border-radius: 999px;
+		background: rgba(255, 255, 255, 0.06);
+		font-size: 16px;
 		color: var(--text-dim);
 	}
 
-	.pads img {
-		width: 24px;
-		height: 24px;
-		opacity: 0.7;
+	.chip img {
+		width: 20px;
+		height: 20px;
+		opacity: 0.75;
 	}
 
 	.clock {

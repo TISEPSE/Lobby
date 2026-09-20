@@ -16,7 +16,7 @@
 	const SECTIONS: Section[] = ['home', 'library', 'search', 'settings'];
 	const FILTERS: Filter[] = ['all', 'favorites', 'recent'];
 	const SORTS: Sort[] = ['title', 'recent', 'playtime'];
-	const COLUMNS = 6;
+	const COLUMNS = 7;
 
 	/* Outil de développement, comme le `--capture` de la version Godot :
 	   `?screen=detail&index=3` ouvre directement un écran pour la capture. */

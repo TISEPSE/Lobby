@@ -53,7 +53,8 @@
 		flex-direction: column;
 		justify-content: flex-end;
 		height: 100%;
-		padding: 0 0 var(--safe-y);
+		/* On dégage la barre d'aide : la rangée ne doit jamais venir dessous. */
+		padding: 0 0 calc(var(--safe-y) + 46px);
 	}
 
 	.headline {

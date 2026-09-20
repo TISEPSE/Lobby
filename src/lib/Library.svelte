@@ -115,15 +115,17 @@
 	}
 
 	.grid {
-		/* La taille part de la hauteur : deux lignes entières doivent tenir dans
-		   la fenêtre, sinon on ne verrait qu'une rangée et demie. La largeur en
-		   découle (jaquettes au format 2/3). */
-		--gap: 26px;
-		--row-height: 27vh;
+		/* Les colonnes remplissent la largeur : l'espacement reste constant, la
+		   taille des jaquettes s'ajuste. La hauteur d'une ligne s'en déduit
+		   (format 2/3) et sert au défilement, ligne par ligne. */
+		--gap: 18px;
+		--col-width: calc(
+			(100vw - 2 * var(--safe-x) - (var(--columns) - 1) * var(--gap)) / var(--columns)
+		);
+		--row-height: calc(var(--col-width) * 1.5);
 
 		display: grid;
-		grid-template-columns: repeat(var(--columns), calc(var(--row-height) * 2 / 3));
-		justify-content: space-between;
+		grid-template-columns: repeat(var(--columns), 1fr);
 		gap: var(--gap);
 		transform: translateY(calc(var(--row) * -1 * (var(--row-height) + var(--gap))));
 		transition: transform var(--normal) var(--ease);
