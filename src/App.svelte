@@ -42,7 +42,7 @@
 	let opened = $state<Game | null>(wanted === 'detail' ? (games[wantedIndex] ?? null) : null);
 
 	let homeIndex = $state(wantedIndex);
-	let libraryIndex = $state(0);
+	let libraryIndex = $state(wanted === 'library' ? wantedIndex : 0);
 	let filter = $state<Filter>('all');
 	let sort = $state<Sort>('title');
 

@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { coverFallback } from './images';
-	import { coverOf, ensureDetails } from './steam.svelte.js';
+	import Cover from './Cover.svelte';
 	import { FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
 
 	/**
@@ -47,14 +46,7 @@
 		<div class="grid" style="--columns: {columns}; --row: {row}">
 			{#each games as game, i (game.id)}
 				<button class="tile" class:selected={i === index}>
-					<img
-						src={coverOf(game.appid, game.cover)}
-						alt={game.title}
-						onerror={(e) => {
-							ensureDetails(game.appid);
-							coverFallback(e, game.appid);
-						}}
-					/>
+					<Cover {game} />
 					{#if isFavorite(game.id)}
 						<img class="badge" src="/assets/icons/star.svg" alt="Favori" />
 					{/if}
@@ -116,10 +108,14 @@
 		opacity: 0.8;
 	}
 
-	/* La fenêtre rogne ce qui dépasse ; la grille se décale ligne par ligne. */
+	/* La fenêtre rogne ce qui dépasse ; la grille se décale ligne par ligne.
+	   La marge négative compensée par le padding laisse respirer la tuile
+	   agrandie : sans elle, la sélection était coupée sur les bords. */
 	.viewport {
 		flex: 1;
 		overflow: hidden;
+		margin: -16px;
+		padding: 16px;
 	}
 
 	.grid {
@@ -158,13 +154,6 @@
 		box-shadow:
 			0 0 30px 6px var(--accent-soft),
 			0 22px 50px rgba(0, 0, 0, 0.6);
-	}
-
-	.tile img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
 	}
 
 	.badge {

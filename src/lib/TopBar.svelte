@@ -32,7 +32,6 @@
 		{ id: 'settings', label: 'Réglages', icon: 'settings' },
 	];
 
-	const current = $derived(SECTIONS.find((entry) => entry.id === section));
 </script>
 
 <header class="top">
@@ -56,11 +55,6 @@
 				<img src="/assets/icons/{entry.icon}.svg" alt={entry.label} />
 			</span>
 		{/each}
-		<!-- Le nom de la section ne s'affiche que lorsque la barre a la main :
-		     sinon il double le titre de l'écran juste en dessous. -->
-		{#if focused && current}
-			<span class="current">{current.label}</span>
-		{/if}
 	</nav>
 
 	<div class="right">
@@ -175,20 +169,6 @@
 		filter: brightness(0) saturate(100%) invert(8%) sepia(24%) saturate(1200%) hue-rotate(96deg);
 	}
 
-	.current {
-		padding: 0 10px 0 6px;
-		font-size: 17px;
-		font-weight: 600;
-		white-space: nowrap;
-		animation: reveal 180ms var(--ease) both;
-	}
-
-	@keyframes reveal {
-		from {
-			opacity: 0;
-			transform: translateX(-6px);
-		}
-	}
 
 	.right {
 		display: flex;

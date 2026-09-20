@@ -1,7 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { coverFallback } from './images';
-	import { coverOf, ensureDetails } from './steam.svelte.js';
+	import Cover from './Cover.svelte';
 
 	/**
 	 * Accueil : artwork plein écran, rangée horizontale de jaquettes. La tuile
@@ -30,15 +29,7 @@
 				style="--i: {i}"
 				aria-current={i === index}
 			>
-				<img
-					src={coverOf(game.appid, game.cover)}
-					alt={game.title}
-					onerror={(e) => {
-						/* L'adresse connue ne répond pas : Rust va chercher la bonne. */
-						ensureDetails(game.appid);
-						coverFallback(e, game.appid);
-					}}
-				/>
+				<Cover {game} />
 				<span class="caption">{game.title}</span>
 			</button>
 		{/each}
@@ -132,13 +123,6 @@
 		box-shadow:
 			0 0 34px 6px var(--accent-soft),
 			0 26px 60px rgba(0, 0, 0, 0.6);
-	}
-
-	.tile img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		display: block;
 	}
 
 	.caption {
