@@ -6,6 +6,8 @@
 	import Library from './lib/Library.svelte';
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
+	import PowerMenu from './lib/PowerMenu.svelte';
+	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
 	import { games, view, toggleFavorite, isFavorite, type Filter, type Sort } from './lib/library.svelte.js';
@@ -20,13 +22,18 @@
 	   `?screen=detail&index=3` ouvre directement un écran pour la capture. */
 	const params = new URLSearchParams(location.search);
 
+	const wanted = params.get('screen');
+	const wantedIndex = Number(params.get('index') ?? 0);
+
 	/** Section affichée, et si la sélection est montée sur la barre du haut. */
-	let section = $state<Section>((params.get('screen') as Section) ?? 'home');
+	let section = $state<Section>(
+		wanted === 'library' || wanted === 'search' || wanted === 'settings' ? wanted : 'home'
+	);
 	let onTabs = $state(false);
 	/** Jeu ouvert en fiche détaillée. Null : on est sur la section courante. */
-	let opened = $state<Game | null>(null);
+	let opened = $state<Game | null>(wanted === 'detail' ? (games[wantedIndex] ?? null) : null);
 
-	let homeIndex = $state(Number(params.get('index') ?? 0));
+	let homeIndex = $state(wantedIndex);
 	let libraryIndex = $state(0);
 	let filter = $state<Filter>('all');
 	let sort = $state<Sort>('title');
@@ -34,6 +41,13 @@
 	let clock = $state(formatClock());
 	let pads = $state(0);
 	let notice = $state('');
+
+	/** Bouton sélectionné sur une fiche : 0 = Jouer, 1 = Favori. */
+	let detailButton = $state(0);
+	/** Fenêtre d'alimentation : index sélectionné, et action en attente de confirmation. */
+	let powerOpen = $state(params.get('power') === '1');
+	let powerIndex = $state(0);
+	let powerPending = $state<PowerAction | null>(null);
 
 	const libraryGames = $derived(view(filter, sort));
 	const selected = $derived(
@@ -60,6 +74,7 @@
 
 	function openDetail(game: Game | undefined) {
 		if (!game) return;
+		detailButton = 0;
 		transition(() => (opened = game));
 	}
 
@@ -89,6 +104,7 @@
 		else if (action === 'right') homeIndex = Math.min(games.length - 1, homeIndex + 1);
 		else if (action === 'up') onTabs = true;
 		else if (action === 'accept') openDetail(games[homeIndex]);
+		else if (action === 'options') openPower();
 	}
 
 	function handleLibrary(action: Action) {
@@ -113,15 +129,61 @@
 	}
 
 	function handleDetail(action: Action) {
+		if (!opened) return;
 		if (action === 'cancel') closeDetail();
-		else if (action === 'accept') launch();
-		else if (action === 'options' && opened) {
-			toggleFavorite(opened.id);
-			notify(isFavorite(opened.id) ? 'Ajouté aux favoris.' : 'Retiré des favoris.');
+		else if (action === 'left') detailButton = 0;
+		else if (action === 'right') detailButton = 1;
+		else if (action === 'accept') {
+			if (detailButton === 0) launch();
+			else switchFavorite();
+		} else if (action === 'options') switchFavorite();
+	}
+
+	/** Bascule le favori du jeu ouvert et le dit, pour que l'action se voie. */
+	function switchFavorite() {
+		if (!opened) return;
+		toggleFavorite(opened.id);
+		notify(isFavorite(opened.id) ? 'Ajouté aux favoris.' : 'Retiré des favoris.');
+	}
+
+	/** Fenêtre d'alimentation : liste, puis confirmation de l'action choisie. */
+	async function handlePower(action: Action) {
+		const count = powerPending ? 2 : POWER_ENTRIES.length;
+		if (action === 'up') powerIndex = Math.max(0, powerIndex - 1);
+		else if (action === 'down') powerIndex = Math.min(count - 1, powerIndex + 1);
+		else if (action === 'cancel') {
+			if (powerPending) {
+				powerPending = null;
+				powerIndex = 0;
+			} else powerOpen = false;
+		} else if (action === 'accept') {
+			if (powerPending) {
+				const chosen = powerPending;
+				powerPending = null;
+				powerIndex = 0;
+				powerOpen = false;
+				if (chosen) notify(await runPower(chosen));
+				return;
+			}
+			const entry = POWER_ENTRIES[powerIndex];
+			if (entry.confirm) {
+				powerPending = entry.action;
+				powerIndex = 0;
+			} else {
+				powerOpen = false;
+				notify(await runPower(entry.action));
+			}
 		}
 	}
 
+	function openPower() {
+		powerOpen = true;
+		powerIndex = 0;
+		powerPending = null;
+	}
+
 	function handle(action: Action) {
+		if (powerOpen) return handlePower(action);
 		if (opened) return handleDetail(action);
 		if (onTabs) return handleTabs(action);
 		if (section === 'library') return handleLibrary(action);
@@ -156,9 +218,14 @@
 
 	/** Aide contextuelle : ce que font les touches, ici et maintenant. */
 	const help = $derived(
-		opened
+		powerOpen
 			? [
-					{ button: 'a' as const, label: 'Jouer' },
+					{ button: 'a' as const, label: 'Valider' },
+					{ button: 'b' as const, label: 'Annuler' },
+				]
+			: opened
+			? [
+					{ button: 'a' as const, label: detailButton === 0 ? 'Jouer' : 'Favori' },
 					{ button: 'x' as const, label: isFavorite(opened.id) ? 'Retirer des favoris' : 'Favori' },
 					{ button: 'b' as const, label: 'Retour' },
 				]
@@ -171,7 +238,7 @@
 					]
 				: [
 						{ button: 'a' as const, label: 'Ouvrir' },
-						{ button: 'x' as const, label: 'Options' },
+						{ button: 'x' as const, label: 'Alimentation' },
 						{ button: 'y' as const, label: 'Recherche' },
 					]
 	);
@@ -189,7 +256,7 @@
 
 <main>
 	{#if opened}
-		<Detail game={opened} favorite={isFavorite(opened.id)} onplay={launch} />
+		<Detail game={opened} favorite={isFavorite(opened.id)} selected={detailButton} />
 	{:else if section === 'home'}
 		<Home {games} index={homeIndex} />
 	{:else if section === 'library'}
@@ -201,6 +268,10 @@
 		</section>
 	{/if}
 </main>
+
+{#if powerOpen}
+	<PowerMenu index={powerIndex} pending={powerPending} />
+{/if}
 
 {#if notice}
 	<div class="notice">{notice}</div>

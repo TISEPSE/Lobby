@@ -29,10 +29,41 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Éteint, redémarre ou quitte. Rien n'est fait sans que l'interface ait
+/// demandé confirmation : cette commande ne pose pas de question, elle exécute.
+#[tauri::command]
+fn power_action(app: tauri::AppHandle, action: String) -> Result<(), String> {
+  match action.as_str() {
+    "quit" => {
+      app.exit(0);
+      Ok(())
+    }
+    "shutdown" | "reboot" => {
+      #[cfg(windows)]
+      let mut command = {
+        let mut c = Command::new("shutdown");
+        c.args([if action == "reboot" { "/r" } else { "/s" }, "/t", "0"]);
+        c
+      };
+      #[cfg(not(windows))]
+      let mut command = {
+        let mut c = Command::new("systemctl");
+        c.arg(if action == "reboot" { "reboot" } else { "poweroff" });
+        c
+      };
+      command
+        .spawn()
+        .map(|_| ())
+        .map_err(|error| format!("Commande refusée : {error}"))
+    }
+    other => Err(format!("Action inconnue : {other}")),
+  }
+}
+
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
 pub fn run() {
   tauri::Builder::default()
-    .invoke_handler(tauri::generate_handler![launch_game, is_running])
+    .invoke_handler(tauri::generate_handler![launch_game, is_running, power_action])
     .setup(|app| {
       if cfg!(debug_assertions) {
         app.handle().plugin(

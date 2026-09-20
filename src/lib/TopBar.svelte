@@ -24,7 +24,7 @@
 		avatar?: string;
 	} = $props();
 
-	export const SECTIONS: { id: Section; label: string }[] = [
+	const SECTIONS: { id: Section; label: string }[] = [
 		{ id: 'home', label: 'Accueil' },
 		{ id: 'library', label: 'Bibliothèque' },
 		{ id: 'search', label: 'Recherche' },

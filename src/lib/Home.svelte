@@ -88,8 +88,11 @@
 		align-items: flex-end;
 		gap: 18px;
 		padding: 40px 0 0;
-		/* La sélection reste au centre de l'écran : la rangée glisse sous elle. */
-		transform: translateX(calc(50vw - (var(--index) + 0.5) * (var(--tile) + 18px)));
+		/* La sélection se tient un peu à droite du centre : pile au milieu, la
+		   rangée paraît figée et la lecture est moins naturelle. */
+		transform: translateX(
+			calc(50vw + var(--selection-shift) - (var(--index) + 0.5) * (var(--tile) + 18px))
+		);
 		transition: transform var(--normal) var(--ease);
 		will-change: transform;
 	}

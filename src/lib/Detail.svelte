@@ -9,8 +9,8 @@
 	let {
 		game,
 		favorite = false,
-		onplay,
-	}: { game: Game; favorite?: boolean; onplay?: () => void } = $props();
+		selected = 0,
+	}: { game: Game; favorite?: boolean; selected?: number } = $props();
 
 	const facts = ['Action, Aventure', '2024', 'Jamais joué'];
 	const rating = 4.3;
@@ -40,8 +40,10 @@
 		</p>
 
 		<div class="actions">
-			<button class="primary focus-ring" onclick={onplay}>Jouer</button>
-			<button class="ghost">{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}</button>
+			<button class="action" class:focus-ring={selected === 0}>Jouer</button>
+			<button class="action ghost" class:focus-ring={selected === 1}>
+				{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
+			</button>
 		</div>
 	</div>
 </div>
@@ -137,12 +139,18 @@
 		transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
 	}
 
-	.primary {
+	.action {
 		background: var(--surface-strong);
 	}
 
 	.ghost {
 		background: var(--surface);
 		color: var(--text-dim);
+	}
+
+	/* Le halo suit la sélection : un seul bouton actif à la fois. */
+	.action.focus-ring {
+		background: var(--surface-strong);
+		color: var(--text);
 	}
 </style>
