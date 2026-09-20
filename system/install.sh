@@ -5,14 +5,14 @@
 #   ./install.sh /chemin/vers/interface-console.x86_64 [utilisateur]
 set -euo pipefail
 
-BIN_SOURCE="${1:-build/interface-console.x86_64}"
+BIN_SOURCE="${1:-src-tauri/target/release/interface-console}"
 USER_NAME="${2:-$USER}"
 TARGET_DIR=/opt/interface-console
 LAUNCHER=/usr/local/bin/interface-console
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 
 if [[ ! -f "$BIN_SOURCE" ]]; then
-	echo "Export introuvable : $BIN_SOURCE" >&2
+	echo "Binaire introuvable : $BIN_SOURCE" >&2
 	exit 1
 fi
 if ! command -v gamescope >/dev/null; then
@@ -21,7 +21,7 @@ if ! command -v gamescope >/dev/null; then
 fi
 
 sudo install -d "$TARGET_DIR"
-sudo install -m 755 "$BIN_SOURCE" "$TARGET_DIR/interface-console.x86_64"
+sudo install -m 755 "$BIN_SOURCE" "$TARGET_DIR/interface-console"
 sudo install -m 755 "$HERE/interface-console.sh" "$LAUNCHER"
 
 # L'unité est écrite pour l'utilisateur demandé, avec son UID réel.

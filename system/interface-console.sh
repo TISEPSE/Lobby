@@ -3,9 +3,9 @@
 # Rien d'autre ne tourne — pas de bureau, pas de souris.
 set -euo pipefail
 
-# Emplacement de l'export Godot. INTERFACE_CONSOLE_BIN permet de pointer
-# ailleurs sans toucher à ce script (utile pour tester une nouvelle version).
-BIN="${INTERFACE_CONSOLE_BIN:-/opt/interface-console/interface-console.x86_64}"
+# Emplacement du binaire Tauri. INTERFACE_CONSOLE_BIN permet de pointer ailleurs
+# sans toucher à ce script (utile pour tester une nouvelle version).
+BIN="${INTERFACE_CONSOLE_BIN:-/opt/interface-console/interface-console}"
 
 WIDTH="${INTERFACE_CONSOLE_WIDTH:-1920}"
 HEIGHT="${INTERFACE_CONSOLE_HEIGHT:-1080}"
@@ -13,7 +13,7 @@ REFRESH="${INTERFACE_CONSOLE_REFRESH:-60}"
 
 if [[ ! -x "$BIN" ]]; then
 	echo "Interface introuvable : $BIN" >&2
-	echo "Exporter d'abord : godot --headless --export-release \"Linux\" build/interface-console.x86_64" >&2
+	echo "Construire d'abord : npm run tauri build" >&2
 	exit 1
 fi
 

@@ -2,23 +2,24 @@
 
 Faire démarrer le PC directement sur l'interface, sans bureau, comme un Steam Deck.
 
-## 1. Exporter l'interface
+## 1. Construire l'interface
 
-Depuis le poste de développement, avec les modèles d'exportation Linux installés
-(éditeur Godot : *Éditeur → Gérer les modèles d'exportation*) :
+Depuis le poste de développement (ou directement sur la machine cible) :
 
 ```
-godot --headless --export-release "Linux" build/interface-console.x86_64
+npm install
+npm run tauri build
 ```
 
-Le preset `Linux` est déjà dans `export_presets.cfg` (x86_64, PCK embarqué, les
-dossiers `Références-XBOX/` et `tools/` sont exclus).
+Le binaire sort dans `src-tauri/target/release/interface-console`. Sous Linux,
+Tauri s'appuie sur WebKitGTK : `webkit2gtk-4.1` et `libappindicator` doivent être
+installés.
 
 ## 2. Installer sur la machine cible
 
 ```
 sudo pacman -S gamescope          # Arch ; déjà présent sur Bazzite
-./system/install.sh build/interface-console.x86_64 joueur
+./system/install.sh src-tauri/target/release/interface-console joueur
 sudo systemctl enable --now interface-console.service
 ```
 
