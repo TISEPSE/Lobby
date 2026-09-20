@@ -22,11 +22,24 @@ export interface Details {
 	title: string;
 	cover: string;
 	hero: string;
+	/** Logo détouré, s'il existe : sert à composer une jaquette. */
+	logo: string;
+	/** Bannière 16/9, jamais affichée telle quelle dans une tuile. */
+	banner: string;
 	genres: string[];
 	release_date: string;
 	summary: string;
 	/** Note sur 5 ; 0 quand Metacritic ne connaît pas le jeu. */
 	rating: number;
+}
+
+/** Une entrée du menu d'options d'une tuile. */
+export interface TileAction {
+	id: string;
+	label: string;
+	icon: string;
+	/** Une ligne sous le libellé, quand l'action mérite une précision. */
+	hint?: string;
 }
 
 /** Sections de la barre du haut. */

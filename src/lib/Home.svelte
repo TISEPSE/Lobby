@@ -1,13 +1,26 @@
 <script lang="ts">
-	import type { Game } from './types';
+	import type { Game, TileAction } from './types';
 	import Cover from './Cover.svelte';
+	import TileOptions from './TileOptions.svelte';
 
 	/**
 	 * Accueil : artwork plein écran, rangée horizontale de jaquettes. La tuile
 	 * sélectionnée s'agrandit et **pousse** ses voisines plutôt que de les
 	 * recouvrir — c'est le `gap` qui s'élargit autour d'elle.
 	 */
-	let { games, index }: { games: Game[]; index: number } = $props();
+	let {
+		games,
+		index,
+		actions = [],
+		optionsOpen = false,
+		optionsIndex = 0,
+	}: {
+		games: Game[];
+		index: number;
+		actions?: TileAction[];
+		optionsOpen?: boolean;
+		optionsIndex?: number;
+	} = $props();
 
 	const selected = $derived(games[index]);
 
@@ -32,6 +45,9 @@
 				<Cover {game} />
 				<span class="caption">{game.title}</span>
 			</button>
+			{#if i === index}
+				<TileOptions {actions} index={optionsIndex} open={optionsOpen} />
+			{/if}
 		{/each}
 	</div>
 </section>

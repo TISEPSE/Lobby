@@ -61,7 +61,7 @@
 	.dialog {
 		padding: 44px 48px 48px;
 		border-radius: var(--radius-lg);
-		background: linear-gradient(180deg, #161b24 0%, #0e1118 100%);
+		background: linear-gradient(180deg, #14171c 0%, #0b0d11 100%);
 		box-shadow:
 			0 0 0 1px rgba(255, 255, 255, 0.06),
 			0 40px 90px rgba(0, 0, 0, 0.75);
@@ -121,16 +121,16 @@
 		opacity: 0.9;
 	}
 
-	.mark.shutdown {
-		background: rgba(239, 68, 68, 0.18);
-	}
-
-	.mark.reboot {
-		background: rgba(59, 130, 246, 0.18);
-	}
-
+	/* Toutes les pastilles partagent la même teinte sombre : l'interface ne
+	   parle qu'une couleur, l'accent. La sélection suffit à désigner l'action. */
+	.mark.shutdown,
+	.mark.reboot,
 	.mark.quit {
-		background: rgba(34, 211, 102, 0.18);
+		background: rgba(255, 255, 255, 0.07);
+	}
+
+	.card.selected .mark {
+		background: var(--accent-soft);
 	}
 
 	.label {
@@ -194,11 +194,17 @@
 			0 0 28px 5px var(--accent-soft);
 	}
 
-	/* La confirmation d'une action irréversible ne se déguise pas en bouton doux. */
-	.choice.danger.selected {
-		box-shadow:
-			0 0 0 2px #ef4444,
-			0 0 28px 5px rgba(239, 68, 68, 0.28);
+	/* Une action irréversible se marque par un liseré, pas par une autre couleur :
+	   l'accent reste la seule teinte de l'interface. */
+	.choice.danger::before {
+		content: '';
+		display: block;
+		width: 34px;
+		height: 3px;
+		margin: 0 auto 10px;
+		border-radius: 2px;
+		background: var(--accent);
+		opacity: 0.5;
 	}
 
 	@keyframes fade {

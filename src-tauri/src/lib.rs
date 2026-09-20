@@ -10,9 +10,14 @@ use tauri::Manager;
 struct GameDetails {
   appid: String,
   title: String,
-  /// Jaquette verticale quand elle existe, bannière sinon.
+  /// Jaquette verticale quand elle existe, vide sinon : l'interface compose
+  /// alors une tuile avec l'artwork et le logo.
   cover: String,
   hero: String,
+  /// Logo détouré du jeu, sur fond transparent, quand Steam en fournit un.
+  logo: String,
+  /// Bannière horizontale, utilisée pour composer une jaquette à défaut.
+  banner: String,
   genres: Vec<String>,
   release_date: String,
   summary: String,
@@ -81,25 +86,36 @@ async fn steam_details(app: tauri::AppHandle, appid: String, refresh: bool) -> R
   // La jaquette verticale n'existe pas pour tous les jeux : on garde la
   // première adresse qui répond, et l'image de la fiche Steam en dernier recours.
   let cdn = "https://cdn.cloudflare.steamstatic.com/steam/apps";
-  let mut cover_candidates = vec![
+  // Jaquette verticale seulement : une bannière 16/9 étirée dans une tuile 2/3
+  // est laide. Sans jaquette, l'interface compose la sienne.
+  let cover_candidates = vec![
     format!("{cdn}/{appid}/library_600x900_2x.jpg"),
     format!("{cdn}/{appid}/library_600x900.jpg"),
   ];
+
+  let mut banner_candidates = vec![];
   if let Some(header) = data["header_image"].as_str() {
-    cover_candidates.push(header.to_string());
+    banner_candidates.push(header.to_string());
   }
-  cover_candidates.push(format!("{cdn}/{appid}/header.jpg"));
+  banner_candidates.push(format!("{cdn}/{appid}/header.jpg"));
 
   let mut hero_candidates = vec![format!("{cdn}/{appid}/library_hero.jpg")];
   if let Some(background) = data["background_raw"].as_str() {
     hero_candidates.push(background.to_string());
   }
 
+  let logo_candidates = vec![
+    format!("{cdn}/{appid}/logo.png"),
+    format!("{cdn}/{appid}/logo_2x.png"),
+  ];
+
   let details = GameDetails {
     appid: appid.clone(),
     title: data["name"].as_str().unwrap_or_default().to_string(),
     cover: first_available(&client, &cover_candidates).await,
     hero: first_available(&client, &hero_candidates).await,
+    logo: first_available(&client, &logo_candidates).await,
+    banner: first_available(&client, &banner_candidates).await,
     genres: data["genres"]
       .as_array()
       .map(|list| {
@@ -167,6 +183,26 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Ouvre une adresse avec l'application du système : c'est ainsi qu'on demande
+/// à Steam d'installer, de vérifier ou de désinstaller un jeu (`steam://…`).
+#[tauri::command]
+fn open_url(url: String) -> Result<(), String> {
+  // On n'ouvre que des liens Steam : cette commande ne doit pas devenir un
+  // moyen d'exécuter n'importe quoi depuis la page.
+  if !url.starts_with("steam://") {
+    return Err("Adresse refusée".into());
+  }
+
+  #[cfg(windows)]
+  let result = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+  #[cfg(not(windows))]
+  let result = Command::new("xdg-open").arg(&url).spawn();
+
+  result
+    .map(|_| ())
+    .map_err(|error| format!("Ouverture impossible : {error}"))
+}
+
 /// Éteint, redémarre ou quitte. Rien n'est fait sans que l'interface ait
 /// demandé confirmation : cette commande ne pose pas de question, elle exécute.
 #[tauri::command]
@@ -205,7 +241,8 @@ pub fn run() {
       launch_game,
       is_running,
       power_action,
-      steam_details
+      steam_details,
+      open_url
     ])
     .setup(|app| {
       if cfg!(debug_assertions) {

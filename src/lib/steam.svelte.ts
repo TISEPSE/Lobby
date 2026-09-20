@@ -36,6 +36,38 @@ export function ensureDetails(appid: string) {
 	})();
 }
 
+/**
+ * Affiche choisie par l'utilisateur pour un jeu : la jaquette quand elle
+ * existe, l'artwork ou la bannière sinon. Gardée d'une session à l'autre.
+ */
+export type ArtStyle = 'auto' | 'artwork' | 'banner';
+
+const ART_KEY = 'interface-console.art';
+
+export const artStyles = $state<Record<string, ArtStyle>>(loadArt());
+
+function loadArt(): Record<string, ArtStyle> {
+	try {
+		const raw = localStorage.getItem(ART_KEY);
+		return raw ? JSON.parse(raw) : {};
+	} catch {
+		return {};
+	}
+}
+
+/** Passe à l'affiche suivante et rend son nom, pour le dire à l'utilisateur. */
+export function cycleArtStyle(appid: string): string {
+	const order: ArtStyle[] = ['auto', 'artwork', 'banner'];
+	const next = order[(order.indexOf(artStyles[appid] ?? 'auto') + 1) % order.length];
+	artStyles[appid] = next;
+	try {
+		localStorage.setItem(ART_KEY, JSON.stringify(artStyles));
+	} catch {
+		/* sans stockage, le choix ne vaut que pour la session */
+	}
+	return { auto: 'Jaquette', artwork: 'Artwork', banner: 'Bannière' }[next];
+}
+
 /** Jaquette à afficher : celle résolue par Rust si elle est arrivée. */
 export function coverOf(appid: string, fallback: string): string {
 	return details[appid]?.cover || fallback;

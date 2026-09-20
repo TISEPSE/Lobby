@@ -90,6 +90,18 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Côté front, `steam.svelte.ts` garde les fiches dans un `$state` : `ensureDetails(appid)` lance la récupération sans rien bloquer, et `coverOf` / `heroOf` prennent la valeur résolue dès qu'elle arrive.
 - La fiche d'un jeu (genres, date, résumé, note Metacritic ramenée sur 5) vient de là aussi.
 
+## Jaquettes
+
+- **Jamais de bannière 16/9 étirée dans une tuile 2/3** : c'est laid et ça coupe les titres. `steam_details` ne renvoie dans `cover` qu'une **vraie jaquette verticale** (`library_600x900`) ; sinon le champ reste vide.
+- Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
+- L'utilisateur peut changer l'affiche d'un jeu (menu d'options d'une tuile) : jaquette, artwork ou bannière. Le choix est gardé par jeu (`artStyles`).
+
+## Menu d'options d'une tuile
+
+- **X** sur l'accueil ouvre un panneau **dans la rangée**, à droite de la tuile sélectionnée : il pousse les tuiles suivantes au lieu de les recouvrir, en animant sa largeur. On voit donc toujours de quel jeu il s'agit.
+- Entrées : favori, changer l'affiche, mettre à jour, vérifier les fichiers, désinstaller.
+- Tout ce qui touche à l'installation est **confié à Steam** par un lien `steam://` (`install`, `validate`, `uninstall`), ouvert par la commande Rust `open_url` — qui n'accepte que ce protocole, pour ne pas devenir un moyen d'exécuter n'importe quoi depuis la page.
+
 ## Données de jeu
 
 - `src/lib/data/games.json` : identifiant, titre, appid Steam, adresses de la jaquette et de l'artwork.

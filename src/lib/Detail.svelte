@@ -94,14 +94,19 @@
 
 	.info {
 		align-self: center;
-		max-width: 60ch;
+		/* Le titre prend toute la largeur disponible : le brider le cassait en
+		   trois lignes alors que la moitié droite de l'écran était vide. */
+		max-width: none;
+		padding-right: 4vw;
 	}
 
 	h1 {
 		margin: 0;
-		font-size: clamp(42px, 5vw, 86px);
+		font-size: clamp(42px, 4.6vw, 80px);
 		font-weight: 700;
+		line-height: 1.04;
 		letter-spacing: -0.025em;
+		text-wrap: balance;
 	}
 
 	.facts {
@@ -133,8 +138,11 @@
 		color: var(--text-dim);
 	}
 
+	/* Le résumé, lui, garde une largeur de lecture : une ligne trop longue se
+	   lit mal, même sur grand écran. */
 	.synopsis {
 		margin: 22px 0 0;
+		max-width: 68ch;
 		font-size: 22px;
 		line-height: 1.5;
 		color: rgba(255, 255, 255, 0.86);

@@ -8,6 +8,9 @@
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
+	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
+	import { cycleArtStyle } from './lib/steam.svelte.js';
+	import type { TileAction } from './lib/types';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
 	import {
@@ -56,6 +59,10 @@
 	let powerOpen = $state(params.get('power') === '1');
 	let powerIndex = $state(0);
 	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
+
+	/** Menu d'options de la tuile sélectionnée, sur l'accueil. */
+	let optionsOpen = $state(params.get('options') === '1');
+	let optionsIndex = $state(0);
 
 	const libraryGames = $derived(view(filter, sort));
 	const selected = $derived(
@@ -112,6 +119,10 @@
 		else if (action === 'right') homeIndex = Math.min(games.length - 1, homeIndex + 1);
 		else if (action === 'up') onTabs = true;
 		else if (action === 'accept') openDetail(games[homeIndex]);
+		else if (action === 'options') {
+			optionsOpen = true;
+			optionsIndex = 0;
+		}
 	}
 
 	function handleLibrary(action: Action) {
@@ -195,6 +206,7 @@
 		if (powerOpen) return handlePower(action);
 		// Le bouton Options ouvre l'alimentation depuis n'importe quel écran.
 		if (action === 'menu') return openPower();
+		if (optionsOpen) return handleOptions(action);
 		if (opened) return handleDetail(action);
 		if (onTabs) return handleTabs(action);
 		if (section === 'library') return handleLibrary(action);
@@ -227,6 +239,55 @@
 		};
 	});
 
+	/** Options de la tuile : ce qu'on peut faire d'un jeu sans l'ouvrir. */
+	const tileActions = $derived<TileAction[]>(
+		selected
+			? [
+					{
+						id: 'favorite',
+						label: isFavorite(selected.id) ? 'Retirer des favoris' : 'Ajouter aux favoris',
+						icon: 'star',
+					},
+					{ id: 'art', label: "Changer l'affiche", icon: 'image', hint: 'Jaquette, artwork ou bannière' },
+					{ id: 'update', label: 'Mettre à jour', icon: 'download', hint: 'Confié à Steam' },
+					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart', hint: 'Confié à Steam' },
+					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash', hint: 'Confié à Steam' },
+				]
+			: []
+	);
+
+	/** Menu d'options : navigation verticale, A exécute, B referme. */
+	async function handleOptions(action: Action) {
+		if (action === 'up') optionsIndex = Math.max(0, optionsIndex - 1);
+		else if (action === 'down') optionsIndex = Math.min(tileActions.length - 1, optionsIndex + 1);
+		else if (action === 'cancel' || action === 'options') optionsOpen = false;
+		else if (action === 'accept') await runTileAction(tileActions[optionsIndex]?.id);
+	}
+
+	async function runTileAction(id: string | undefined) {
+		if (!id || !selected) return;
+		switch (id) {
+			case 'favorite':
+				switchFavorite();
+				break;
+			case 'art':
+				notify(`Affiche : ${cycleArtStyle(selected.appid)}.`);
+				break;
+			case 'update':
+				notify(await updateGame(selected.appid));
+				break;
+			case 'verify':
+				notify(await verifyGame(selected.appid));
+				break;
+			case 'uninstall':
+				notify(await uninstallGame(selected.appid));
+				break;
+		}
+		// Les actions confiées à Steam referment le menu : la suite se passe
+		// dans Steam, pas ici.
+		if (id !== 'favorite' && id !== 'art') optionsOpen = false;
+	}
+
 	/** Aide contextuelle : ce que font les touches, ici et maintenant. */
 	const help = $derived(
 		powerOpen
@@ -234,7 +295,12 @@
 					{ button: 'a' as const, label: 'Valider' },
 					{ button: 'b' as const, label: 'Annuler' },
 				]
-			: opened
+			: optionsOpen
+				? [
+						{ button: 'a' as const, label: 'Choisir' },
+						{ button: 'b' as const, label: 'Fermer' },
+					]
+				: opened
 			? [
 					{ button: 'a' as const, label: detailButton === 0 ? 'Jouer' : 'Favori' },
 					{ button: 'x' as const, label: isFavorite(opened.id) ? 'Retirer des favoris' : 'Favori' },
@@ -249,6 +315,7 @@
 					]
 				: [
 						{ button: 'a' as const, label: 'Ouvrir' },
+						{ button: 'x' as const, label: 'Options' },
 						{ button: 'y' as const, label: 'Recherche' },
 					]
 	);
@@ -273,7 +340,13 @@
 			playtime={playtimeText(opened.id)}
 		/>
 	{:else if section === 'home'}
-		<Home {games} index={homeIndex} />
+		<Home
+			{games}
+			index={homeIndex}
+			actions={tileActions}
+			{optionsOpen}
+			{optionsIndex}
+		/>
 	{:else if section === 'library'}
 		<Library games={libraryGames} index={libraryIndex} {filter} {sort} columns={COLUMNS} />
 	{:else}
