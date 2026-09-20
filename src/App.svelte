@@ -104,7 +104,6 @@
 		else if (action === 'right') homeIndex = Math.min(games.length - 1, homeIndex + 1);
 		else if (action === 'up') onTabs = true;
 		else if (action === 'accept') openDetail(games[homeIndex]);
-		else if (action === 'options') openPower();
 	}
 
 	function handleLibrary(action: Action) {
@@ -184,6 +183,8 @@
 
 	function handle(action: Action) {
 		if (powerOpen) return handlePower(action);
+		// Le bouton Options ouvre l'alimentation depuis n'importe quel écran.
+		if (action === 'menu') return openPower();
 		if (opened) return handleDetail(action);
 		if (onTabs) return handleTabs(action);
 		if (section === 'library') return handleLibrary(action);
@@ -238,7 +239,6 @@
 					]
 				: [
 						{ button: 'a' as const, label: 'Ouvrir' },
-						{ button: 'x' as const, label: 'Alimentation' },
 						{ button: 'y' as const, label: 'Recherche' },
 					]
 	);

@@ -21,8 +21,9 @@
 
 	--tile: clamp(140px, 11vw, 210px);
 	--tile-focus-scale: 1.24;
-	/* Décalage de la sélection par rapport au centre, sur l'accueil. */
-	--selection-shift: calc(var(--tile) + 18px);
+	/* Décalage de la sélection par rapport au centre, sur l'accueil : une tuile
+	   vers la gauche, pour que le regard parte du titre et aille vers la suite. */
+	--selection-shift: calc(-1 * (var(--tile) + 18px));
 
 	--ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 	--fast: 180ms;

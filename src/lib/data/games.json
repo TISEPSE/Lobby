@@ -102,13 +102,5 @@
 		"cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/library_600x900_2x.jpg",
 		"hero": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/library_hero.jpg",
 		"logo": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/logo.png"
-	},
-	{
-		"id": "steam-228980",
-		"appid": "228980",
-		"title": "Steamworks Common Redistributables",
-		"cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/228980/library_600x900_2x.jpg",
-		"hero": "https://cdn.cloudflare.steamstatic.com/steam/apps/228980/library_hero.jpg",
-		"logo": "https://cdn.cloudflare.steamstatic.com/steam/apps/228980/logo.png"
 	}
 ]

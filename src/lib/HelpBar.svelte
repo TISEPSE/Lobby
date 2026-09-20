@@ -38,7 +38,7 @@
 		</span>
 	{/each}
 	{#if !pad}
-		<span class="hint">Flèches · Entrée · Échap</span>
+		<span class="hint">Flèches · Entrée · Échap · M</span>
 	{/if}
 </footer>
 

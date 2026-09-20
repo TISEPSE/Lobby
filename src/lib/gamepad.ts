@@ -7,7 +7,17 @@
  * stick qui traîne au repos ne déplace pas la sélection tout seul.
  */
 
-export type Action = 'up' | 'down' | 'left' | 'right' | 'accept' | 'cancel' | 'options' | 'search';
+export type Action =
+	| 'up'
+	| 'down'
+	| 'left'
+	| 'right'
+	| 'accept'
+	| 'cancel'
+	| 'options'
+	| 'search'
+	/** Bouton Options (PlayStation) / Menu (Xbox) : l'alimentation. */
+	| 'menu';
 
 const ENGAGE = 0.65;
 const RELEASE = 0.4;
@@ -20,6 +30,7 @@ const BUTTONS: Record<number, Action> = {
 	1: 'cancel',
 	2: 'options',
 	3: 'search',
+	9: 'menu',
 	12: 'up',
 	13: 'down',
 	14: 'left',
@@ -37,6 +48,7 @@ const KEYS: Record<string, Action> = {
 	Backspace: 'cancel',
 	x: 'options',
 	y: 'search',
+	m: 'menu',
 };
 
 type Listener = (action: Action) => void;
