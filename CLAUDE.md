@@ -82,6 +82,14 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Les jeux Steam se lancent par `steam -applaunch <appid>` : c'est Steam qui connaît les arguments.
 - Hors application (simple onglet de navigateur), `play()` se contente de l'annoncer — le front reste utilisable pour juger le design.
 
+## Fiches Steam (commande Rust `steam_details`)
+
+- Les points d'entrée publics de Steam **ne renvoient pas d'en-tête CORS** : le webview ne peut pas les appeler. C'est Rust qui interroge `store.steampowered.com/api/appdetails`, et le résultat revient au front par `invoke`.
+- La réponse est **mise en cache sur le disque**, une fiche par jeu (`<app data>/steam/<appid>.json`) : une fois récupérée, elle s'affiche même hors ligne. `refresh: true` force une nouvelle requête.
+- Les jeux récents n'ont plus leurs images à l'ancien emplacement du CDN (`/steam/apps/<id>/...` répond 404) : `first_available()` teste les adresses candidates en HEAD et garde la première qui répond, en finissant par `header_image` donné par l'API. C'est ce qui a rattrapé les jaquettes manquantes.
+- Côté front, `steam.svelte.ts` garde les fiches dans un `$state` : `ensureDetails(appid)` lance la récupération sans rien bloquer, et `coverOf` / `heroOf` prennent la valeur résolue dès qu'elle arrive.
+- La fiche d'un jeu (genres, date, résumé, note Metacritic ramenée sur 5) vient de là aussi.
+
 ## Données de jeu
 
 - `src/lib/data/games.json` : identifiant, titre, appid Steam, adresses de la jaquette et de l'artwork.

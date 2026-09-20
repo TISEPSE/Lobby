@@ -1,5 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
+	import { details, ensureDetails, coverOf } from './steam.svelte.js';
 
 	/**
 	 * Fiche d'un jeu. La jaquette arrive depuis sa place sur l'accueil : le
@@ -10,19 +11,35 @@
 		game,
 		favorite = false,
 		selected = 0,
-	}: { game: Game; favorite?: boolean; selected?: number } = $props();
+		playtime = 'Jamais joué',
+	}: { game: Game; favorite?: boolean; selected?: number; playtime?: string } = $props();
 
-	const facts = ['Action, Aventure', '2024', 'Jamais joué'];
-	const rating = 4.3;
+	// La fiche se demande à l'ouverture ; elle arrive de Rust, puis s'affiche.
+	$effect(() => ensureDetails(game.appid));
+
+	const sheet = $derived(details[game.appid]);
+	const rating = $derived(sheet?.rating ?? 0);
+	const facts = $derived(
+		[
+			sheet?.genres?.join(', ') ?? '',
+			sheet?.release_date ?? '',
+			playtime,
+		].filter((fact) => fact.trim() !== '')
+	);
+	const summary = $derived(
+		sheet?.summary ||
+			(sheet ? 'Pas de résumé pour ce jeu.' : 'Récupération de la fiche auprès de Steam…')
+	);
 </script>
 
 <div class="detail">
-	<img class="cover" src={game.cover} alt={game.title} style="view-transition-name: cover-{game.id}" />
+	<img class="cover" src={coverOf(game.appid, game.cover)} alt={game.title} style="view-transition-name: cover-{game.id}" />
 
 	<div class="info">
 		<h1>{game.title}</h1>
 		<p class="facts">{facts.join('  ·  ')}</p>
 
+		{#if rating > 0}
 		<div class="stars" aria-label="Note {rating} sur 5">
 			{#each [0, 1, 2, 3, 4] as i}
 				<svg viewBox="0 0 640 640" class:on={rating >= i + 0.5}>
@@ -33,11 +50,9 @@
 			{/each}
 			<span class="value">{rating.toFixed(1)}</span>
 		</div>
+		{/if}
 
-		<p class="synopsis">
-			Fiche de démonstration : le prototype affiche ici le résumé, les genres et la note
-			récupérés auprès des données publiques de Steam, sans clé d'API.
-		</p>
+		<p class="synopsis">{summary}</p>
 
 		<div class="actions">
 			<button class="action" class:focus-ring={selected === 0}>Jouer</button>

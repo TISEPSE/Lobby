@@ -10,7 +10,15 @@
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
-	import { games, view, toggleFavorite, isFavorite, type Filter, type Sort } from './lib/library.svelte.js';
+	import {
+		games,
+		view,
+		toggleFavorite,
+		isFavorite,
+		playtimeText,
+		type Filter,
+		type Sort,
+	} from './lib/library.svelte.js';
 	import type { Game, Section } from './lib/types';
 
 	const SECTIONS: Section[] = ['home', 'library', 'search', 'settings'];
@@ -256,7 +264,12 @@
 
 <main>
 	{#if opened}
-		<Detail game={opened} favorite={isFavorite(opened.id)} selected={detailButton} />
+		<Detail
+			game={opened}
+			favorite={isFavorite(opened.id)}
+			selected={detailButton}
+			playtime={playtimeText(opened.id)}
+		/>
 	{:else if section === 'home'}
 		<Home {games} index={homeIndex} />
 	{:else if section === 'library'}

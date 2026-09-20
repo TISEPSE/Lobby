@@ -16,5 +16,18 @@ export interface GameStats {
 	lastPlayed: number | null;
 }
 
+/** Fiche d'un jeu récupérée auprès de Steam par la couche Rust. */
+export interface Details {
+	appid: string;
+	title: string;
+	cover: string;
+	hero: string;
+	genres: string[];
+	release_date: string;
+	summary: string;
+	/** Note sur 5 ; 0 quand Metacritic ne connaît pas le jeu. */
+	rating: number;
+}
+
 /** Sections de la barre du haut. */
 export type Section = 'home' | 'library' | 'search' | 'settings';

@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import { coverFallback } from './images';
+	import { coverOf, ensureDetails } from './steam.svelte.js';
 	import { FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
 
 	/**
@@ -46,7 +47,14 @@
 		<div class="grid" style="--columns: {columns}; --row: {row}">
 			{#each games as game, i (game.id)}
 				<button class="tile" class:selected={i === index}>
-					<img src={game.cover} alt={game.title} onerror={(e) => coverFallback(e, game.appid)} />
+					<img
+						src={coverOf(game.appid, game.cover)}
+						alt={game.title}
+						onerror={(e) => {
+							ensureDetails(game.appid);
+							coverFallback(e, game.appid);
+						}}
+					/>
 					{#if isFavorite(game.id)}
 						<img class="badge" src="/assets/icons/star.svg" alt="Favori" />
 					{/if}
