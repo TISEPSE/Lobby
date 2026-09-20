@@ -1,60 +1,63 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import { details, ensureDetails, artStyles } from './steam.svelte.js';
+	import { generateProceduralCover } from './art';
 
-	/**
-	 * Jaquette d'un jeu.
-	 *
-	 * Tous les jeux n'ont pas d'image verticale chez Steam. Plutôt que d'étirer
-	 * une bannière 16/9 dans une tuile 2/3 — ce qui coupe les titres et fait
-	 * laid — on **compose** une jaquette : l'artwork du jeu en fond, assombri,
-	 * et le logo détouré par-dessus. À défaut de logo, le titre.
-	 */
 	let { game }: { game: Game } = $props();
 
-	const sheet = $derived(details[game.appid]);
+	$effect(() => {
+		if (game.appid) {
+			ensureDetails(game.appid);
+		}
+	});
 
-	/** Affiche demandée pour ce jeu : jaquette par défaut. */
-	const style = $derived(artStyles[game.appid] ?? 'auto');
+	const sheet = $derived(game.appid ? details[game.appid] : undefined);
+	const style = $derived(game.appid ? (artStyles[game.appid] ?? 'auto') : 'auto');
 
-	/** Vraie jaquette verticale : celle du fichier, ou celle résolue par Rust. */
-	const vertical = $derived(
-		style !== 'auto'
-			? ''
-			: sheet
-				? sheet.cover
-				: game.cover.includes('library_600x900')
-					? game.cover
-					: ''
-	);
-	/** Fond de la jaquette composée : artwork, sinon bannière. */
-	const backdrop = $derived(
-		style === 'banner'
-			? sheet?.banner || sheet?.hero || game.hero
-			: sheet?.hero || sheet?.banner || game.hero
-	);
-	const logo = $derived(sheet?.logo ?? '');
+	const coverSrc = $derived.by(() => {
+		if (style === 'banner' && (sheet?.banner || game.hero)) {
+			return sheet?.banner || game.hero;
+		}
+		if (style === 'artwork' && (sheet?.hero || game.hero)) {
+			return sheet?.hero || game.hero;
+		}
+		if (sheet?.cover && sheet.cover.trim().length > 0) {
+			return sheet.cover;
+		}
+		if (game.cover && game.cover.trim().length > 0) {
+			return game.cover;
+		}
+		return generateProceduralCover(game.title, game.source);
+	});
 
-	/** Une image qui ne répond pas déclenche la résolution par Rust. */
-	function resolve() {
-		ensureDetails(game.appid);
+	let failed = $state(false);
+
+	function onError() {
+		if (!failed) {
+			failed = true;
+			if (game.appid) {
+				ensureDetails(game.appid);
+			}
+		}
 	}
 </script>
 
 <span class="cover">
-	{#if vertical}
-		<img class="art" src={vertical} alt={game.title} onerror={resolve} />
+	{#if !failed}
+		<img
+			class="art"
+			src={coverSrc}
+			alt={game.title}
+			loading="lazy"
+			onerror={onError}
+		/>
 	{:else}
-		<!-- Jaquette composée : l'artwork en fond, le logo ou le titre devant. -->
-		<span class="made">
-			<img class="art blurred" src={backdrop} alt="" onerror={resolve} />
-			<span class="veil"></span>
-			{#if logo}
-				<img class="logo" src={logo} alt={game.title} />
-			{:else}
-				<span class="name">{game.title}</span>
-			{/if}
-		</span>
+		<img
+			class="art"
+			src={generateProceduralCover(game.title, game.source)}
+			alt={game.title}
+			loading="lazy"
+		/>
 	{/if}
 </span>
 

@@ -24,8 +24,24 @@
 
 	const filters: Filter[] = ['all', 'favorites', 'recent'];
 
-	/** La grille défile par lignes entières : jamais de jaquette coupée. */
-	const row = $derived(Math.floor(index / columns));
+	const currentRow = $derived(Math.floor(index / columns));
+	let scrollRow = $state(0);
+
+	/**
+	 * Deux lignes entières de jaquettes sont visibles simultanément dans la fenêtre.
+	 * Descendre d'un cran (ligne 0 vers ligne 1) ne fait pas bouger la grille.
+	 * Le défilement ne s'enclenche que lorsqu'on dépasse la rangée du bas.
+	 */
+	const VISIBLE_ROWS = 2;
+
+	$effect(() => {
+		const cur = currentRow;
+		if (cur < scrollRow) {
+			scrollRow = cur;
+		} else if (cur >= scrollRow + VISIBLE_ROWS) {
+			scrollRow = cur - VISIBLE_ROWS + 1;
+		}
+	});
 </script>
 
 <section class="library">
@@ -44,7 +60,7 @@
 	</header>
 
 	<div class="viewport">
-		<div class="grid" style="--columns: {columns}; --row: {row}">
+		<div class="grid" style="--columns: {columns}; --row: {scrollRow}">
 			{#each games as game, i (game.id)}
 				<button class="tile" class:selected={i === index}>
 					<Cover {game} />

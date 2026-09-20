@@ -136,9 +136,9 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Feuille de route
 
 1. **Socle** : accueil (carrousel), fiche de jeu, navigation manette, lancement réel. — *fait*
-2. **Bibliothèque** : grille, filtres (Tous / Favoris / Récemment joué), tri.
-3. **Réglages** : profil (pseudo, photo parmi celles fournies), vidéo de démarrage, dossiers de jeux, système.
-4. **Détection de jeux** : porter en Rust la détection Steam / Epic / raccourcis `.lnk` (algorithmes dans le commit de sauvegarde Godot), avec validation par l'utilisateur avant ajout.
+2. **Bibliothèque** : grille, filtres (Tous / Favoris / Récemment joué), tri. — *fait*
+3. **Réglages** : profil (pseudo, photo parmi celles fournies), dossiers de jeux, système. — *fait*
+4. **Détection de jeux** : détection Steam / Epic / dossiers de jeux / raccourcis `.lnk` en Rust avec validation utilisateur. — *fait*
 5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement, en tâche de fond.
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
 7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs.

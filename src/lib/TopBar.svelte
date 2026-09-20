@@ -15,6 +15,7 @@
 		pads = 0,
 		profileName = 'Joueur',
 		avatar = '',
+		onSelectSection,
 	}: {
 		section: Section;
 		focused?: boolean;
@@ -23,6 +24,7 @@
 		pads?: number;
 		profileName?: string;
 		avatar?: string;
+		onSelectSection?: (section: Section) => void;
 	} = $props();
 
 	const SECTIONS: { id: Section; label: string; icon: string }[] = [
@@ -51,9 +53,16 @@
 
 	<nav class="sections" class:focused>
 		{#each SECTIONS as entry}
-			<span class="pill" class:active={entry.id === section} title={entry.label}>
+			<button
+				type="button"
+				class="pill"
+				class:active={entry.id === section}
+				class:is-hub={entry.id === 'home'}
+				title={entry.label}
+				onclick={() => onSelectSection?.(entry.id)}
+			>
 				<img src="/assets/icons/{entry.icon}.svg" alt={entry.label} />
-			</span>
+			</button>
 		{/each}
 	</nav>
 
@@ -145,10 +154,16 @@
 		width: 46px;
 		height: 46px;
 		border-radius: 50%;
+		border: none;
 		background: rgba(255, 255, 255, 0.06);
+		cursor: pointer;
+		outline: none;
+		padding: 0;
 		transition:
 			background var(--fast) var(--ease),
-			transform var(--fast) var(--ease);
+			transform var(--fast) var(--ease),
+			outline var(--fast) var(--ease),
+			box-shadow var(--fast) var(--ease);
 	}
 
 	.pill img {
@@ -158,9 +173,29 @@
 		transition: opacity var(--fast) var(--ease);
 	}
 
+	.pill:hover {
+		outline: 3px solid var(--accent);
+		box-shadow: 0 0 20px 4px var(--accent-soft);
+	}
+
 	.pill.active {
 		background: var(--accent);
-		transform: scale(1.06);
+		transform: scale(1.04);
+	}
+
+	.pill:hover {
+		outline: 3px solid var(--accent);
+		outline-offset: 2px;
+		box-shadow: 0 0 20px 4px var(--accent-soft);
+	}
+
+	.sections.focused .pill.active {
+		outline: 4px solid var(--accent);
+		outline-offset: 3px;
+		box-shadow:
+			0 0 32px 6px var(--accent-soft),
+			0 0 12px var(--accent);
+		transform: scale(1.1);
 	}
 
 	.pill.active img {

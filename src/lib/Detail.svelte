@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import { details, ensureDetails, coverOf } from './steam.svelte.js';
+	import { generateProceduralCover } from './art';
 
 	/**
 	 * Fiche d'un jeu. La jaquette arrive depuis sa place sur l'accueil : le
@@ -15,9 +16,11 @@
 	}: { game: Game; favorite?: boolean; selected?: number; playtime?: string } = $props();
 
 	// La fiche se demande à l'ouverture ; elle arrive de Rust, puis s'affiche.
-	$effect(() => ensureDetails(game.appid));
+	$effect(() => {
+		if (game.appid) ensureDetails(game.appid);
+	});
 
-	const sheet = $derived(details[game.appid]);
+	const sheet = $derived(game.appid ? details[game.appid] : undefined);
 	const rating = $derived(sheet?.rating ?? 0);
 	const facts = $derived(
 		[
@@ -33,7 +36,15 @@
 </script>
 
 <div class="detail">
-	<img class="cover" src={coverOf(game.appid, game.cover)} alt={game.title} style="view-transition-name: cover-{game.id}" />
+	<img
+		class="cover"
+		src={(game.appid ? coverOf(game.appid, game.cover) : '') || game.cover || generateProceduralCover(game.title, game.source)}
+		alt={game.title}
+		style="view-transition-name: cover-{game.id}"
+		onerror={(e) => {
+			(e.currentTarget as HTMLImageElement).src = generateProceduralCover(game.title, game.source);
+		}}
+	/>
 
 	<div class="info">
 		<h1>{game.title}</h1>

@@ -120,6 +120,15 @@ function poll(now: number) {
 }
 
 function onKey(event: KeyboardEvent) {
+	// Ne pas intercepter les touches si l'utilisateur saisit du texte ou si le clavier virtuel est ouvert
+	const target = event.target as HTMLElement | null;
+	const isInput = target && (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable);
+	const isKeyboardOpen = typeof document !== 'undefined' && !!document.querySelector('.keyboard-backdrop');
+
+	if (isInput || isKeyboardOpen) {
+		return;
+	}
+
 	const action = KEYS[event.key];
 	if (!action) return;
 	event.preventDefault();

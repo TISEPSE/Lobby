@@ -12,9 +12,20 @@ export async function play(game: Game): Promise<string> {
 
 	const { invoke } = await import('@tauri-apps/api/core');
 	try {
+		let program = STEAM;
+		let args: string[] = [];
+
+		if (game.executable) {
+			program = game.executable;
+			args = game.args ?? [];
+		} else if (game.appid) {
+			program = STEAM;
+			args = ['-applaunch', game.appid];
+		}
+
 		const pid = await invoke<number>('launch_game', {
-			program: STEAM,
-			args: ['-applaunch', game.appid],
+			program,
+			args,
 		});
 		watch(pid);
 		return `${game.title} démarre…`;

@@ -39,7 +39,6 @@
 			<button
 				class="tile"
 				class:selected={i === index}
-				class:joined={i === index && optionsOpen}
 				style="--i: {i}"
 				aria-current={i === index}
 			>
@@ -132,20 +131,13 @@
 		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 	}
 
-	/* Quand le tiroir d'options est sorti, la tuile lui donne la main : plus
-	   d'arrondi ni de contour de ce côté, les deux ne font qu'un. */
-	.tile.joined {
-		border-top-right-radius: 0;
-		border-bottom-right-radius: 0;
-	}
-
 	/* La tuile agrandie écarte ses voisines au lieu de passer par-dessus. */
 	.tile.selected {
 		transform: scale(var(--tile-focus-scale));
 		margin: 0 calc(var(--tile) * (var(--tile-focus-scale) - 1) / 2);
-		outline: 3px solid var(--accent);
+		outline: 4.5px solid var(--accent);
 		box-shadow:
-			0 0 34px 6px var(--accent-soft),
+			0 0 38px 8px var(--accent-soft),
 			0 26px 60px rgba(0, 0, 0, 0.6);
 	}
 

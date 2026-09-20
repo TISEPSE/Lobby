@@ -1,11 +1,14 @@
 /** Un jeu de la bibliothèque, tel que le projet le manipule. */
 export interface Game {
 	id: string;
-	appid: string;
 	title: string;
+	appid?: string | null;
 	cover: string;
 	hero: string;
 	logo: string;
+	source?: string;
+	executable?: string;
+	args?: string[];
 }
 
 /** Ce que l'utilisateur a fait d'un jeu. Conservé à part de la liste des jeux. */
@@ -44,3 +47,11 @@ export interface TileAction {
 
 /** Sections de la barre du haut. */
 export type Section = 'home' | 'library' | 'search' | 'settings';
+
+/** Préférences utilisateur de la console. */
+export interface UserSettings {
+	profile_name: string;
+	avatar_path: string;
+	button_layout: string;
+	game_folders: string[];
+}

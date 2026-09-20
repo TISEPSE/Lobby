@@ -10,11 +10,140 @@ import rawGames from './data/games.json';
 import type { Game, GameStats } from './types';
 
 const STORAGE_KEY = 'interface-console.stats';
+const LIBRARY_KEY = 'interface-console.library';
 
-export const games: Game[] = rawGames as Game[];
+export function cleanTitle(title: string): string {
+	return title
+		.replace(/marvel'?s\s+/gi, '')
+		.replace(/\b(deluxe|definitive|game of the year|goty|collector'?s?|edition|remastered|v\d+[\d.]*)\b/gi, '')
+		.replace(/\b(by\s+[a-z0-9_-]+)\b/gi, '')
+		.replace(/\ball\s+dlc\b/gi, '')
+		.replace(/[^a-zA-Z0-9]/g, '')
+		.toLowerCase()
+		.trim();
+}
+
+export function deduplicateGames(list: Game[]): Game[] {
+	const map = new Map<string, Game>();
+	const exeMap = new Map<string, string>();
+
+	for (const g of list) {
+		const key = cleanTitle(g.title) || g.id;
+		const normExe = g.executable ? g.executable.toLowerCase().replace(/\\/g, '/') : '';
+		const isGenericLauncher =
+			normExe.endsWith('/steam.exe') ||
+			normExe.endsWith('/ealauncher.exe') ||
+			normExe.endsWith('/epicgameslauncher.exe');
+
+		let matchedKey = map.has(key)
+			? key
+			: !isGenericLauncher && normExe && exeMap.has(normExe)
+				? exeMap.get(normExe)!
+				: null;
+
+		if (matchedKey && map.has(matchedKey)) {
+			const existing = map.get(matchedKey)!;
+			if (!existing.cover && g.cover) existing.cover = g.cover;
+			if (!existing.hero && g.hero) existing.hero = g.hero;
+			if (!existing.logo && g.logo) existing.logo = g.logo;
+			if (!existing.appid && g.appid) existing.appid = g.appid;
+			if (g.title.length > existing.title.length && g.title.includes(' ')) {
+				existing.title = g.title;
+			} else if (/[A-Z]/.test(g.title) && !/[A-Z]/.test(existing.title)) {
+				existing.title = g.title;
+			}
+			if ((g.source === 'steam' || g.source === 'epic') && existing.source !== 'steam' && existing.source !== 'epic') {
+				existing.source = g.source;
+				existing.executable = g.executable;
+				existing.args = g.args;
+				existing.id = g.id;
+			}
+		} else {
+			map.set(key, { ...g });
+			if (normExe && !isGenericLauncher) {
+				exeMap.set(normExe, key);
+			}
+		}
+	}
+	return Array.from(map.values());
+}
+
+export const games = $state<Game[]>(deduplicateGames(rawGames as Game[]));
 
 /** Statistiques par identifiant de jeu. */
 export const stats = $state<Record<string, GameStats>>(load());
+
+export async function initLibrary() {
+	const tauri = (window as any).__TAURI_INTERNALS__;
+	if (tauri) {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const loaded = await invoke<Game[]>('load_library');
+			if (loaded && loaded.length > 0) {
+				const cleaned = deduplicateGames(loaded);
+				games.length = 0;
+				games.push(...cleaned);
+				if (cleaned.length !== loaded.length) {
+					saveLibrary();
+				}
+				return;
+			}
+		} catch (e) {
+			console.warn('Impossible de charger la bibliothèque via Tauri:', e);
+		}
+	}
+
+	try {
+		const raw = localStorage.getItem(LIBRARY_KEY);
+		if (raw) {
+			const parsed = JSON.parse(raw);
+			if (Array.isArray(parsed) && parsed.length > 0) {
+				const cleaned = deduplicateGames(parsed);
+				games.length = 0;
+				games.push(...cleaned);
+				if (cleaned.length !== parsed.length) {
+					saveLibrary();
+				}
+			}
+		}
+	} catch {}
+}
+
+export async function saveLibrary() {
+	try {
+		localStorage.setItem(LIBRARY_KEY, JSON.stringify(games));
+	} catch {}
+
+	const tauri = (window as any).__TAURI_INTERNALS__;
+	if (tauri) {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			await invoke('save_library', { games });
+		} catch (e) {
+			console.warn('Impossible de sauvegarder la bibliothèque via Tauri:', e);
+		}
+	}
+}
+
+export function addGames(newGames: Game[]) {
+	const prevCount = games.length;
+	const combined = deduplicateGames([...games, ...newGames]);
+	const added = combined.length - prevCount;
+	games.length = 0;
+	games.push(...combined);
+	if (added > 0 || combined.length !== prevCount) {
+		saveLibrary();
+	}
+	return Math.max(0, added);
+}
+
+export function removeGame(id: string) {
+	const idx = games.findIndex((g) => g.id === id);
+	if (idx !== -1) {
+		games.splice(idx, 1);
+		saveLibrary();
+	}
+}
 
 function load(): Record<string, GameStats> {
 	try {

@@ -26,3 +26,11 @@ tauri-plugin-log = "2"
 # Requêtes HTTP côté natif : les points d'entrée publics de Steam ne renvoient
 # pas d'en-tête CORS, le webview ne peut donc pas les appeler lui-même.
 reqwest = { version = "0.12", default-features = false, features = ["json", "rustls-tls", "gzip"] }
+
+[dev-dependencies]
+tokio = { version = "1", features = ["full"] }
+
+# Lecture du registre Windows : la seule source qui connaisse les jeux installés
+# hors launcher (Riot, Battle.net, installeurs classiques).
+[target.'cfg(windows)'.dependencies]
+winreg = "0.52"
