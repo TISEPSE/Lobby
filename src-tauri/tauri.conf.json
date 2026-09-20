@@ -13,12 +13,12 @@
     "windows": [
       {
         "title": "Interface Console",
-        "width": 1920,
-        "height": 1080,
-        "fullscreen": true,
-        "decorations": false,
-        "resizable": true,
-        "alwaysOnTop": false
+        "width": 1600,
+        "height": 900,
+        "center": true,
+        "fullscreen": false,
+        "decorations": true,
+        "resizable": true
       }
     ],
     "security": {

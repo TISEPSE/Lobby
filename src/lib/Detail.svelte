@@ -6,7 +6,11 @@
 	 * navigateur anime lui-même le changement de position via `view-transition`,
 	 * on n'a pas à mesurer le rectangle de départ comme en Godot.
 	 */
-	let { game, onplay }: { game: Game; onplay?: () => void } = $props();
+	let {
+		game,
+		favorite = false,
+		onplay,
+	}: { game: Game; favorite?: boolean; onplay?: () => void } = $props();
 
 	const facts = ['Action, Aventure', '2024', 'Jamais joué'];
 	const rating = 4.3;
@@ -37,7 +41,7 @@
 
 		<div class="actions">
 			<button class="primary focus-ring" onclick={onplay}>Jouer</button>
-			<button class="ghost">Ajouter aux favoris</button>
+			<button class="ghost">{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}</button>
 		</div>
 	</div>
 </div>

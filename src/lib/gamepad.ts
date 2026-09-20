@@ -135,7 +135,12 @@ export function padLayout(): 'xbox' | 'ps5' {
 	return SONY.some((marker) => id.includes(marker)) ? 'ps5' : 'xbox';
 }
 
+/** Nombre de manettes branchées, affiché dans la barre du haut. */
+export function padCount(): number {
+	return navigator.getGamepads?.().filter((p) => p && p.connected).length ?? 0;
+}
+
 /** Vrai dès qu'une manette est branchée : sert à afficher les bons symboles. */
 export function hasGamepad(): boolean {
-	return (navigator.getGamepads?.().filter((p) => p && p.connected).length ?? 0) > 0;
+	return padCount() > 0;
 }

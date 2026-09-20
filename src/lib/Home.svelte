@@ -1,44 +1,17 @@
 <script lang="ts">
 	import type { Game } from './types';
+	import { coverFallback } from './images';
 
 	/**
 	 * Accueil : artwork plein écran, rangée horizontale de jaquettes. La tuile
 	 * sélectionnée s'agrandit et **pousse** ses voisines plutôt que de les
 	 * recouvrir — c'est le `gap` qui s'élargit autour d'elle.
 	 */
-	let {
-		games,
-		index,
-		clock,
-	}: { games: Game[]; index: number; clock: string } = $props();
+	let { games, index }: { games: Game[]; index: number } = $props();
 
 	const selected = $derived(games[index]);
 
-	/** Toutes les jaquettes Steam n'existent pas en format vertical : on retombe
-	 *  sur la bannière horizontale plutôt que d'afficher une case vide. */
-	function fallback(event: Event, game: Game) {
-		const img = event.currentTarget as HTMLImageElement;
-		const header = `https://cdn.cloudflare.steamstatic.com/steam/apps/${game.appid}/header.jpg`;
-		if (img.src !== header) img.src = header;
-	}
 </script>
-
-<header class="top">
-	<div class="profile">
-		<div class="avatar">J</div>
-		<div>
-			<div class="name">Joueur</div>
-			<div class="stat">{games.length} jeux installés</div>
-		</div>
-	</div>
-	<nav class="sections">
-		<span class="section active">Accueil</span>
-		<span class="section">Bibliothèque</span>
-		<span class="section">Recherche</span>
-		<span class="section">Réglages</span>
-	</nav>
-	<div class="clock">{clock}</div>
-</header>
 
 <section class="stage">
 	{#if selected}
@@ -56,7 +29,7 @@
 				style="--i: {i}"
 				aria-current={i === index}
 			>
-				<img src={game.cover} alt={game.title} onerror={(e) => fallback(e, game)} />
+				<img src={game.cover} alt={game.title} onerror={(e) => coverFallback(e, game.appid)} />
 				<span class="caption">{game.title}</span>
 			</button>
 		{/each}
@@ -64,65 +37,14 @@
 </section>
 
 <style>
-	.top {
-		position: relative;
-		z-index: 2;
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 32px;
-		padding: var(--safe-y) var(--safe-x) 0;
-	}
 
-	.profile {
-		display: flex;
-		align-items: center;
-		gap: 14px;
-	}
 
-	.avatar {
-		display: grid;
-		place-items: center;
-		width: 46px;
-		height: 46px;
-		border-radius: 50%;
-		background: var(--accent);
-		color: #06210f;
-		font-size: 24px;
-		font-weight: 700;
-	}
 
-	.name {
-		font-size: 22px;
-		font-weight: 600;
-	}
 
-	.stat {
-		font-size: 15px;
-		color: var(--text-dim);
-	}
 
-	.sections {
-		display: flex;
-		gap: 28px;
-	}
 
-	.section {
-		font-size: 17px;
-		color: var(--text-dim);
-		padding-bottom: 6px;
-		border-bottom: 2px solid transparent;
-	}
 
-	.section.active {
-		color: var(--text);
-		border-color: var(--accent);
-	}
 
-	.clock {
-		font-size: 22px;
-		font-variant-numeric: tabular-nums;
-	}
 
 	.stage {
 		position: relative;
@@ -130,7 +52,7 @@
 		display: flex;
 		flex-direction: column;
 		justify-content: flex-end;
-		height: calc(100% - 120px);
+		height: 100%;
 		padding: 0 0 var(--safe-y);
 	}
 
