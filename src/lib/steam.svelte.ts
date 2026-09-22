@@ -185,14 +185,23 @@ export async function artCandidates(game: {
  * et l'interface lit désormais ce fichier. Le choix survit donc au
  * redémarrage, et ne dépend plus d'une recherche en ligne.
  */
-export async function chooseArt(gameId: string, candidate: ArtCandidate): Promise<void> {
+export type ArtTarget = 'cover' | 'background';
+
+export async function chooseArt(
+	gameId: string,
+	candidate: ArtCandidate,
+	target: ArtTarget = 'cover'
+): Promise<void> {
 	const tauri = (window as any).__TAURI_INTERNALS__;
 	if (!tauri) return;
 	const { invoke, convertFileSrc } = await import('@tauri-apps/api/core');
+	// Un fond est toujours rangé comme « hero », quelle que soit l'image
+	// choisie : c'est ce champ que lit l'arrière-plan.
+	const kind = target === 'background' ? 'hero' : candidate.kind;
 	const local = await invoke<string>('pick_game_art', {
 		gameId,
 		url: candidate.url,
-		kind: candidate.kind,
+		kind,
 	});
 
 	const current = artwork[gameId] ?? { cover: '', hero: '', logo: '', banner: '' };
@@ -200,11 +209,13 @@ export async function chooseArt(gameId: string, candidate: ArtCandidate): Promis
 	// webview affiche la nouvelle au lieu de resservir l'ancienne. Un paramètre
 	// d'URL ne marcherait pas — le protocole d'accès aux fichiers le prendrait
 	// pour une partie du chemin.
-	artwork[gameId] = { ...current, [candidate.kind]: convertFileSrc(local) };
+	artwork[gameId] = { ...current, [kind]: convertFileSrc(local) };
 	saveArtwork();
 
-	// Une affiche choisie à la main prime : on remet le style sur « jaquette »
-	// pour que ce soit bien elle qui s'affiche.
+	// Changer le fond ne doit pas changer la tuile : le style de l'affiche
+	// n'est touché que lorsqu'on choisit une jaquette.
+	if (target === 'background') return;
+
 	if (candidate.kind === 'cover') {
 		artStyles[gameId] = 'auto';
 	} else if (candidate.kind === 'banner') {

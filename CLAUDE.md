@@ -69,6 +69,12 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Toute grille à défilement réserve `--hover-room` autour d'elle (marge négative + padding) : sans cette gouttière, l'agrandissement et le contour de la sélection se faisaient trancher par le `overflow: hidden` de la fenêtre.
 - La tuile sélectionnée **pousse** ses voisines (marges animées) au lieu de passer par-dessus, et la rangée glisse pour la garder centrée.
 
+## Hub (barre du haut, `TopBar.svelte`)
+
+- Profil à gauche, puis les sections **écrites en toutes lettres** (Accueil · Bibliothèque · Recherche · Réglages), heure et manettes à droite. Les pastilles rondes d'icônes obligeaient à deviner, et ne disaient pas où l'on se trouvait.
+- L'onglet courant est en blanc plein, souligné d'un trait d'accent dont la largeur s'anime d'un onglet à l'autre ; les autres restent gris.
+- La barre s'efface (72 %) quand la sélection est descendue dans le contenu, et s'allume quand elle reprend la main : elle reste lisible sans tirer l'œil hors du jeu regardé.
+
 ## Manette (`src/lib/gamepad.ts`)
 
 - API Gamepad, interrogée à chaque frame ; le clavier est branché en parallèle (flèches, Entrée, Échap).
@@ -97,7 +103,8 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - **Jamais de bannière 16/9 étirée dans une tuile 2/3** : c'est laid et ça coupe les titres. `steam_details` ne renvoie dans `cover` qu'une **vraie jaquette verticale** (`library_600x900`) ; sinon le champ reste vide.
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
-- L'utilisateur choisit l'affiche d'un jeu par « Changer l'affiche » (menu d'options d'une tuile) : `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
+- Deux entrées distinctes dans le menu d'options : **« Changer la jaquette »** (la tuile) et **« Changer l'image de fond »** (l'artwork derrière). La même fenêtre sert aux deux (`target`), mais elle ne montre que des images comparables : verticales d'un côté, larges de l'autre, en aperçu 16/9. Changer le fond ne touche pas à la tuile.
+- `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
 - L'aperçu d'un candidat passe par **`Cover.svelte` lui-même** (prop `override`), dans une tuile au format, au rayon, à la légende et au contour de l'accueil : rien n'est reproduit à la main, donc rien ne peut diverger. L'aperçu charge l'image **pleine**, pas la miniature — une vignette au cadrage différent donnait une fausse idée du résultat sur les bannières.
 - Rien ne se pose **sur** l'aperçu : pas d'étiquette de provenance en haut de la tuile, elle cachait une partie de la bannière qu'on est justement en train de juger.
 - Le choix passe par `pick_game_art` : l'image est écrite sous un nom **horodaté** (`<id>-<kind>-<epoch>.<ext>`), les anciens fichiers de ce type sont effacés ensuite, et `artStyles[game.id]` retient le type choisi.
@@ -108,11 +115,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Jaquettes manquantes : SteamGridDB
 
+- Les jeux récents n'ont **plus rien à l'ancien emplacement du CDN** (`/steam/apps/<id>/…` répond 404 pour toutes les images) : chaque visuel vit sous `store_item_assets` avec **son propre identifiant**, impossible à deviner. Seule la fiche du magasin (`appdetails`) les donne — `art_candidates` l'interroge donc systématiquement (`store_asset_candidates`). C'est le cas de « Ballgame Demo ».
 - Dernier recours quand Steam puis Lutris ne donnent rien : `fetch_steamgriddb_art()` (recherche par titre, puis `grids` 600x900, `heroes`, `logos`).
 - **La clé n'est jamais dans le code ni dans le dépôt** : elle est saisie dans Réglages → Jeux (« Clé SteamGridDB ») et vit dans `settings.json` du dossier de données (`steamgriddb_key`). Sans clé, la chaîne s'arrête simplement avant, comme aujourd'hui.
 - L'interface ne réaffiche jamais la clé en entier : `Configurée ····<4 derniers caractères>`, suivi de son état.
 - La clé est **essayée à la saisie** (`test_steamgriddb_key`, une simple recherche) : une faute de copie se voit tout de suite au lieu d'attendre le prochain jeu sans jaquette.
-- SteamGridDB peut avoir **plusieurs fiches pour un même jeu** (deux entrées « Rhythia », une jaquette chacune) : on interroge toutes celles dont le titre correspond exactement, pas seulement la première. L'API ignore toute limite demandée, la troncature (24) se fait côté Rust.
+- SteamGridDB peut avoir **plusieurs fiches pour un même jeu** (deux entrées « Rhythia », une jaquette chacune) : on interroge toutes celles dont le titre correspond (`titles_match`), pas seulement la première. L'API ignore toute limite demandée, la troncature (24) se fait côté Rust.
+- Quand **aucune** fiche ne correspond, on ne renvoie rien. Retomber sur le premier résultat proposait les jaquettes d'un autre jeu — « Ballgame Demo » se voyait offrir celles de « Bunnies & Ballgames! ».
 
 ## Menu d'options d'une tuile
 
@@ -183,7 +192,8 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Le clavier est un composant à part (`Keyboard.svelte`), utilisé **aussi par la saisie des réglages** (`VirtualKeyboard.svelte`) : une touche a la même allure partout, et son style ne se règle qu'à un endroit. Les dispositions vivent dans `searchKeys.ts` (`SEARCH_ROWS` pour la recherche, `textKeyboardRows(caps)` pour les réglages).
 - Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts.
 - Une touche sélectionnée **inverse ses couleurs**, sans agrandissement ni halo : sur une grille serrée, un agrandissement ferait sauter tout le clavier à chaque déplacement.
-- Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges et portent une icône, pas une légende en bas de page.
+- Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges, portent une icône, **et le glyphe du bouton manette qui fait la même chose** : le raccourci se lit sur la touche, pas dans une légende en bas de page.
+- L'écran de recherche a un **fond plein** : l'artwork derrière brouillait les lettres du clavier.
 - Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
 - A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.
 - Descendre sous la dernière rangée fait passer aux résultats : le clavier **se replie** (hauteur animée) et la grille récupère la place. Remonter depuis la première rangée de jaquettes le ramène.

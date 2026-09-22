@@ -101,6 +101,10 @@
 		flex-direction: column;
 		height: 100%;
 		padding: 1.5vh var(--safe-x) calc(var(--safe-y) + 30px);
+		/* Fond plein : on lit une liste et on tape un titre, l'artwork derrière
+		   ne ferait que brouiller les lettres du clavier. Le dégradé monte
+		   jusque sous la barre du haut, qui reste posée sur l'écran. */
+		background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 40%);
 	}
 
 	.head {

@@ -8,6 +8,9 @@
 	--accent: #22d366;
 	--accent-soft: rgba(34, 211, 102, 0.22);
 	--bg: #07080b;
+	/* Haut des écrans pleins (recherche, bibliothèque) : à peine plus clair,
+	   pour que la barre du haut ne flotte pas sur du noir plat. */
+	--bg-top: #0d1016;
 	--surface: rgba(255, 255, 255, 0.06);
 	--surface-strong: rgba(255, 255, 255, 0.12);
 	/* Erreurs : la seule couleur vive en dehors de l'accent. */

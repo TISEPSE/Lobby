@@ -21,6 +21,12 @@ export interface SearchKey {
 	icon?: string;
 	/** Texte affiché à côté de l'icône, pour les touches larges. */
 	label?: string;
+	/**
+	 * Bouton de la manette qui fait la même chose. Son glyphe s'affiche **sur
+	 * la touche** : c'est là qu'on le cherche, pas dans une légende en bas de
+	 * page.
+	 */
+	button?: 'a' | 'b' | 'x' | 'y';
 	/** Largeur en colonnes. */
 	span?: number;
 }
@@ -39,9 +45,9 @@ export const SEARCH_ROWS: SearchKey[][] = [
 	...AZERTY.map(keys),
 	keys('1234567890'),
 	[
-		{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 5 },
-		{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 3 },
-		{ value: '', action: 'clear', icon: 'trash', label: 'Tout', span: 2 },
+		{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 5, button: 'y' },
+		{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 3, button: 'b' },
+		{ value: '', action: 'clear', icon: 'trash', label: 'Tout', span: 2, button: 'x' },
 	],
 ];
 
@@ -58,9 +64,9 @@ export function textKeyboardRows(caps: boolean): SearchKey[][] {
 		...AZERTY.map(letter),
 		[
 			{ value: '', action: 'caps', icon: 'shift', label: caps ? 'Maj' : 'Min', span: 2 },
-			{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 3 },
-			{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 2 },
-			{ value: '', action: 'cancel', icon: 'exit', span: 1 },
+			{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 3, button: 'y' },
+			{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 2, button: 'x' },
+			{ value: '', action: 'cancel', icon: 'exit', span: 1, button: 'b' },
 			{ value: '', action: 'confirm', icon: 'check', label: 'Valider', span: 2 },
 		],
 	];

@@ -642,6 +642,11 @@ async fn art_candidates(
         });
       }
     }
+
+    // Les jeux récents n'ont plus rien à l'ancien emplacement du CDN : chaque
+    // image vit sous `store_item_assets` avec **son propre identifiant**,
+    // impossible à deviner. Seule la fiche du magasin les donne.
+    out.extend(store_asset_candidates(&client, id).await);
   }
 
   if let Some((cover, banner)) = scanner::fetch_lutris_art_variants(&client, &title, &exe).await {
@@ -665,6 +670,44 @@ async fn art_candidates(
 
   out.extend(steamgriddb_candidates(&client, &steamgriddb_key, &title).await);
   Ok(out)
+}
+
+/// Images données par la fiche du magasin : c'est la seule source pour les
+/// jeux dont les visuels ne sont plus à l'ancien emplacement du CDN.
+async fn store_asset_candidates(client: &reqwest::Client, appid: &str) -> Vec<ArtCandidate> {
+  let url = format!("https://store.steampowered.com/api/appdetails?appids={appid}&l=french");
+  let body: serde_json::Value = match client.get(&url).send().await {
+    Ok(response) => match response.json().await {
+      Ok(body) => body,
+      Err(_) => return Vec::new(),
+    },
+    Err(_) => return Vec::new(),
+  };
+
+  let Some(data) = body.get(appid).map(|entry| &entry["data"]) else {
+    return Vec::new();
+  };
+
+  let mut out = Vec::new();
+  for (field, kind) in [
+    ("header_image", "banner"),
+    ("capsule_imagev5", "banner"),
+    ("capsule_image", "banner"),
+    ("background_raw", "hero"),
+  ] {
+    if let Some(image) = data[field].as_str() {
+      if image.is_empty() {
+        continue;
+      }
+      out.push(ArtCandidate {
+        thumb: image.to_string(),
+        url: image.to_string(),
+        source: "Steam".into(),
+        kind: kind.into(),
+      });
+    }
+  }
+  out
 }
 
 /// Les jaquettes communautaires : celles-ci sont nombreuses, d'où un choix à
@@ -699,25 +742,21 @@ async fn steamgriddb_candidates(
     return Vec::new();
   };
 
-  // Les fiches au titre identique d'abord ; à défaut, la première proposée.
-  let wanted = scanner::normalize(title);
-  let mut game_ids: Vec<i64> = results
+  // Seules les fiches qui portent vraiment ce titre. Prendre le premier
+  // résultat à défaut proposait les jaquettes d'un autre jeu — « Ballgame
+  // Demo » se voyait offrir celles de « Bunnies & Ballgames! ». Mieux vaut
+  // aucune affiche qu'une affiche qui n'a rien à voir.
+  let game_ids: Vec<i64> = results
     .iter()
     .filter(|entry| {
       entry["name"]
         .as_str()
-        .map(|name| scanner::normalize(name) == wanted)
+        .map(|name| scanner::titles_match(name, title))
         .unwrap_or(false)
     })
     .filter_map(|entry| entry["id"].as_i64())
     .take(3)
     .collect();
-
-  if game_ids.is_empty() {
-    if let Some(first) = results.first().and_then(|entry| entry["id"].as_i64()) {
-      game_ids.push(first);
-    }
-  }
 
   let mut out: Vec<ArtCandidate> = Vec::new();
   let mut seen: Vec<String> = Vec::new();

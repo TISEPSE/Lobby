@@ -10,21 +10,25 @@
 	import type { Game } from './types';
 	import type { Action } from './gamepad';
 	import Cover from './Cover.svelte';
-	import { artCandidates, chooseArt, type ArtCandidate } from './steam.svelte.js';
+	import { artCandidates, chooseArt, type ArtCandidate, type ArtTarget } from './steam.svelte.js';
 
 	let {
 		open = false,
 		game,
+		target = 'cover',
 		onClose,
 		onPicked,
 	}: {
 		open?: boolean;
 		game?: Game;
+		/** « cover » choisit la jaquette de la tuile, « background » l'artwork de fond. */
+		target?: ArtTarget;
 		onClose: () => void;
 		onPicked?: (message: string, ok: boolean) => void;
 	} = $props();
 
-	const COLUMNS = 6;
+	/** Un fond se juge en grand : moins de colonnes, au format d'un écran. */
+	const COLUMNS = $derived(target === 'background' ? 3 : 6);
 
 	let loading = $state(false);
 	let candidates = $state<ArtCandidate[]>([]);
@@ -37,8 +41,10 @@
 
 	$effect(() => {
 		if (!open || !game) return;
-		if (loadedFor === game.id) return;
-		loadedFor = game.id;
+		// Rouvrir pour le même jeu mais sur l'autre cible relance la recherche.
+		const key = `${game.id}|${target}`;
+		if (loadedFor === key) return;
+		loadedFor = key;
 		index = 0;
 		error = '';
 		candidates = [];
@@ -46,9 +52,18 @@
 		const wanted = game;
 		void (async () => {
 			try {
-				candidates = await artCandidates(wanted);
+				const found = await artCandidates(wanted);
+				// Une jaquette est verticale ; un fond est large. Mélanger les deux
+				// donnerait une liste où rien n'est comparable.
+				candidates =
+					target === 'background'
+						? found.filter((item) => item.kind !== 'cover')
+						: found.filter((item) => item.kind === 'cover');
 				if (candidates.length === 0) {
-					error = "Aucune affiche trouvée pour ce jeu. Une clé SteamGridDB en apporterait davantage (Réglages → Jeux).";
+					error =
+						target === 'background'
+							? "Aucune image de fond trouvée pour ce jeu. Une clé SteamGridDB en apporterait davantage (Réglages → Jeux)."
+							: "Aucune jaquette trouvée pour ce jeu. Une clé SteamGridDB en apporterait davantage (Réglages → Jeux).";
 				}
 			} catch (e) {
 				error = `Recherche impossible : ${e}`;
@@ -76,11 +91,16 @@
 		if (!candidate) return;
 		saving = true;
 		try {
-			await chooseArt(game.id, candidate);
-			onPicked?.(`Affiche de ${game.title} mise à jour.`, true);
+			await chooseArt(game.id, candidate, target);
+			onPicked?.(
+				target === 'background'
+					? `Image de fond de ${game.title} mise à jour.`
+					: `Jaquette de ${game.title} mise à jour.`,
+				true
+			);
 			close();
 		} catch (e) {
-			onPicked?.(`Cette affiche n'a pas pu être enregistrée : ${e}`, false);
+			onPicked?.(`Cette image n'a pas pu être enregistrée : ${e}`, false);
 		} finally {
 			saving = false;
 		}
@@ -98,35 +118,38 @@
 	<div class="veil">
 		<section class="picker">
 			<header>
-				<h2>Changer l'affiche</h2>
+				<h2>{target === 'background' ? "Changer l'image de fond" : 'Changer la jaquette'}</h2>
 				<p class="sub">
 					{game?.title ?? ''}
-					{#if candidates.length}· {candidates.length} affiches{/if}
+					{#if candidates.length}· {candidates.length} image{candidates.length > 1 ? 's' : ''}{/if}
 				</p>
 			</header>
 
 			{#if loading}
 				<!-- Tuiles fantômes au format d'une jaquette : on voit tout de
 				     suite ce qui va arriver, et où. -->
-				<div class="viewport" style="--columns: {COLUMNS}">
+				<div class="viewport" class:wide={target === 'background'} style="--columns: {COLUMNS}">
 					<div class="grid" style="--row: 0">
 						{#each Array(COLUMNS) as _, i}
 							<div class="ghost" style="--delay: {i * 110}ms"></div>
 						{/each}
 					</div>
 				</div>
-				<p class="state">Recherche des affiches…</p>
+				<p class="state">Recherche des images…</p>
 			{:else if error}
 				<p class="state">{error}</p>
 			{:else}
-				<div class="viewport" style="--columns: {COLUMNS}">
+				<div class="viewport" class:wide={target === 'background'} style="--columns: {COLUMNS}">
 					<div class="grid" style="--row: {selectedRow}">
 						{#each candidates as candidate, i}
 							<!-- L'aperçu passe par `Cover`, le composant des vraies tuiles, avec
 							     l'image pleine (pas la miniature) : cadrage, format et légende
 							     sont ceux de l'accueil, sans rien reproduire à la main. -->
 							<figure class="item" class:selected={i === index}>
-								{#if game}
+								{#if target === 'background'}
+									<!-- Un fond se regarde tel qu'il couvrira l'écran. -->
+									<img class="wide" src={candidate.url} alt="" loading="lazy" />
+								{:else if game}
 									<Cover {game} override={candidate.url} />
 								{/if}
 								<span class="caption">{game?.title ?? ''}</span>
@@ -191,6 +214,8 @@
 	   comme la bibliothèque, pas de barre de défilement à viser à la manette. */
 	.viewport {
 		--gap: 16px;
+		/* Un fond est au format d'un écran, une jaquette au format d'une tuile. */
+		--ratio: 1.5;
 		/* Une tuile garde le format 2/3 des jaquettes : sa hauteur se déduit de
 		   la largeur d'une colonne, comme dans la bibliothèque. */
 		--tile-width: calc(
@@ -198,7 +223,7 @@
 					var(--picker-width) - 2 * var(--picker-padding) - (var(--columns) - 1) * var(--gap)
 				) / var(--columns)
 		);
-		--row-height: calc(var(--tile-width) * 1.5);
+		--row-height: calc(var(--tile-width) * var(--ratio));
 
 		/* Deux rangées au maximum ; avec moins d'affiches, la fenêtre se
 		   resserre au lieu de garder une moitié vide. La gouttière laisse
@@ -215,6 +240,17 @@
 		gap: var(--gap);
 		transform: translateY(calc(var(--row) * -1 * (var(--row-height) + var(--gap))));
 		transition: transform var(--normal) var(--ease);
+	}
+
+	.viewport.wide {
+		--ratio: 0.5625;
+	}
+
+	.item .wide {
+		display: block;
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
 	}
 
 	/* Exactement la tuile de l'accueil : même format, même rayon, même fond. */

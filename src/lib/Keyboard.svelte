@@ -10,6 +10,21 @@
 	 * rien portent une icône, pas une légende en bas de page.
 	 */
 	import { SEARCH_ROWS, SEARCH_COLUMNS, type SearchKey } from './searchKeys';
+	import { padLayout } from './gamepad';
+
+	/** Glyphes des boutons, comme dans la barre d'aide. */
+	const FILES: Record<'xbox' | 'ps5', Record<'a' | 'b' | 'x' | 'y', string>> = {
+		xbox: { a: 'xbox/a', b: 'xbox/b', x: 'xbox/x', y: 'xbox/y' },
+		ps5: { a: 'ps5/cross', b: 'ps5/circle', x: 'ps5/square', y: 'ps5/triangle' },
+	};
+
+	let layout = $state<'xbox' | 'ps5'>('xbox');
+
+	$effect(() => {
+		const timer = setInterval(() => (layout = padLayout()), 1000);
+		layout = padLayout();
+		return () => clearInterval(timer);
+	});
 
 	let {
 		rows = SEARCH_ROWS,
@@ -45,6 +60,10 @@
 						<span class="label">{key.label}</span>
 					{:else}
 						{key.value}
+					{/if}
+					{#if key.button}
+						<!-- Le raccourci manette se lit sur la touche même. -->
+						<img class="pad" src="/assets/buttons/{FILES[layout][key.button]}.svg" alt="" />
 					{/if}
 				</button>
 			{/each}
@@ -104,14 +123,25 @@
 		font-weight: 600;
 	}
 
+	.key .pad {
+		width: 22px;
+		height: 22px;
+		opacity: 0.75;
+	}
+
 	.key.selected {
 		background: var(--accent);
 		color: #06210f;
 	}
 
-	/* Sur fond d'accent, une icône blanche disparaîtrait : on l'assombrit. */
-	.key.selected img {
+	/* Sur fond d'accent, une icône blanche disparaîtrait : on l'assombrit. Le
+	   glyphe de manette, lui, a ses propres couleurs : on le laisse tel quel. */
+	.key.selected img:not(.pad) {
 		filter: brightness(0.1);
+		opacity: 1;
+	}
+
+	.key.selected .pad {
 		opacity: 1;
 	}
 </style>

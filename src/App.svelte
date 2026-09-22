@@ -132,6 +132,10 @@
 	let scanModalOpen = $state(params.get('modal') === 'scan');
 	/** Choix de l'affiche d'un jeu, ouvert depuis le menu d'options d'une tuile. */
 	let artPickerOpen = $state(params.get('modal') === 'art');
+	/** Jaquette de la tuile, ou image de fond : la fenêtre est la même. */
+	let artPickerTarget = $state<'cover' | 'background'>(
+		params.get('art') === 'background' ? 'background' : 'cover'
+	);
 	let isScanning = $state(false);
 	let scannedCandidates = $state<Game[]>([]);
 
@@ -172,7 +176,8 @@
 	const backdropSrc = $derived.by(() => {
 		if (!selected) return '';
 		const sheet = selected.appid ? details[selected.appid] : undefined;
-		return sheet?.hero || artwork[selected.id]?.hero || selected.hero || '';
+		// Le fichier local d'abord : c'est l'image de fond choisie pour ce jeu.
+		return artwork[selected.id]?.hero || sheet?.hero || selected.hero || '';
 	});
 
 	/** Artworks disponibles pour la veille, sans doublon ni case vide. */
@@ -297,6 +302,10 @@
 				else goToSection('home');
 			} else if (action === 'search') {
 				query += ' ';
+				searchResult = 0;
+			} else if (action === 'options') {
+				// X efface tout, comme la touche large du clavier.
+				query = '';
 				searchResult = 0;
 			}
 			return;
@@ -556,7 +565,8 @@
 						label: isFavorite(selected.id) ? 'Retirer des favoris' : 'Ajouter aux favoris',
 						icon: 'star',
 					},
-					{ id: 'art', label: "Changer l'affiche", icon: 'image' },
+					{ id: 'art', label: 'Changer la jaquette', icon: 'image' },
+					{ id: 'art-bg', label: "Changer l'image de fond", icon: 'video' },
 					{ id: 'update', label: 'Mettre à jour', icon: 'download' },
 					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
 					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
@@ -583,6 +593,11 @@
 			case 'art':
 				// On ne fait plus défiler les affiches à l'aveugle : la fenêtre
 				// montre tout ce qui existe et l'utilisateur choisit.
+				artPickerTarget = 'cover';
+				artPickerOpen = true;
+				break;
+			case 'art-bg':
+				artPickerTarget = 'background';
 				artPickerOpen = true;
 				break;
 			case 'update':
@@ -625,7 +640,7 @@
 					]
 				: artPickerOpen
 					? [
-							{ button: 'a' as const, label: 'Choisir cette affiche' },
+							{ button: 'a' as const, label: 'Choisir cette image' },
 							{ button: 'b' as const, label: 'Fermer' },
 						]
 					: scanModalOpen
@@ -835,6 +850,7 @@
 	bind:this={artPickerComponent}
 	open={artPickerOpen}
 	game={selected}
+	target={artPickerTarget}
 	onClose={() => (artPickerOpen = false)}
 	onPicked={(message, ok) => notify(message, ok)}
 />

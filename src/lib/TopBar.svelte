@@ -36,7 +36,7 @@
 
 </script>
 
-<header class="top">
+<header class="top" class:focused>
 	<div class="profile">
 		<div class="avatar">
 			{#if avatar}
@@ -51,17 +51,18 @@
 		</div>
 	</div>
 
-	<nav class="sections" class:focused>
+	<!-- Les sections s'écrivent en toutes lettres : sur une télé, une icône
+	     seule oblige à deviner, et rien ne dit où l'on se trouve. -->
+	<nav class="sections">
 		{#each SECTIONS as entry}
 			<button
 				type="button"
-				class="pill"
+				class="tab"
 				class:active={entry.id === section}
-				class:is-hub={entry.id === 'home'}
-				title={entry.label}
 				onclick={() => onSelectSection?.(entry.id)}
 			>
-				<img src="/assets/icons/{entry.icon}.svg" alt={entry.label} />
+				<img src="/assets/icons/{entry.icon}.svg" alt="" />
+				<span>{entry.label}</span>
 			</button>
 		{/each}
 	</nav>
@@ -83,10 +84,17 @@
 		z-index: 2;
 		display: flex;
 		align-items: center;
-		justify-content: space-between;
-		gap: 32px;
+		gap: 44px;
 		height: 110px;
 		padding: 0 var(--safe-x);
+		/* La barre s'efface quand la sélection est descendue dans le contenu :
+		   elle reste lisible, sans tirer l'œil hors du jeu regardé. */
+		opacity: 0.72;
+		transition: opacity var(--normal) var(--ease);
+	}
+
+	.top.focused {
+		opacity: 1;
 	}
 
 	.profile {
@@ -107,7 +115,7 @@
 		font-size: 26px;
 		font-weight: 700;
 		/* Anneau fin autour de l'avatar : le repère « profil » d'une console. */
-		box-shadow: 0 0 0 3px rgba(34, 211, 102, 0.22);
+		box-shadow: 0 0 0 3px var(--accent-soft);
 	}
 
 	.avatar img {
@@ -130,80 +138,74 @@
 		color: var(--text-dim);
 	}
 
-	/* Les sections sont des pastilles, comme sur un tableau de bord de console. */
+	/* Onglets alignés à la suite du profil, pas de cartouche autour : la barre
+	   se lit comme une ligne de titres, à la manière d'une console de salon. */
 	.sections {
 		display: flex;
 		align-items: center;
-		gap: 14px;
-		padding: 8px 14px;
-		border-radius: 999px;
-		background: rgba(255, 255, 255, 0.04);
-		transition:
-			background var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease);
+		gap: 34px;
+		margin-right: auto;
 	}
 
-	.sections.focused {
-		background: rgba(255, 255, 255, 0.09);
-		box-shadow: 0 0 0 2px var(--accent-soft);
-	}
-
-	.pill {
-		display: grid;
-		place-items: center;
-		width: 46px;
-		height: 46px;
-		border-radius: 50%;
+	.tab {
+		position: relative;
+		display: flex;
+		align-items: center;
+		gap: 10px;
+		padding: 6px 2px 10px;
 		border: none;
-		background: rgba(255, 255, 255, 0.06);
+		background: none;
+		color: var(--text-dim);
+		font-size: 20px;
+		font-weight: 600;
 		cursor: pointer;
-		outline: none;
-		padding: 0;
-		transition:
-			background var(--fast) var(--ease),
-			transform var(--fast) var(--ease),
-			outline var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease);
+		transition: color var(--fast) var(--ease);
 	}
 
-	.pill img {
-		width: 24px;
-		height: 24px;
-		opacity: 0.7;
+	.tab img {
+		width: 22px;
+		height: 22px;
+		opacity: 0.55;
 		transition: opacity var(--fast) var(--ease);
 	}
 
-	.pill:hover {
-		outline: 3px solid var(--accent);
-		box-shadow: 0 0 20px 4px var(--accent-soft);
-	}
-
-	.pill.active {
+	/* Le trait d'accent est toujours là, mais il ne se révèle que sous
+	   l'onglet courant : sa largeur s'anime d'un onglet à l'autre. */
+	.tab::after {
+		content: '';
+		position: absolute;
+		left: 0;
+		right: 0;
+		bottom: 0;
+		height: 3px;
+		border-radius: 3px;
 		background: var(--accent);
-		transform: scale(1.04);
+		transform: scaleX(0);
+		transform-origin: center;
+		transition: transform var(--normal) var(--ease);
 	}
 
-	.pill:hover {
-		outline: 3px solid var(--accent);
-		outline-offset: 2px;
-		box-shadow: 0 0 20px 4px var(--accent-soft);
+	.tab.active {
+		color: var(--text);
 	}
 
-	.sections.focused .pill.active {
-		outline: 4px solid var(--accent);
-		outline-offset: 3px;
-		box-shadow:
-			0 0 32px 6px var(--accent-soft),
-			0 0 12px var(--accent);
-		transform: scale(1.1);
-	}
-
-	.pill.active img {
+	.tab.active img {
 		opacity: 1;
-		/* L'icône passe en sombre sur la pastille d'accent. */
-		filter: brightness(0) saturate(100%) invert(8%) sepia(24%) saturate(1200%) hue-rotate(96deg);
 	}
 
+	.tab.active::after {
+		transform: scaleX(1);
+	}
+
+	/* Quand la barre a la main, l'onglet courant s'allume franchement : la
+	   sélection ne doit jamais se perdre. */
+	.top.focused .tab.active {
+		text-shadow: 0 0 24px var(--accent-soft);
+	}
+
+	.top.focused .tab.active::after {
+		box-shadow: 0 0 18px 3px var(--accent-soft);
+	}
 
 	.right {
 		display: flex;
