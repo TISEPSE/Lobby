@@ -133,13 +133,29 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
   ```
   `?screen=home|detail` et `?index=N` ouvrent directement un état donné.
 
+## Recherche
+
+- Écran dédié, sans modale : le clavier reste affiché à gauche, les résultats à droite se mettent à jour à chaque lettre.
+- A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.
+- Le passage clavier ↔ résultats se fait au bord (à droite depuis la dernière colonne, à gauche depuis la première tuile).
+- Comparaison via `normalizeForSearch` : sans accents ni ponctuation, « repo » trouve « R.E.P.O. ».
+- La hauteur de la fenêtre de résultats est en **unités d'écran** : un pourcentage à l'intérieur d'une variable CSS se résout contre la hauteur du parent, pas sa largeur — le calcul partait faux.
+
+## Vidéo d'introduction
+
+- Les vidéos sont dans `public/assets/boot/` au format **.webm** (le web le lit nativement ; l'Ogg Theora était une contrainte de Godot).
+- `BootVideo.svelte` la joue au lancement par-dessus l'interface déjà construite derrière. N'importe quelle touche la passe, et une vidéo illisible enchaîne directement sur l'accueil plutôt que de laisser un écran noir.
+- Réglages → Apparence : choix de la vidéo et activation (`boot_video`, `boot_video_enabled`, persistés côté Rust).
+- `?boot=0` la saute — utile pour les captures.
+
 ## Feuille de route
 
 1. **Socle** : accueil (carrousel), fiche de jeu, navigation manette, lancement réel. — *fait*
 2. **Bibliothèque** : grille, filtres (Tous / Favoris / Récemment joué), tri. — *fait*
+2b. **Recherche** : clavier à l'écran et résultats filtrés à la frappe. — *fait*
 3. **Réglages** : profil (pseudo, photo parmi celles fournies), dossiers de jeux, système. — *fait*
 4. **Détection de jeux** : détection Steam / Epic / dossiers de jeux / raccourcis `.lnk` en Rust avec validation utilisateur. — *fait*
-5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement, en tâche de fond.
+5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement — *fait*. Les visuels sont **téléchargés une fois** dans `<app data>/artwork/` (`cache_game_art`) : l'interface lit un fichier, pas une adresse web, donc l'association jeu ↔ jaquette ne peut plus changer et tout s'affiche hors ligne.
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
 7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs.
 
