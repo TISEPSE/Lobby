@@ -18,7 +18,9 @@
 	const online = $derived(artwork[game.id]);
 
 	const sheet = $derived(game.appid ? details[game.appid] : undefined);
-	const style = $derived(game.appid ? (artStyles[game.appid] ?? 'auto') : 'auto');
+	// L'affiche choisie est rangée sous l'identifiant du jeu : un appid peut
+	// manquer, un id jamais.
+	const style = $derived(artStyles[game.id] ?? 'auto');
 
 	const coverSrc = $derived.by(() => {
 		// Le fichier local d'abord : c'est la jaquette retenue pour ce jeu.

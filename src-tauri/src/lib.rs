@@ -299,6 +299,21 @@ pub struct OnlineArtwork {
   pub banner: String,
 }
 
+/// Une affiche proposée à l'utilisateur dans « Changer l'affiche ».
+///
+/// On garde l'adresse de la vignette à part : les jaquettes SteamGridDB font
+/// 600x900 en plein format, et en afficher vingt d'un coup tirerait plusieurs
+/// mégaoctets pour rien.
+#[derive(Debug, Clone, Serialize, Deserialize)]
+pub struct ArtCandidate {
+  pub url: String,
+  pub thumb: String,
+  /// « Steam », « Lutris » ou « SteamGridDB » : l'utilisateur voit d'où ça vient.
+  pub source: String,
+  /// « cover » (2/3), « hero » (artwork large) ou « banner » (16/9).
+  pub kind: String,
+}
+
 /// État d'un téléchargement ou d'une mise à jour en cours chez Steam.
 #[derive(serde::Serialize, Clone, Debug)]
 pub struct DownloadStatus {
@@ -547,6 +562,178 @@ async fn cache_game_art(
   })
 }
 
+/// Toutes les affiches possibles pour un jeu, pour que l'utilisateur choisisse
+/// lui-même — l'automatique se trompe parfois de jeu, et lui seul sait laquelle
+/// il veut voir dans sa bibliothèque.
+#[tauri::command]
+async fn art_candidates(
+  app: tauri::AppHandle,
+  title: String,
+  appid: Option<String>,
+  executable: Option<String>,
+) -> Result<Vec<ArtCandidate>, String> {
+  let exe = executable.unwrap_or_default();
+  let steamgriddb_key = load_user_settings(app)
+    .map(|settings| settings.steamgriddb_key)
+    .unwrap_or_default();
+  let client = reqwest::Client::builder()
+    .user_agent("InterfaceConsole/0.1")
+    .build()
+    .map_err(|e| e.to_string())?;
+
+  let mut out: Vec<ArtCandidate> = Vec::new();
+  let cdn = "https://cdn.cloudflare.steamstatic.com/steam/apps";
+
+  let mut target_appid = appid;
+  if target_appid.is_none() {
+    target_appid = scanner::match_steam_app_variants(&client, &title, &exe).await;
+  }
+
+  if let Some(ref id) = target_appid {
+    for (url, kind) in [
+      (format!("{cdn}/{id}/library_600x900_2x.jpg"), "cover"),
+      (format!("{cdn}/{id}/library_600x900.jpg"), "cover"),
+      (format!("{cdn}/{id}/library_hero.jpg"), "hero"),
+      (format!("{cdn}/{id}/header.jpg"), "banner"),
+      (format!("{cdn}/{id}/capsule_616x353.jpg"), "banner"),
+    ] {
+      if !first_available(&client, &[url.clone()]).await.is_empty() {
+        out.push(ArtCandidate {
+          thumb: url.clone(),
+          url,
+          source: "Steam".into(),
+          kind: kind.into(),
+        });
+      }
+    }
+  }
+
+  if let Some((cover, banner)) = scanner::fetch_lutris_art_variants(&client, &title, &exe).await {
+    if !cover.is_empty() {
+      out.push(ArtCandidate {
+        thumb: cover.clone(),
+        url: cover,
+        source: "Lutris".into(),
+        kind: "cover".into(),
+      });
+    }
+    if !banner.is_empty() {
+      out.push(ArtCandidate {
+        thumb: banner.clone(),
+        url: banner,
+        source: "Lutris".into(),
+        kind: "banner".into(),
+      });
+    }
+  }
+
+  out.extend(steamgriddb_candidates(&client, &steamgriddb_key, &title).await);
+  Ok(out)
+}
+
+/// Les jaquettes communautaires : celles-ci sont nombreuses, d'où un choix à
+/// faire par l'utilisateur plutôt qu'une première réponse prise au hasard.
+async fn steamgriddb_candidates(
+  client: &reqwest::Client,
+  key: &str,
+  title: &str,
+) -> Vec<ArtCandidate> {
+  if key.is_empty() || title.is_empty() {
+    return Vec::new();
+  }
+
+  let search = format!(
+    "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
+    scanner::urlencoding_simple(title)
+  );
+  let found: serde_json::Value = match client.get(&search).bearer_auth(key).send().await {
+    Ok(response) => match response.json().await {
+      Ok(body) => body,
+      Err(_) => return Vec::new(),
+    },
+    Err(_) => return Vec::new(),
+  };
+
+  let Some(game_id) = found["data"]
+    .as_array()
+    .and_then(|list| list.first())
+    .and_then(|first| first["id"].as_i64())
+  else {
+    return Vec::new();
+  };
+
+  let mut out = Vec::new();
+  for (kind, endpoint, query) in [
+    ("cover", "grids", "?dimensions=600x900&limit=18"),
+    ("hero", "heroes", "?limit=6"),
+  ] {
+    let url = format!("https://www.steamgriddb.com/api/v2/{endpoint}/game/{game_id}{query}");
+    let body: serde_json::Value = match client.get(&url).bearer_auth(key).send().await {
+      Ok(response) => match response.json().await {
+        Ok(body) => body,
+        Err(_) => continue,
+      },
+      Err(_) => continue,
+    };
+    let Some(items) = body["data"].as_array() else {
+      continue;
+    };
+    for item in items {
+      let Some(full) = item["url"].as_str() else {
+        continue;
+      };
+      out.push(ArtCandidate {
+        // `thumb` est la miniature fournie par l'API : c'est elle qu'on affiche
+        // dans la grille, l'image pleine taille n'est tirée qu'au choix.
+        thumb: item["thumb"].as_str().unwrap_or(full).to_string(),
+        url: full.to_string(),
+        source: "SteamGridDB".into(),
+        kind: kind.into(),
+      });
+    }
+  }
+  out
+}
+
+/// Enregistre l'affiche choisie par l'utilisateur, en remplaçant celle qui
+/// était déjà sur le disque pour ce jeu.
+#[tauri::command]
+async fn pick_game_art(
+  app: tauri::AppHandle,
+  game_id: String,
+  url: String,
+  kind: String,
+) -> Result<String, String> {
+  let dir = artwork_dir(&app)?;
+  let client = reqwest::Client::builder()
+    .user_agent("InterfaceConsole/0.1")
+    .build()
+    .map_err(|error| error.to_string())?;
+
+  // Les anciens fichiers de ce type partent : sans ça, `download_once` verrait
+  // un fichier existant et garderait l'affiche précédente.
+  // Le nom de fichier est assaini comme dans `download_once` : sinon un jeu au
+  // titre exotique ne retrouverait pas ses propres fichiers.
+  let safe_id: String = game_id
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect();
+  if let Ok(entries) = fs::read_dir(&dir) {
+    let prefix = format!("{safe_id}-{kind}.");
+    for entry in entries.flatten() {
+      if entry.file_name().to_string_lossy().starts_with(&prefix) {
+        let _ = fs::remove_file(entry.path());
+      }
+    }
+  }
+
+  let local = download_once(&client, &dir, &game_id, &kind, &url).await;
+  if local.is_empty() {
+    return Err("Cette image n'a pas pu être téléchargée.".into());
+  }
+  Ok(local)
+}
+
 /// Récupère en ligne les jaquettes et illustrations officielles (Steam CDN ou Lutris/IGDB gratuit, 0 clé).
 #[tauri::command]
 async fn fetch_game_art(
@@ -745,6 +932,8 @@ pub fn run() {
       power_action,
       steam_details,
       cache_game_art,
+      art_candidates,
+      pick_game_art,
       steam_downloads,
       open_url,
       scan_installed_games,

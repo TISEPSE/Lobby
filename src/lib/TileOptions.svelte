@@ -46,21 +46,25 @@
 		width: 320px;
 	}
 
+	/* Les entrées se répartissent la hauteur de la tuile au lieu d'être
+	   empilées à taille fixe : à cinq, la dernière sortait du cadre et se
+	   faisait trancher par le `overflow: hidden` du panneau. */
 	.inner {
-		display: flex;
-		flex-direction: column;
-		justify-content: center;
-		gap: 8px;
+		display: grid;
+		grid-auto-rows: 1fr;
+		align-content: stretch;
+		gap: 6px;
 		width: 320px;
 		height: 100%;
-		padding: 10px 14px 10px 18px;
+		padding: 4px 14px 4px 18px;
 	}
 
 	.row {
 		display: flex;
 		align-items: center;
-		gap: 14px;
-		padding: 12px 14px;
+		min-height: 0;
+		gap: 12px;
+		padding: 0 12px;
 		border-radius: var(--radius);
 		background: rgba(255, 255, 255, 0.05);
 		transition:
@@ -81,8 +85,8 @@
 		display: grid;
 		place-items: center;
 		flex: 0 0 auto;
-		width: 40px;
-		height: 40px;
+		width: 34px;
+		height: 34px;
 		border-radius: 50%;
 		background: rgba(255, 255, 255, 0.07);
 	}
@@ -92,8 +96,8 @@
 	}
 
 	.mark img {
-		width: 20px;
-		height: 20px;
+		width: 18px;
+		height: 18px;
 		opacity: 0.9;
 	}
 

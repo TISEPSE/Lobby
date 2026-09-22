@@ -55,19 +55,6 @@ function loadArt(): Record<string, ArtStyle> {
 	}
 }
 
-/** Passe à l'affiche suivante et rend son nom, pour le dire à l'utilisateur. */
-export function cycleArtStyle(appid: string): string {
-	const order: ArtStyle[] = ['auto', 'artwork', 'banner'];
-	const next = order[(order.indexOf(artStyles[appid] ?? 'auto') + 1) % order.length];
-	artStyles[appid] = next;
-	try {
-		localStorage.setItem(ART_KEY, JSON.stringify(artStyles));
-	} catch {
-		/* sans stockage, le choix ne vaut que pour la session */
-	}
-	return { auto: 'Jaquette', artwork: 'Artwork', banner: 'Bannière' }[next];
-}
-
 /** Jaquette à afficher : celle résolue par Rust si elle est arrivée. */
 export function coverOf(appid: string, fallback: string): string {
 	return details[appid]?.cover || fallback;
@@ -162,4 +149,82 @@ export function ensureArtwork(game: { id: string; title: string; appid?: string;
 export function forgetArtwork(gameId: string) {
 	delete artwork[gameId];
 	saveArtwork();
+}
+
+/** Une affiche proposée dans « Changer l'affiche ». */
+export interface ArtCandidate {
+	url: string;
+	thumb: string;
+	source: string;
+	kind: 'cover' | 'hero' | 'banner';
+}
+
+/**
+ * Toutes les affiches trouvables pour un jeu. La recherche prend quelques
+ * secondes (Steam, Lutris, SteamGridDB) : l'appelant affiche une attente.
+ */
+export async function artCandidates(game: {
+	title: string;
+	appid?: string;
+	executable?: string;
+}): Promise<ArtCandidate[]> {
+	const tauri = (window as any).__TAURI_INTERNALS__;
+	// Hors application, on montre ce que le CDN Steam expose pour ce jeu : le
+	// front reste utilisable pour juger la fenêtre, comme pour le lancement.
+	if (!tauri) return previewCandidates(game.appid);
+	const { invoke } = await import('@tauri-apps/api/core');
+	return invoke<ArtCandidate[]>('art_candidates', {
+		title: game.title,
+		appid: game.appid ?? null,
+		executable: game.executable ?? null,
+	});
+}
+
+/**
+ * Retient l'affiche choisie : Rust la télécharge à la place de la précédente,
+ * et l'interface lit désormais ce fichier. Le choix survit donc au
+ * redémarrage, et ne dépend plus d'une recherche en ligne.
+ */
+export async function chooseArt(gameId: string, candidate: ArtCandidate): Promise<void> {
+	const tauri = (window as any).__TAURI_INTERNALS__;
+	if (!tauri) return;
+	const { invoke, convertFileSrc } = await import('@tauri-apps/api/core');
+	const local = await invoke<string>('pick_game_art', {
+		gameId,
+		url: candidate.url,
+		kind: candidate.kind,
+	});
+
+	const current = artwork[gameId] ?? { cover: '', hero: '', logo: '', banner: '' };
+	artwork[gameId] = { ...current, [candidate.kind]: convertFileSrc(local) };
+	saveArtwork();
+
+	// Une affiche choisie à la main prime : on remet le style sur « jaquette »
+	// pour que ce soit bien elle qui s'affiche.
+	if (candidate.kind === 'cover') {
+		artStyles[gameId] = 'auto';
+	} else if (candidate.kind === 'banner') {
+		artStyles[gameId] = 'banner';
+	} else {
+		artStyles[gameId] = 'artwork';
+	}
+	try {
+		localStorage.setItem(ART_KEY, JSON.stringify(artStyles));
+	} catch {
+		/* sans stockage, le choix ne vaut que pour la session */
+	}
+}
+
+/** Candidats visibles dans un simple onglet de navigateur, sans Rust. */
+function previewCandidates(appid?: string): ArtCandidate[] {
+	if (!appid) return [];
+	const cdn = 'https://cdn.cloudflare.steamstatic.com/steam/apps';
+	const kinds: [string, ArtCandidate['kind']][] = [
+		[`${cdn}/${appid}/library_600x900_2x.jpg`, 'cover'],
+		[`${cdn}/${appid}/library_600x900.jpg`, 'cover'],
+		[`${cdn}/${appid}/library_hero.jpg`, 'hero'],
+		[`${cdn}/${appid}/header.jpg`, 'banner'],
+		[`${cdn}/${appid}/capsule_616x353.jpg`, 'banner'],
+	];
+	return kinds.map(([url, kind]) => ({ url, thumb: url, source: 'Steam', kind }));
 }

@@ -16,9 +16,10 @@
 	import Settings from './lib/Settings.svelte';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
+	import ArtPicker from './lib/ArtPicker.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
-	import { cycleArtStyle, artwork, details } from './lib/steam.svelte.js';
+	import { artwork, details } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { SEARCH_ROWS, keyAt, rowLength, nearestColumn, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
@@ -126,6 +127,8 @@
 	/** Modales et scan */
 	let avatarPickerOpen = $state(params.get('modal') === 'avatars');
 	let scanModalOpen = $state(params.get('modal') === 'scan');
+	/** Choix de l'affiche d'un jeu, ouvert depuis le menu d'options d'une tuile. */
+	let artPickerOpen = $state(params.get('modal') === 'art');
 	let isScanning = $state(false);
 	let scannedCandidates = $state<Game[]>([]);
 
@@ -136,6 +139,7 @@
 	} | null = $state(null);
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
+	let artPickerComponent: { handleAction: (action: Action) => void } | null = $state(null);
 
 	const libraryGames = $derived(view(filter, sort));
 
@@ -443,6 +447,7 @@
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
+		if (artPickerOpen) return artPickerComponent?.handleAction(action);
 		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
 			return settingsComponent.handleAction(action);
 		}
@@ -558,7 +563,9 @@
 				switchFavorite();
 				break;
 			case 'art':
-				notify(`Affiche : ${cycleArtStyle(selected.appid ?? selected.id)}.`);
+				// On ne fait plus défiler les affiches à l'aveugle : la fenêtre
+				// montre tout ce qui existe et l'utilisateur choisit.
+				artPickerOpen = true;
 				break;
 			case 'update':
 				if (selected.appid) notify(await updateGame(selected.appid));
@@ -570,7 +577,7 @@
 				if (selected.appid) notify(await uninstallGame(selected.appid));
 				break;
 		}
-		if (id !== 'favorite' && id !== 'art') optionsOpen = false;
+		if (id !== 'favorite') optionsOpen = false;
 	}
 
 	const help = $derived(
@@ -584,7 +591,12 @@
 						{ button: 'a' as const, label: 'Choisir' },
 						{ button: 'b' as const, label: 'Fermer' },
 					]
-				: scanModalOpen
+				: artPickerOpen
+					? [
+							{ button: 'a' as const, label: 'Choisir cette affiche' },
+							{ button: 'b' as const, label: 'Fermer' },
+						]
+					: scanModalOpen
 					? [
 							{ button: 'a' as const, label: 'Cocher / Valider' },
 							{ button: 'x' as const, label: 'Tout cocher' },
@@ -762,6 +774,14 @@
 	profileName={settings.profile_name}
 	onSelect={setAvatar}
 	onClose={() => (avatarPickerOpen = false)}
+/>
+
+<ArtPicker
+	bind:this={artPickerComponent}
+	open={artPickerOpen}
+	game={selected}
+	onClose={() => (artPickerOpen = false)}
+	onPicked={(message, ok) => notify(message, ok)}
 />
 
 <ScanResultsModal
