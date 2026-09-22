@@ -3,9 +3,22 @@
 	import { details, ensureDetails, artStyles, artwork, ensureArtwork } from './steam.svelte.js';
 	import { generateProceduralCover } from './art';
 
-	let { game }: { game: Game } = $props();
+	let {
+		game,
+		override = '',
+	}: {
+		game: Game;
+		/**
+		 * Image imposée, quelle que soit l'affiche retenue pour ce jeu. Sert à
+		 * l'aperçu du choix d'affiche : la tuile est alors rendue exactement
+		 * comme elle le sera une fois le choix validé.
+		 */
+		override?: string;
+	} = $props();
 
 	$effect(() => {
+		// En aperçu, rien à chercher : l'image est déjà connue.
+		if (override) return;
 		// Les métadonnées (note, genres, résumé) viennent de l'appid…
 		if (game.appid) {
 			ensureDetails(game.appid);
@@ -23,6 +36,7 @@
 	const style = $derived(artStyles[game.id] ?? 'auto');
 
 	const coverSrc = $derived.by(() => {
+		if (override) return override;
 		// Le fichier local d'abord : c'est la jaquette retenue pour ce jeu.
 		if (style === 'auto' && online?.cover) {
 			return online.cover;

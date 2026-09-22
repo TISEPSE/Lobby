@@ -9,6 +9,7 @@
 	 */
 	import type { Game } from './types';
 	import type { Action } from './gamepad';
+	import Cover from './Cover.svelte';
 	import { artCandidates, chooseArt, type ArtCandidate } from './steam.svelte.js';
 
 	let {
@@ -113,8 +114,8 @@
 			{#if loading}
 				<!-- Tuiles fantômes au format d'une jaquette : on voit tout de
 				     suite ce qui va arriver, et où. -->
-				<div class="viewport">
-					<div class="grid" style="--columns: {COLUMNS}; --row: 0">
+				<div class="viewport" style="--columns: {COLUMNS}">
+					<div class="grid" style="--row: 0">
 						{#each Array(COLUMNS) as _, i}
 							<div class="ghost" style="--delay: {i * 110}ms"></div>
 						{/each}
@@ -124,14 +125,16 @@
 			{:else if error}
 				<p class="state">{error}</p>
 			{:else}
-				<div class="viewport">
-					<div class="grid" style="--columns: {COLUMNS}; --row: {selectedRow}">
+				<div class="viewport" style="--columns: {COLUMNS}">
+					<div class="grid" style="--row: {selectedRow}">
 						{#each candidates as candidate, i}
-							<!-- L'aperçu est rendu **comme la vraie tuile** : même format, même
-							     cadrage, même légende. Ce qu'on voit ici est exactement ce
-							     qu'on verra dans la bibliothèque. -->
+							<!-- L'aperçu passe par `Cover`, le composant des vraies tuiles, avec
+							     l'image pleine (pas la miniature) : cadrage, format et légende
+							     sont ceux de l'accueil, sans rien reproduire à la main. -->
 							<figure class="item" class:selected={i === index}>
-								<img src={candidate.thumb} alt="" loading="lazy" />
+								{#if game}
+									<Cover {game} override={candidate.url} />
+								{/if}
 								<span class="caption">{game?.title ?? ''}</span>
 								<span class="tag">
 									{KIND_LABELS[candidate.kind] ?? candidate.kind} · {candidate.source}
@@ -158,12 +161,17 @@
 	}
 
 	.picker {
+		/* Largeur de la fenêtre : elle sert aussi à déduire la taille exacte
+		   d'une tuile, donc le format 2/3 des aperçus. */
+		--picker-width: min(1400px, 86vw);
+		--picker-padding: 34px;
+
 		display: flex;
 		flex-direction: column;
 		gap: 18px;
-		width: min(1400px, 86vw);
+		width: var(--picker-width);
 		max-height: 80vh;
-		padding: 30px 34px;
+		padding: 30px var(--picker-padding);
 		border-radius: var(--radius);
 		background: var(--surface-strong);
 		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
@@ -192,7 +200,14 @@
 	   comme la bibliothèque, pas de barre de défilement à viser à la manette. */
 	.viewport {
 		--gap: 16px;
-		--row-height: 26vh;
+		/* Une tuile garde le format 2/3 des jaquettes : sa hauteur se déduit de
+		   la largeur d'une colonne, comme dans la bibliothèque. */
+		--tile-width: calc(
+			(
+					var(--picker-width) - 2 * var(--picker-padding) - (var(--columns) - 1) * var(--gap)
+				) / var(--columns)
+		);
+		--row-height: calc(var(--tile-width) * 1.5);
 
 		/* Deux rangées au maximum ; avec moins d'affiches, la fenêtre se
 		   resserre au lieu de garder une moitié vide. La gouttière laisse
@@ -211,6 +226,7 @@
 		transition: transform var(--normal) var(--ease);
 	}
 
+	/* Exactement la tuile de l'accueil : même format, même rayon, même fond. */
 	.item {
 		position: relative;
 		height: var(--row-height);
@@ -224,31 +240,24 @@
 			box-shadow var(--fast) var(--ease);
 	}
 
-	/* Exactement le cadrage d'une tuile (`Cover.svelte`) : une bannière choisie
-	   sera recadrée ici comme elle le sera dans la bibliothèque, sans surprise
-	   au moment de valider. */
-	.item img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
-		background: #0c0e13;
-	}
-
+	/* Et la sélection est celle d'une tuile : même contour, même halo. */
 	.item.selected {
 		transform: scale(1.05);
-		outline: 3px solid var(--accent);
-		box-shadow: 0 0 30px 6px var(--accent-soft);
+		outline: 4.5px solid var(--accent);
+		box-shadow:
+			0 0 38px 8px var(--accent-soft),
+			0 26px 60px rgba(0, 0, 0, 0.6);
 	}
 
-	/* Le titre se pose comme sur une tuile de la bibliothèque. */
+	/* Le titre se pose comme sur une tuile de l'accueil, aux mêmes valeurs. */
 	.caption {
 		position: absolute;
 		inset: auto 0 0;
-		padding: 28px 8px 10px;
+		padding: 26px 10px 10px;
 		font-size: 14px;
 		font-weight: 600;
 		text-align: center;
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+		background: linear-gradient(to top, rgba(0, 0, 0, 0.88), transparent);
 	}
 
 	/* La provenance est une étiquette de la fenêtre, pas un élément de la
