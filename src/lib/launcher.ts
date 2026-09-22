@@ -2,13 +2,13 @@
  * Lancement d'un jeu. Hors Tauri (simple onglet de navigateur), on se contente
  * de le signaler : le prototype reste utilisable pour juger le design.
  */
-import type { Game } from './types';
+import type { Game, Outcome } from './types';
 
 const STEAM = 'C:/Program Files (x86)/Steam/steam.exe';
 
-export async function play(game: Game): Promise<string> {
+export async function play(game: Game): Promise<Outcome> {
 	const tauri = (window as any).__TAURI_INTERNALS__;
-	if (!tauri) return `Hors application : « ${game.title} » serait lancé ici.`;
+	if (!tauri) return { ok: true, message: `Hors application : « ${game.title} » serait lancé ici.` };
 
 	const { invoke } = await import('@tauri-apps/api/core');
 	try {
@@ -28,9 +28,9 @@ export async function play(game: Game): Promise<string> {
 			args,
 		});
 		watch(pid);
-		return `${game.title} démarre…`;
+		return { ok: true, message: `${game.title} démarre…` };
 	} catch (error) {
-		return String(error);
+		return { ok: false, message: `Impossible de lancer ${game.title} : ${error}` };
 	}
 }
 

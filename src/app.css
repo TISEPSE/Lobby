@@ -10,6 +10,8 @@
 	--bg: #07080b;
 	--surface: rgba(255, 255, 255, 0.06);
 	--surface-strong: rgba(255, 255, 255, 0.12);
+	/* Erreurs : la seule couleur vive en dehors de l'accent. */
+	--danger: #ff5f56;
 	--text: #ffffff;
 	--text-dim: rgba(255, 255, 255, 0.62);
 	--radius: 16px;

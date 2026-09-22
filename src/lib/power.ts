@@ -3,6 +3,8 @@
  * droit d'éteindre un PC, et c'est tant mieux — ça reste une action explicite,
  * confirmée, et refusée proprement hors application.
  */
+import type { Outcome } from './types';
+
 export type PowerAction = 'shutdown' | 'reboot' | 'quit';
 
 /** Entrées du menu, dans l'ordre d'affichage. */
@@ -45,15 +47,17 @@ export const POWER_ENTRIES: PowerEntry[] = [
 	},
 ];
 
-export async function runPower(action: PowerAction): Promise<string> {
+export async function runPower(action: PowerAction): Promise<Outcome> {
 	const tauri = (window as any).__TAURI_INTERNALS__;
-	if (!tauri) return "Hors application : l'alimentation n'est pas disponible ici.";
+	if (!tauri) {
+		return { ok: true, message: "Hors application : l'alimentation n'est pas disponible ici." };
+	}
 
 	const { invoke } = await import('@tauri-apps/api/core');
 	try {
 		await invoke('power_action', { action });
-		return action === 'quit' ? 'Fermeture…' : 'Commande envoyée.';
+		return { ok: true, message: action === 'quit' ? 'Fermeture…' : 'Commande envoyée.' };
 	} catch (error) {
-		return String(error);
+		return { ok: false, message: `L'action a échoué : ${error}` };
 	}
 }

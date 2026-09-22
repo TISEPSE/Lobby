@@ -110,6 +110,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Le panneau est **un tiroir de la tuile** : il reprend sa hauteur, son contour d'accent et ses coins, et se colle à son bord droit (marges négatives qui annulent l'espacement de la rangée). Tuile et panneau se lisent comme un seul bloc.
 - Tout ce qui touche à l'installation est **confié à Steam** par un lien `steam://` (`install`, `validate`, `uninstall`), ouvert par la commande Rust `open_url` — qui n'accepte que ce protocole, pour ne pas devenir un moyen d'exécuter n'importe quoi depuis la page.
 
+## Erreurs
+
+- Les actions qui peuvent échouer (`play`, `runPower`, `steamActions`) renvoient un `Outcome` (`{ ok, message }`) plutôt qu'une chaîne : l'appelant sait alors si c'est une confirmation ou une erreur.
+- `notify()` est le seul point d'affichage : bandeau rouge liseré + pastille, son `error`, et 6 s à l'écran au lieu de 3 — le temps de lire depuis un canapé.
+- `window.onerror` et `unhandledrejection` alimentent le même bandeau : une erreur non rattrapée se voit au lieu de figer l'interface en silence (c'est ce qui avait donné un écran noir muet).
+- Capture : `?notice=error`. Attention, le budget de temps virtuel de Chrome fait expirer les `setTimeout` — garder `--virtual-time-budget` sous la durée du bandeau.
+
 ## Écran de veille
 
 - Après `screensaver_minutes` sans aucune action (5 min par défaut, réglable dans Réglages → Apparence, `0` = jamais), `ScreenSaver.svelte` prend l'écran : artworks de la bibliothèque qui se relaient toutes les 12 s avec un lent panoramique, heure et date en bas à gauche.
@@ -169,7 +176,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 4. **Détection de jeux** : détection Steam / Epic / dossiers de jeux / raccourcis `.lnk` en Rust avec validation utilisateur. — *fait*
 5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement — *fait*. Les visuels sont **téléchargés une fois** dans `<app data>/artwork/` (`cache_game_art`) : l'interface lit un fichier, pas une adresse web, donc l'association jeu ↔ jaquette ne peut plus changer et tout s'affiche hors ligne.
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
-7. **Finitions** : vidéo d'introduction, son, écran de veille — *faits* ; reste la gestion des erreurs.
+7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs. — *fait*
 
 ## Règles de travail pour Claude
 

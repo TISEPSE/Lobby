@@ -19,7 +19,7 @@
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
 	import { cycleArtStyle, artwork, details } from './lib/steam.svelte.js';
-	import type { TileAction, Game, Section } from './lib/types';
+	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { SEARCH_KEYS, SEARCH_COLUMNS, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
@@ -109,6 +109,8 @@
 	let clock = $state(formatClock());
 	let pads = $state(0);
 	let notice = $state('');
+	/** Ton du bandeau : une erreur ne se lit pas comme une confirmation. */
+	let noticeOk = $state(true);
 
 	/** Bouton sélectionné sur une fiche : 0 = Jouer, 1 = Favori. */
 	let detailButton = $state(0);
@@ -374,7 +376,7 @@
 				});
 				scannedCandidates = results;
 			} catch (e) {
-				notify(`Erreur pendant le scan : ${e}`);
+				notify(`Erreur pendant le scan : ${e}`, false);
 			} finally {
 				isScanning = false;
 			}
@@ -455,9 +457,19 @@
 		else if (action === 'cancel') goToSection('home');
 	}
 
-	function notify(message: string) {
-		notice = message;
-		setTimeout(() => (notice = ''), 3000);
+	let noticeTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/**
+	 * Bandeau du bas. Une erreur reste plus longtemps affichée — le temps de la
+	 * lire depuis un canapé — et s'accompagne du signal sonore d'erreur.
+	 */
+	function notify(message: string | Outcome, ok = true) {
+		const resolved = typeof message === 'string' ? { ok, message } : message;
+		notice = resolved.message;
+		noticeOk = resolved.ok;
+		if (!resolved.ok) playSound('error');
+		if (noticeTimer) clearTimeout(noticeTimer);
+		noticeTimer = setTimeout(() => (notice = ''), resolved.ok ? 3000 : 6000);
 	}
 
 	async function launch() {
@@ -474,6 +486,13 @@
 		initSettings();
 		initLibrary();
 		const stop = listen(handle);
+		// Filet de sécurité : sans cela, une erreur non rattrapée laissait une
+		// interface figée sans rien dire. On préfère un bandeau explicite.
+		const onError = (event: ErrorEvent) => notify(`Erreur : ${event.message}`, false);
+		const onRejection = (event: PromiseRejectionEvent) =>
+			notify(`Erreur : ${event.reason}`, false);
+		window.addEventListener('error', onError);
+		window.addEventListener('unhandledrejection', onRejection);
 		const timer = setInterval(() => {
 			clock = formatClock();
 			pads = padCount();
@@ -484,10 +503,16 @@
 			}
 		}, 1000);
 		pads = padCount();
+		// Outil de capture : ?notice=error montre le bandeau d'erreur.
+		if (params.get('notice') === 'error') {
+			notify("Impossible de lancer Hollow Knight : le fichier n'existe plus.", false);
+		}
 		return () => {
 			stop();
 			stopDownloads();
 			clearInterval(timer);
+			window.removeEventListener('error', onError);
+			window.removeEventListener('unhandledrejection', onRejection);
 		};
 	});
 
@@ -737,7 +762,10 @@
 />
 
 {#if notice}
-	<div class="notice">{notice}</div>
+	<div class="notice" class:failed={!noticeOk}>
+		{#if !noticeOk}<span class="mark">!</span>{/if}
+		{notice}
+	</div>
 {/if}
 
 <DownloadBar />
@@ -767,6 +795,25 @@
 	.todo p {
 		font-size: 20px;
 		color: var(--text-dim);
+	}
+
+	/* Une erreur se distingue au premier coup d'œil : liseré rouge et pastille,
+	   sans pour autant changer de place ni de forme. */
+	.notice.failed {
+		box-shadow: inset 0 0 0 2px var(--danger);
+	}
+
+	.mark {
+		display: inline-grid;
+		place-items: center;
+		width: 24px;
+		height: 24px;
+		margin-right: 10px;
+		border-radius: 50%;
+		background: var(--danger);
+		color: #17060a;
+		font-weight: 700;
+		vertical-align: -5px;
 	}
 
 	.notice {

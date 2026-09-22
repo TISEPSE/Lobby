@@ -49,6 +49,17 @@ export interface TileAction {
 export type Section = 'home' | 'library' | 'search' | 'settings';
 
 /** Préférences utilisateur de la console. */
+/**
+ * Résultat d'une action qui peut échouer (lancer un jeu, éteindre la machine,
+ * passer la main à Steam). Le message est destiné à l'écran ; `ok` décide du
+ * ton : une erreur doit se voir et s'entendre, pas se fondre dans les
+ * confirmations.
+ */
+export interface Outcome {
+	ok: boolean;
+	message: string;
+}
+
 export interface UserSettings {
 	profile_name: string;
 	avatar_path: string;

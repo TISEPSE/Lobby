@@ -3,15 +3,17 @@
  * On ne touche pas aux fichiers nous-mêmes — Steam sait le faire, et lui seul
  * connaît l'état réel d'une installation.
  */
-async function openSteam(url: string, done: string): Promise<string> {
+import type { Outcome } from './types';
+
+async function openSteam(url: string, done: string): Promise<Outcome> {
 	const tauri = (window as any).__TAURI_INTERNALS__;
-	if (!tauri) return "Hors application : Steam n'est pas joignable ici.";
+	if (!tauri) return { ok: true, message: "Hors application : Steam n'est pas joignable ici." };
 	const { invoke } = await import('@tauri-apps/api/core');
 	try {
 		await invoke('open_url', { url });
-		return done;
+		return { ok: true, message: done };
 	} catch (error) {
-		return String(error);
+		return { ok: false, message: `Steam n'a pas répondu : ${error}` };
 	}
 }
 
