@@ -53,12 +53,18 @@
 		void (async () => {
 			try {
 				const found = await artCandidates(wanted);
-				// Une jaquette est verticale ; un fond est large. Mélanger les deux
-				// donnerait une liste où rien n'est comparable.
-				candidates =
-					target === 'background'
-						? found.filter((item) => item.kind !== 'cover')
-						: found.filter((item) => item.kind === 'cover');
+				if (target === 'background') {
+					// Un fond est large : une jaquette verticale n'a rien à y faire.
+					candidates = found.filter((item) => item.kind !== 'cover');
+				} else {
+					// Pour la tuile, les vraies jaquettes d'abord — mais on montre
+					// aussi les images larges : beaucoup de jeux n'ont **aucune**
+					// jaquette verticale chez Steam, et une fenêtre vide ne laisse
+					// alors aucun choix. L'aperçu montre le recadrage réel, donc
+					// personne n'est surpris.
+					const rank = { cover: 0, banner: 1, hero: 2 } as const;
+					candidates = [...found].sort((a, b) => rank[a.kind] - rank[b.kind]);
+				}
 				if (candidates.length === 0) {
 					error =
 						target === 'background'

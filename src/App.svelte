@@ -266,7 +266,13 @@
 		const row = Math.floor(libraryIndex / COLUMNS);
 		if (action === 'left') libraryIndex = Math.max(0, libraryIndex - 1);
 		else if (action === 'right') libraryIndex = Math.min(total - 1, libraryIndex + 1);
-		else if (action === 'down') libraryIndex = Math.min(total - 1, libraryIndex + COLUMNS);
+		else if (action === 'down') {
+			// Depuis la dernière rangée, descendre ne fait rien : ramener la
+			// sélection sur la toute dernière tuile la faisait sauter en
+			// diagonale, à l'autre bout de l'écran.
+			const below = libraryIndex + COLUMNS;
+			if (below < total) libraryIndex = below;
+		}
 		else if (action === 'up') {
 			if (row === 0) onTabs = true;
 			else libraryIndex = Math.max(0, libraryIndex - COLUMNS);
@@ -315,7 +321,12 @@
 		const row = Math.floor(searchResult / SEARCH_RESULT_COLUMNS);
 		if (action === 'left') searchResult = Math.max(0, searchResult - 1);
 		else if (action === 'right') searchResult = Math.min(total - 1, searchResult + 1);
-		else if (action === 'down') searchResult = Math.min(total - 1, searchResult + SEARCH_RESULT_COLUMNS);
+		else if (action === 'down') {
+			// Comme dans la bibliothèque : pas de saut en diagonale depuis la
+			// dernière rangée.
+			const below = searchResult + SEARCH_RESULT_COLUMNS;
+			if (below < total) searchResult = below;
+		}
 		else if (action === 'up') {
 			// La première rangée ramène au clavier, pas à la barre du haut : on
 			// est encore en train de chercher.

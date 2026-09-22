@@ -91,6 +91,7 @@
 	}
 
 	.key {
+		position: relative;
 		display: flex;
 		align-items: center;
 		justify-content: center;
@@ -112,9 +113,12 @@
 			color var(--fast) var(--ease);
 	}
 
+	/* Toutes les icônes occupent la même boîte : dessinées à des échelles
+	   différentes, elles paraissaient sinon montées ou descendues. */
 	.key img {
 		width: 24px;
 		height: 24px;
+		object-fit: contain;
 		opacity: 0.85;
 	}
 
@@ -123,9 +127,15 @@
 		font-weight: 600;
 	}
 
+	/* Le glyphe se pose au bord droit de la touche : dans le flux, il décalait
+	   l'icône et le mot vers la gauche et plus rien n'était centré. */
 	.key .pad {
+		position: absolute;
+		right: 12px;
+		top: 50%;
 		width: 22px;
 		height: 22px;
+		transform: translateY(-50%);
 		opacity: 0.75;
 	}
 

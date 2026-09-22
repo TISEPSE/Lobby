@@ -63,6 +63,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Animations courtes (`--fast` 180 ms, `--normal` 260 ms) avec `--ease`, jamais de ralentissement perceptible.
 - Texte d'au moins 17 px à l'écran, contraste élevé : ça se lit depuis un canapé.
 - La sélection doit toujours être visible (agrandissement + contour d'accent + halo) et jamais perdue.
+- Dans une grille, **descendre depuis la dernière rangée ne fait rien**. Ramener la sélection sur la toute dernière tuile la faisait sauter en diagonale, à l'autre bout de l'écran.
 - Transition entre écrans : `view-transition-name` partagé sur la jaquette. Le navigateur anime le déplacement, on ne mesure aucun rectangle à la main.
 - Le voile posé sur un artwork est un dégradé (`Backdrop.svelte`) : lisible en bas, artwork préservé en haut. Sur une fiche, il s'appuie à gauche, là où se trouve le texte.
 - L'artwork ne change qu'une fois la nouvelle image chargée : deux couches se relaient, sinon on verrait un clignotement noir à chaque déplacement de la sélection.
@@ -103,6 +104,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - **Jamais de bannière 16/9 étirée dans une tuile 2/3** : c'est laid et ça coupe les titres. `steam_details` ne renvoie dans `cover` qu'une **vraie jaquette verticale** (`library_600x900`) ; sinon le champ reste vide.
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
+- Dans « Changer la jaquette », les vraies jaquettes verticales viennent en tête, mais les images larges sont proposées ensuite : beaucoup de jeux (« Ballgame Demo ») n'ont **aucune** jaquette verticale chez Steam, et une fenêtre vide ne laisse aucun choix. L'aperçu montrant le recadrage réel, personne n'est surpris.
 - Deux entrées distinctes dans le menu d'options : **« Changer la jaquette »** (la tuile) et **« Changer l'image de fond »** (l'artwork derrière). La même fenêtre sert aux deux (`target`), mais elle ne montre que des images comparables : verticales d'un côté, larges de l'autre, en aperçu 16/9. Changer le fond ne touche pas à la tuile.
 - `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
 - L'aperçu d'un candidat passe par **`Cover.svelte` lui-même** (prop `override`), dans une tuile au format, au rayon, à la légende et au contour de l'accueil : rien n'est reproduit à la main, donc rien ne peut diverger. L'aperçu charge l'image **pleine**, pas la miniature — une vignette au cadrage différent donnait une fausse idée du résultat sur les bannières.
@@ -193,6 +195,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts.
 - Une touche sélectionnée **inverse ses couleurs**, sans agrandissement ni halo : sur une grille serrée, un agrandissement ferait sauter tout le clavier à chaque déplacement.
 - Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges, portent une icône, **et le glyphe du bouton manette qui fait la même chose** : le raccourci se lit sur la touche, pas dans une légende en bas de page.
+- Ce glyphe est posé **en absolu au bord droit** de la touche : dans le flux, il poussait l'icône et le mot vers la gauche et plus rien n'était centré.
 - L'écran de recherche a un **fond plein** : l'artwork derrière brouillait les lettres du clavier.
 - Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
 - A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.
