@@ -146,7 +146,7 @@ pub fn steam_root() -> Option<PathBuf> {
 }
 
 /// Extrait la valeur d'une clé dans un fichier Valve .vdf ou .acf : `"clé"   "valeur"`
-fn parse_vdf_value(line: &str, key: &str) -> Option<String> {
+pub fn parse_vdf_value(line: &str, key: &str) -> Option<String> {
   let parts: Vec<&str> = line.split('"').collect();
   for i in 0..parts.len() {
     if parts[i].trim().eq_ignore_ascii_case(key) {

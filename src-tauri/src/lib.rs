@@ -282,6 +282,99 @@ pub struct OnlineArtwork {
   pub banner: String,
 }
 
+/// État d'un téléchargement ou d'une mise à jour en cours chez Steam.
+#[derive(serde::Serialize, Clone, Debug)]
+pub struct DownloadStatus {
+  pub appid: String,
+  pub title: String,
+  /// « download », « stage » (installation des fichiers) ou « queued ».
+  pub phase: String,
+  pub bytes_done: u64,
+  pub bytes_total: u64,
+  /// Avancement de 0 à 100, déjà calculé pour l'interface.
+  pub percent: f32,
+}
+
+/// Téléchargements en cours, lus dans les manifestes de Steam.
+///
+/// Steam n'expose pas d'API locale pour ça, mais il tient ses `appmanifest`
+/// à jour en permanence : `StateFlags` dit ce qu'il fait, et les compteurs
+/// d'octets donnent l'avancement réel. C'est la même source que celle qui sert
+/// à lister les jeux installés.
+#[tauri::command]
+fn steam_downloads() -> Vec<DownloadStatus> {
+  let mut running = Vec::new();
+  let root = match scanner::steam_root() {
+    Some(r) => r,
+    None => return running,
+  };
+
+  for library in scanner::steam_libraries(&root) {
+    let steamapps = library.join("steamapps");
+    let entries = match fs::read_dir(&steamapps) {
+      Ok(e) => e,
+      Err(_) => continue,
+    };
+
+    for entry in entries.flatten() {
+      let name = entry.file_name().to_string_lossy().to_string();
+      if !name.starts_with("appmanifest_") || !name.ends_with(".acf") {
+        continue;
+      }
+      let content = match fs::read_to_string(entry.path()) {
+        Ok(c) => c,
+        Err(_) => continue,
+      };
+
+      let value = |key: &str| -> String {
+        content
+          .lines()
+          .find_map(|line| scanner::parse_vdf_value(line, key))
+          .unwrap_or_default()
+      };
+      let number = |key: &str| -> u64 { value(key).parse().unwrap_or(0) };
+
+      let flags: u64 = value("StateFlags").parse().unwrap_or(0);
+      // 4 = installé et à jour : rien à signaler.
+      if flags == 4 {
+        continue;
+      }
+
+      let downloaded = number("BytesDownloaded");
+      let to_download = number("BytesToDownload");
+      let staged = number("BytesStaged");
+      let to_stage = number("BytesToStage");
+
+      // Tant que le téléchargement n'est pas fini, c'est lui qui compte ;
+      // ensuite Steam installe les fichiers, et c'est cette étape qu'on montre.
+      let (phase, done, total) = if to_download > 0 && downloaded < to_download {
+        ("download", downloaded, to_download)
+      } else if to_stage > 0 && staged < to_stage {
+        ("stage", staged, to_stage)
+      } else {
+        ("queued", 0, 0)
+      };
+
+      let percent = if total > 0 {
+        (done as f64 / total as f64 * 100.0) as f32
+      } else {
+        0.0
+      };
+
+      running.push(DownloadStatus {
+        appid: value("appid"),
+        title: value("name"),
+        phase: phase.to_string(),
+        bytes_done: done,
+        bytes_total: total,
+        percent,
+      });
+    }
+  }
+
+  running
+}
+
 /// Dossier des visuels téléchargés, un fichier par jeu.
 fn artwork_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   let dir = app
@@ -551,6 +644,7 @@ pub fn run() {
       power_action,
       steam_details,
       cache_game_art,
+      steam_downloads,
       open_url,
       scan_installed_games,
       save_library,

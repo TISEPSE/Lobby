@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import { details, ensureDetails, coverOf } from './steam.svelte.js';
+	import { downloadFor, phaseLabel, sizeText } from './downloads.svelte.js';
 	import { generateProceduralCover } from './art';
 
 	/**
@@ -21,6 +22,8 @@
 	});
 
 	const sheet = $derived(game.appid ? details[game.appid] : undefined);
+	/** Téléchargement en cours pour ce jeu, s'il y en a un. */
+	const progress = $derived(downloadFor(game.appid));
 	const rating = $derived(sheet?.rating ?? 0);
 	const facts = $derived(
 		[
@@ -64,6 +67,16 @@
 		{/if}
 
 		<p class="synopsis">{summary}</p>
+
+		{#if progress}
+			<div class="progress">
+				<div class="track"><div class="fill" style="width: {Math.max(2, progress.percent)}%"></div></div>
+				<span class="state">
+					{phaseLabel(progress)} · {Math.round(progress.percent)} %
+					{#if sizeText(progress)}· {sizeText(progress)}{/if}
+				</span>
+			</div>
+		{/if}
 
 		<div class="actions">
 			<button class="action" class:focus-ring={selected === 0}>Jouer</button>
@@ -157,6 +170,36 @@
 		font-size: 22px;
 		line-height: 1.5;
 		color: rgba(255, 255, 255, 0.86);
+	}
+
+	/* Un jeu en cours de téléchargement le dit ici, sous ses informations. */
+	.progress {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin-top: 22px;
+		max-width: 52ch;
+	}
+
+	.track {
+		flex: 1;
+		height: 8px;
+		border-radius: 4px;
+		background: rgba(255, 255, 255, 0.12);
+		overflow: hidden;
+	}
+
+	.fill {
+		height: 100%;
+		border-radius: 4px;
+		background: var(--accent);
+		transition: width var(--normal) var(--ease);
+	}
+
+	.state {
+		font-size: 16px;
+		color: var(--text-dim);
+		white-space: nowrap;
 	}
 
 	.actions {

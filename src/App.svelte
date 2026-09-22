@@ -9,6 +9,8 @@
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
 	import BootVideo from './lib/BootVideo.svelte';
+	import DownloadBar from './lib/DownloadBar.svelte';
+	import { watchDownloads } from './lib/downloads.svelte.js';
 	import Settings from './lib/Settings.svelte';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
@@ -426,6 +428,9 @@
 	}
 
 	onMount(() => {
+		// Les téléchargements Steam sont relus régulièrement tant que
+		// l'interface est ouverte.
+		const stopDownloads = watchDownloads();
 		initSettings();
 		initLibrary();
 		const stop = listen(handle);
@@ -436,6 +441,7 @@
 		pads = padCount();
 		return () => {
 			stop();
+			stopDownloads();
 			clearInterval(timer);
 		};
 	});
@@ -662,6 +668,8 @@
 {#if notice}
 	<div class="notice">{notice}</div>
 {/if}
+
+<DownloadBar />
 
 <HelpBar entries={help} />
 
