@@ -59,4 +59,6 @@ export interface UserSettings {
 	boot_video_enabled: boolean;
 	/** Retours sonores de l'interface. */
 	sound_enabled: boolean;
+	/** Clé SteamGridDB, propre à l'utilisateur : jamais dans le dépôt. */
+	steamgriddb_key: string;
 }

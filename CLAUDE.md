@@ -97,6 +97,12 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
 - L'utilisateur peut changer l'affiche d'un jeu (menu d'options d'une tuile) : jaquette, artwork ou bannière. Le choix est gardé par jeu (`artStyles`).
 
+## Jaquettes manquantes : SteamGridDB
+
+- Dernier recours quand Steam puis Lutris ne donnent rien : `fetch_steamgriddb_art()` (recherche par titre, puis `grids` 600x900, `heroes`, `logos`).
+- **La clé n'est jamais dans le code ni dans le dépôt** : elle est saisie dans Réglages → Jeux (« Clé SteamGridDB ») et vit dans `settings.json` du dossier de données (`steamgriddb_key`). Sans clé, la chaîne s'arrête simplement avant, comme aujourd'hui.
+- L'interface ne réaffiche jamais la clé en entier : `Configurée ····<4 derniers caractères>`.
+
 ## Menu d'options d'une tuile
 
 - **X** sur l'accueil ouvre un panneau **dans la rangée**, à droite de la tuile sélectionnée : il pousse les tuiles suivantes au lieu de les recouvrir, en animant sa largeur. On voit donc toujours de quel jeu il s'agit.

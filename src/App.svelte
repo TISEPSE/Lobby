@@ -43,6 +43,7 @@
 		setBootVideo,
 		setBootVideoEnabled,
 		setSoundEnabled as saveSoundEnabled,
+		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
 	} from './lib/settings.svelte.js';
@@ -633,6 +634,12 @@
 				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
 			}}
 			soundEnabled={settings.sound_enabled}
+			steamGridKey={settings.steamgriddb_key}
+			initialCategory={params.get('cat') ?? 'profile'}
+			onChangeSteamGridKey={(key) => {
+				setSteamGridKey(key);
+				notify(key ? 'Clé SteamGridDB enregistrée.' : 'Clé SteamGridDB retirée.');
+			}}
 			onToggleSound={() => {
 				const next = !settings.sound_enabled;
 				saveSoundEnabled(next);

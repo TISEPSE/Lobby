@@ -15,6 +15,8 @@
 		bootVideo = '',
 		bootVideoEnabled = true,
 		soundEnabled = true,
+		steamGridKey = '',
+		initialCategory = 'profile',
 		onBack,
 		onReturnToHub = onBack,
 		onOpenAvatarPicker,
@@ -26,6 +28,7 @@
 		onCycleBootVideo,
 		onToggleBootVideo,
 		onToggleSound,
+		onChangeSteamGridKey,
 	}: {
 		focused?: boolean;
 		profileName: string;
@@ -38,6 +41,9 @@
 		bootVideo?: string;
 		bootVideoEnabled?: boolean;
 		soundEnabled?: boolean;
+		steamGridKey?: string;
+		/** Catégorie ouverte au premier affichage (outil de capture). */
+		initialCategory?: string;
 		onBack: () => void;
 		onReturnToHub?: () => void;
 		onOpenAvatarPicker: () => void;
@@ -49,6 +55,7 @@
 		onCycleBootVideo?: () => void;
 		onToggleBootVideo?: () => void;
 		onToggleSound?: () => void;
+		onChangeSteamGridKey?: (key: string) => void;
 	} = $props();
 
 	type CategoryId = 'profile' | 'games' | 'appearance' | 'system';
@@ -87,17 +94,24 @@
 		},
 	];
 
-	let activeCatIndex = $state(0);
+	let activeCatIndex = $state(Math.max(0, CATEGORIES.findIndex((c) => c.id === initialCategory)));
 	let focusCol = $state<'categories' | 'content'>('categories');
 	let focusRow = $state(0);
 
 	let isKeyboardOpen = $state(false);
+	/** Ce que le clavier est en train de saisir : le pseudo ou la clé d'API. */
+	let keyboardTarget = $state<'name' | 'steamgrid'>('name');
 	let keyboardComponent = $state<any>(null);
 
 	let isAddingFolder = $state(false);
 	let newFolderInput = $state('');
 
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
+
+	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
+	const steamGridKeyLabel = $derived(
+		steamGridKey ? `Configurée ····${steamGridKey.slice(-4)}` : 'Non configurée'
+	);
 
 	/** « /assets/boot/steamos_startup.webm » se lit « Steamos startup ». */
 	const bootVideoName = $derived.by(() => {
@@ -113,7 +127,8 @@
 			case 'profile':
 				return 2; // [0: modifier pseudo, 1: changer photo]
 			case 'games':
-				return 2 + gameFolders.length; // [0: scanner, 1: ajouter dossier, 2..N: dossiers]
+				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
+				return 3 + gameFolders.length;
 			case 'appearance':
 				return 4; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons]
 			case 'system':
@@ -191,6 +206,7 @@
 		const cat = currentCategory.id;
 		if (cat === 'profile') {
 			if (focusRow === 0) {
+				keyboardTarget = 'name';
 				isKeyboardOpen = true;
 			} else if (focusRow === 1) {
 				onOpenAvatarPicker();
@@ -199,11 +215,14 @@
 			if (focusRow === 0) {
 				onOpenScan();
 			} else if (focusRow === 1) {
+				keyboardTarget = 'steamgrid';
+				isKeyboardOpen = true;
+			} else if (focusRow === 2) {
 				newFolderInput = 'D:/Jeux';
 				isAddingFolder = true;
 			} else {
 				// Supprimer le dossier
-				const folderIdx = focusRow - 2;
+				const folderIdx = focusRow - 3;
 				if (folderIdx >= 0 && folderIdx < gameFolders.length) {
 					onRemoveFolder(gameFolders[folderIdx]);
 					focusRow = Math.max(1, focusRow - 1);
@@ -363,7 +382,7 @@
 				</div>
 
 				<div class="section-divider">
-					<h3>Dossiers surveillés</h3>
+					<h3>Jaquettes</h3>
 				</div>
 
 				<div class="rows-list">
@@ -374,6 +393,33 @@
 						onclick={() => {
 							focusCol = 'content';
 							focusRow = 1;
+							keyboardTarget = 'steamgrid';
+							isKeyboardOpen = true;
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Clé SteamGridDB</span>
+							<span class="desc">
+								Jaquettes des jeux absents de Steam. Clé gratuite sur steamgriddb.com
+								(Preferences → API) ; elle reste sur cette machine.
+							</span>
+						</div>
+						<span class="badge-layout">{steamGridKeyLabel} ▸</span>
+					</button>
+				</div>
+
+				<div class="section-divider">
+					<h3>Dossiers surveillés</h3>
+				</div>
+
+				<div class="rows-list">
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 2}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 2;
 							newFolderInput = 'D:/Jeux';
 							isAddingFolder = true;
 						}}
@@ -405,7 +451,8 @@
 					{/if}
 
 					{#each gameFolders as folder, i}
-						{@const rowIdx = 2 + i}
+						<!-- La clé SteamGridDB occupe la ligne 1, les dossiers commencent à 3. -->
+						{@const rowIdx = 3 + i}
 						<div
 							class="setting-row folder-row"
 							class:focused={focused && focusCol === 'content' && focusRow === rowIdx}
@@ -526,12 +573,15 @@
 	<!-- Clavier virtuel console pour modification du pseudo -->
 	<VirtualKeyboard
 		open={isKeyboardOpen}
-		title="Modifier le pseudo"
-		subtitle="Saisis ton nom avec la manette ou le clavier"
-		initialValue={profileName}
-		maxLength={24}
-		onConfirm={(name) => {
-			if (name.trim()) onChangeName(name.trim());
+		title={keyboardTarget === 'steamgrid' ? 'Clé SteamGridDB' : 'Modifier le pseudo'}
+		subtitle={keyboardTarget === 'steamgrid'
+			? 'Colle ta clé (steamgriddb.com > Preferences > API). Elle reste sur cette machine.'
+			: 'Saisis ton nom avec la manette ou le clavier'}
+		initialValue={keyboardTarget === 'steamgrid' ? steamGridKey : profileName}
+		maxLength={keyboardTarget === 'steamgrid' ? 64 : 24}
+		onConfirm={(value) => {
+			if (keyboardTarget === 'steamgrid') onChangeSteamGridKey?.(value.trim());
+			else if (value.trim()) onChangeName(value.trim());
 			isKeyboardOpen = false;
 		}}
 		onClose={() => {

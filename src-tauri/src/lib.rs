@@ -187,6 +187,10 @@ pub struct UserSettings {
   /// Retours sonores de l'interface.
   #[serde(default = "default_true")]
   pub sound_enabled: bool,
+  /// Clé SteamGridDB, saisie par l'utilisateur. Elle n'est **jamais** écrite
+  /// dans le dépôt : elle ne vit que dans le fichier de réglages local.
+  #[serde(default)]
+  pub steamgriddb_key: String,
 }
 
 fn default_true() -> bool {
@@ -275,6 +279,7 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     boot_video: "/assets/boot/steamos_startup.webm".to_string(),
     boot_video_enabled: true,
     sound_enabled: true,
+    steamgriddb_key: String::new(),
   })
 }
 
@@ -379,6 +384,68 @@ fn steam_downloads() -> Vec<DownloadStatus> {
   running
 }
 
+/// Visuels trouvés chez SteamGridDB, la base communautaire de jaquettes.
+///
+/// C'est le dernier recours de la chaîne : les jeux qui n'existent ni chez
+/// Steam ni chez Lutris (Valorant, Call of Duty, jeux hors catalogue) n'ont
+/// que là de vraies jaquettes verticales. La clé appartient à l'utilisateur et
+/// ne quitte pas sa machine.
+async fn fetch_steamgriddb_art(
+  client: &reqwest::Client,
+  key: &str,
+  title: &str,
+) -> Option<(String, String, String)> {
+  if key.is_empty() || title.is_empty() {
+    return None;
+  }
+
+  let search = format!(
+    "https://www.steamgriddb.com/api/v2/search/autocomplete/{}",
+    scanner::urlencoding_simple(title)
+  );
+  let found: serde_json::Value = client
+    .get(&search)
+    .bearer_auth(key)
+    .send()
+    .await
+    .ok()?
+    .json()
+    .await
+    .ok()?;
+
+  let game_id = found["data"].as_array()?.first()?["id"].as_i64()?;
+
+  // Une image par usage : la jaquette verticale, l'artwork large, le logo.
+  let grab = |kind: &str, query: &str| {
+    let url = format!(
+      "https://www.steamgriddb.com/api/v2/{kind}/game/{game_id}{query}"
+    );
+    let client = client.clone();
+    let key = key.to_string();
+    async move {
+      let body: serde_json::Value = client
+        .get(&url)
+        .bearer_auth(&key)
+        .send()
+        .await
+        .ok()?
+        .json()
+        .await
+        .ok()?;
+      body["data"].as_array()?.first()?["url"].as_str().map(str::to_string)
+    }
+  };
+
+  let cover = grab("grids", "?dimensions=600x900").await.unwrap_or_default();
+  let hero = grab("heroes", "").await.unwrap_or_default();
+  let logo = grab("logos", "").await.unwrap_or_default();
+
+  if cover.is_empty() && hero.is_empty() {
+    return None;
+  }
+  Some((cover, hero, logo))
+}
+
 /// Dossier des visuels téléchargés, un fichier par jeu.
 fn artwork_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
   let dir = app
@@ -457,7 +524,7 @@ async fn cache_game_art(
   executable: Option<String>,
 ) -> Result<OnlineArtwork, String> {
   let dir = artwork_dir(&app)?;
-  let found = fetch_game_art(title, appid, executable).await?;
+  let found = fetch_game_art(app.clone(), title, appid, executable).await?;
 
   let client = reqwest::Client::builder()
     .user_agent("InterfaceConsole/0.1")
@@ -475,11 +542,16 @@ async fn cache_game_art(
 /// Récupère en ligne les jaquettes et illustrations officielles (Steam CDN ou Lutris/IGDB gratuit, 0 clé).
 #[tauri::command]
 async fn fetch_game_art(
+  app: tauri::AppHandle,
   title: String,
   appid: Option<String>,
   executable: Option<String>,
 ) -> Result<OnlineArtwork, String> {
   let exe = executable.unwrap_or_default();
+  // La clé vient des réglages de l'utilisateur, jamais du code.
+  let steamgriddb_key = load_user_settings(app)
+    .map(|settings| settings.steamgriddb_key)
+    .unwrap_or_default();
   let client = reqwest::Client::builder()
     .user_agent("InterfaceConsole/0.1")
     .build()
@@ -518,7 +590,7 @@ async fn fetch_game_art(
     logo = first_available(&client, &logo_candidates).await;
   }
 
-  // Si pas de jaquette Steam trouvée, interroge Lutris / IGDB (100% gratuit, 0 clé)
+  // Si pas de jaquette Steam trouvée, interroge Lutris (gratuit, sans clé)
   if cover.is_empty() {
     if let Some((lutris_cover, lutris_banner)) = scanner::fetch_lutris_art_variants(&client, &title, &exe).await {
       cover = lutris_cover;
@@ -527,6 +599,23 @@ async fn fetch_game_art(
       }
       if banner.is_empty() && !lutris_banner.is_empty() {
         banner = lutris_banner;
+      }
+    }
+  }
+
+  // Dernier recours : SteamGridDB, si l'utilisateur a renseigné sa clé. C'est
+  // la seule source à avoir de vraies jaquettes verticales pour les jeux hors
+  // catalogue Steam.
+  if cover.is_empty() {
+    if let Some((grid_cover, grid_hero, grid_logo)) =
+      fetch_steamgriddb_art(&client, &steamgriddb_key, &title).await
+    {
+      cover = grid_cover;
+      if hero.is_empty() {
+        hero = grid_hero;
+      }
+      if logo.is_empty() {
+        logo = grid_logo;
       }
     }
   }

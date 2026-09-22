@@ -15,6 +15,7 @@ export const settings = $state<UserSettings>({
 	boot_video: '/assets/boot/steamos_startup.webm',
 	boot_video_enabled: true,
 	sound_enabled: true,
+	steamgriddb_key: '',
 });
 
 export async function initSettings() {
@@ -32,6 +33,7 @@ export async function initSettings() {
 				settings.boot_video = loaded.boot_video ?? '';
 				settings.boot_video_enabled = loaded.boot_video_enabled ?? true;
 				settings.sound_enabled = loaded.sound_enabled ?? true;
+				settings.steamgriddb_key = loaded.steamgriddb_key ?? '';
 				return;
 			}
 		} catch (e) {
@@ -107,6 +109,15 @@ export function setBootVideoEnabled(enabled: boolean) {
 
 export function setSoundEnabled(enabled: boolean) {
 	settings.sound_enabled = enabled;
+	saveSettings();
+}
+
+/**
+ * Enregistre la clé SteamGridDB. Elle part dans le fichier de réglages local
+ * (dossier de données de l'application) et nulle part ailleurs.
+ */
+export function setSteamGridKey(key: string) {
+	settings.steamgriddb_key = key.trim();
 	saveSettings();
 }
 

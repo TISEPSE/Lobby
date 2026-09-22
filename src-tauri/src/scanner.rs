@@ -1256,7 +1256,7 @@ pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<St
   None
 }
 
-fn urlencoding_simple(s: &str) -> String {
+pub fn urlencoding_simple(s: &str) -> String {
   let mut out = String::new();
   for b in s.bytes() {
     match b {
