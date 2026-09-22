@@ -191,6 +191,13 @@ pub struct UserSettings {
   /// dans le dépôt : elle ne vit que dans le fichier de réglages local.
   #[serde(default)]
   pub steamgriddb_key: String,
+  /// Minutes d'inactivité avant l'écran de veille ; 0 pour ne jamais l'afficher.
+  #[serde(default = "default_screensaver")]
+  pub screensaver_minutes: u32,
+}
+
+fn default_screensaver() -> u32 {
+  5
 }
 
 fn default_true() -> bool {
@@ -280,6 +287,7 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     boot_video_enabled: true,
     sound_enabled: true,
     steamgriddb_key: String::new(),
+    screensaver_minutes: 5,
   })
 }
 

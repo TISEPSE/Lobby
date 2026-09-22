@@ -110,6 +110,12 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Le panneau est **un tiroir de la tuile** : il reprend sa hauteur, son contour d'accent et ses coins, et se colle à son bord droit (marges négatives qui annulent l'espacement de la rangée). Tuile et panneau se lisent comme un seul bloc.
 - Tout ce qui touche à l'installation est **confié à Steam** par un lien `steam://` (`install`, `validate`, `uninstall`), ouvert par la commande Rust `open_url` — qui n'accepte que ce protocole, pour ne pas devenir un moyen d'exécuter n'importe quoi depuis la page.
 
+## Écran de veille
+
+- Après `screensaver_minutes` sans aucune action (5 min par défaut, réglable dans Réglages → Apparence, `0` = jamais), `ScreenSaver.svelte` prend l'écran : artworks de la bibliothèque qui se relaient toutes les 12 s avec un lent panoramique, heure et date en bas à gauche.
+- La première action **réveille seulement** : elle n'est pas transmise à l'écran en dessous, pour ne pas lancer un jeu en voulant rallumer l'écran.
+- Pas de veille pendant la vidéo d'introduction, ni s'il n'y a aucun artwork à montrer.
+
 ## Données de jeu
 
 - `src/lib/data/games.json` : identifiant, titre, appid Steam, adresses de la jaquette et de l'artwork.
@@ -163,7 +169,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 4. **Détection de jeux** : détection Steam / Epic / dossiers de jeux / raccourcis `.lnk` en Rust avec validation utilisateur. — *fait*
 5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement — *fait*. Les visuels sont **téléchargés une fois** dans `<app data>/artwork/` (`cache_game_art`) : l'interface lit un fichier, pas une adresse web, donc l'association jeu ↔ jaquette ne peut plus changer et tout s'affiche hors ligne.
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
-7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs.
+7. **Finitions** : vidéo d'introduction, son, écran de veille — *faits* ; reste la gestion des erreurs.
 
 ## Règles de travail pour Claude
 

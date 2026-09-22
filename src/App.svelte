@@ -10,6 +10,7 @@
 	import PowerMenu from './lib/PowerMenu.svelte';
 	import BootVideo from './lib/BootVideo.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
+	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads } from './lib/downloads.svelte.js';
 	import { play as playSound, setSoundEnabled as applySound } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
@@ -43,6 +44,7 @@
 		setBootVideo,
 		setBootVideoEnabled,
 		setSoundEnabled as saveSoundEnabled,
+		setScreensaverMinutes,
 		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
@@ -81,6 +83,13 @@
 	 * déjà construite derrière. `?boot=0` la saute (outil de capture).
 	 */
 	let bootPlaying = $state(params.get('boot') !== '0');
+
+	/**
+	 * Écran de veille : on garde l'instant de la dernière action plutôt qu'un
+	 * compte à rebours à annuler et relancer sans arrêt.
+	 */
+	let saverOn = $state(params.get('saver') === '1');
+	let lastInput = $state(Date.now());
 
 	/** Vidéos livrées avec l'interface ; la première entrée n'en joue aucune. */
 	const BOOT_VIDEOS = [
@@ -154,6 +163,17 @@
 		if (!selected) return '';
 		const sheet = selected.appid ? details[selected.appid] : undefined;
 		return sheet?.hero || artwork[selected.id]?.hero || selected.hero || '';
+	});
+
+	/** Artworks disponibles pour la veille, sans doublon ni case vide. */
+	const saverImages = $derived.by(() => {
+		const seen = new Set<string>();
+		for (const game of games) {
+			const sheet = game.appid ? details[game.appid] : undefined;
+			const src = sheet?.hero || artwork[game.id]?.hero || game.hero || '';
+			if (src) seen.add(src);
+		}
+		return [...seen];
 	});
 
 	const favoriteCount = $derived(games.filter((g) => isFavorite(g.id)).length);
@@ -390,6 +410,14 @@
 	}
 
 	function handle(action: Action) {
+		lastInput = Date.now();
+		// La veille se dissipe sans rien déclencher derrière : on ne veut pas
+		// lancer un jeu en voulant simplement réveiller l'écran.
+		if (saverOn) {
+			saverOn = false;
+			return;
+		}
+
 		// N'importe quelle touche passe l'introduction.
 		if (bootPlaying) {
 			bootPlaying = false;
@@ -449,6 +477,11 @@
 		const timer = setInterval(() => {
 			clock = formatClock();
 			pads = padCount();
+			// Pas de veille pendant l'introduction, ni sans artwork à montrer.
+			const delay = settings.screensaver_minutes * 60_000;
+			if (delay > 0 && !bootPlaying && saverImages.length > 0) {
+				if (Date.now() - lastInput >= delay) saverOn = true;
+			}
 		}, 1000);
 		pads = padCount();
 		return () => {
@@ -634,11 +667,20 @@
 				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
 			}}
 			soundEnabled={settings.sound_enabled}
+			screensaverMinutes={settings.screensaver_minutes}
 			steamGridKey={settings.steamgriddb_key}
 			initialCategory={params.get('cat') ?? 'profile'}
 			onChangeSteamGridKey={(key) => {
 				setSteamGridKey(key);
 				notify(key ? 'Clé SteamGridDB enregistrée.' : 'Clé SteamGridDB retirée.');
+			}}
+			onCycleScreensaver={() => {
+				const steps = [0, 5, 10, 20];
+				const at = steps.indexOf(settings.screensaver_minutes);
+				const next = steps[(at + 1) % steps.length];
+				setScreensaverMinutes(next);
+				lastInput = Date.now();
+				notify(next ? `Veille après ${next} min.` : 'Veille désactivée.');
 			}}
 			onToggleSound={() => {
 				const next = !settings.sound_enabled;
@@ -665,6 +707,10 @@
 
 {#if bootPlaying && settings.boot_video_enabled && settings.boot_video}
 	<BootVideo src={settings.boot_video} onFinished={() => (bootPlaying = false)} />
+{/if}
+
+{#if saverOn}
+	<ScreenSaver images={saverImages} />
 {/if}
 
 {#if powerOpen}

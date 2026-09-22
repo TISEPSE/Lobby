@@ -61,4 +61,6 @@ export interface UserSettings {
 	sound_enabled: boolean;
 	/** Clé SteamGridDB, propre à l'utilisateur : jamais dans le dépôt. */
 	steamgriddb_key: string;
+	/** Minutes d'inactivité avant l'écran de veille ; 0 = jamais. */
+	screensaver_minutes: number;
 }

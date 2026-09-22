@@ -15,6 +15,7 @@
 		bootVideo = '',
 		bootVideoEnabled = true,
 		soundEnabled = true,
+		screensaverMinutes = 5,
 		steamGridKey = '',
 		initialCategory = 'profile',
 		onBack,
@@ -28,6 +29,7 @@
 		onCycleBootVideo,
 		onToggleBootVideo,
 		onToggleSound,
+		onCycleScreensaver,
 		onChangeSteamGridKey,
 	}: {
 		focused?: boolean;
@@ -41,6 +43,7 @@
 		bootVideo?: string;
 		bootVideoEnabled?: boolean;
 		soundEnabled?: boolean;
+		screensaverMinutes?: number;
 		steamGridKey?: string;
 		/** Catégorie ouverte au premier affichage (outil de capture). */
 		initialCategory?: string;
@@ -55,6 +58,7 @@
 		onCycleBootVideo?: () => void;
 		onToggleBootVideo?: () => void;
 		onToggleSound?: () => void;
+		onCycleScreensaver?: () => void;
 		onChangeSteamGridKey?: (key: string) => void;
 	} = $props();
 
@@ -109,6 +113,10 @@
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
 
 	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
+	const screensaverLabel = $derived(
+		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
+	);
+
 	const steamGridKeyLabel = $derived(
 		steamGridKey ? `Configurée ····${steamGridKey.slice(-4)}` : 'Non configurée'
 	);
@@ -130,7 +138,7 @@
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 4; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons]
+				return 5; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons, 4: veille]
 			case 'system':
 				return 0;
 			default:
@@ -238,6 +246,8 @@
 				onToggleBootVideo?.();
 			} else if (focusRow === 3) {
 				onToggleSound?.();
+			} else if (focusRow === 4) {
+				onCycleScreensaver?.();
 			}
 		}
 	}
@@ -543,6 +553,23 @@
 							<span class="desc">Petits sons de navigation, de validation et de lancement</span>
 						</div>
 						<span class="badge-layout">{soundEnabled ? 'Oui ▸' : 'Non ▸'}</span>
+					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 4}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 4;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Écran de veille</span>
+							<span class="desc">Artworks de la bibliothèque après un moment sans rien toucher</span>
+						</div>
+						<span class="badge-layout">{screensaverLabel} ▸</span>
 					</button>
 				</div>
 

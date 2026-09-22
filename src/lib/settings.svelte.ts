@@ -16,6 +16,7 @@ export const settings = $state<UserSettings>({
 	boot_video_enabled: true,
 	sound_enabled: true,
 	steamgriddb_key: '',
+	screensaver_minutes: 5,
 });
 
 export async function initSettings() {
@@ -34,6 +35,7 @@ export async function initSettings() {
 				settings.boot_video_enabled = loaded.boot_video_enabled ?? true;
 				settings.sound_enabled = loaded.sound_enabled ?? true;
 				settings.steamgriddb_key = loaded.steamgriddb_key ?? '';
+				settings.screensaver_minutes = loaded.screensaver_minutes ?? 5;
 				return;
 			}
 		} catch (e) {
@@ -104,6 +106,11 @@ export function setBootVideo(path: string) {
 
 export function setBootVideoEnabled(enabled: boolean) {
 	settings.boot_video_enabled = enabled;
+	saveSettings();
+}
+
+export function setScreensaverMinutes(minutes: number) {
+	settings.screensaver_minutes = minutes;
 	saveSettings();
 }
 
