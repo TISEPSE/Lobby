@@ -35,6 +35,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 │       ├── buttons/        # glyphes des touches : xbox/ et ps5/
 │       ├── icons/          # icônes d'interface (étoile Font Awesome, etc.)
 │       ├── avatars/        # photos de profil fournies
+│       ├── sounds/         # retours sonores (.wav)
 │       └── boot/           # vidéos d'introduction
 ├── src/
 │   ├── App.svelte          # racine : écran courant, entrées, lancement
@@ -122,6 +123,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - `notify()` est le seul point d'affichage : bandeau rouge liseré + pastille, son `error`, et 6 s à l'écran au lieu de 3 — le temps de lire depuis un canapé.
 - `window.onerror` et `unhandledrejection` alimentent le même bandeau : une erreur non rattrapée se voit au lieu de figer l'interface en silence (c'est ce qui avait donné un écran noir muet).
 - Capture : `?notice=error`. Attention, le budget de temps virtuel de Chrome fait expirer les `setTimeout` — garder `--virtual-time-budget` sous la durée du bandeau.
+
+## Sons
+
+- Les signaux viennent de `public/assets/sounds/` (design PlayStation fourni) : `ps5-scroll` pour le déplacement, `ps5-selection-button` pour la validation, `ps5-back-button` pour le retour, `ps5-popup-2` pour le lancement d'un jeu.
+- Les fichiers sont **décodés une fois** au démarrage (`preloadSounds()`) puis rejoués depuis la mémoire : un déplacement dans le carrousel ne doit pas attendre un chargement.
+- L'**erreur** n'a pas de fichier : elle garde le signal grave de synthèse, qui ne ressemble à aucun autre son de l'interface. Cette synthèse sert aussi de secours si un fichier manque — mieux vaut un bip qu'une interface muette.
+- Couper puis rallumer les sons ferme et rouvre le contexte audio : il faut alors redécoder (`preloadSounds()` à nouveau).
 
 ## Écran de veille
 

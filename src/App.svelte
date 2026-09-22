@@ -12,7 +12,7 @@
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads } from './lib/downloads.svelte.js';
-	import { play as playSound, setSoundEnabled as applySound } from './lib/sound';
+	import { play as playSound, setSoundEnabled as applySound, preloadSounds } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
@@ -501,6 +501,9 @@
 		// l'interface est ouverte.
 		const stopDownloads = watchDownloads();
 		applySound(settings.sound_enabled);
+		// Les sons sont décodés d'avance : le premier appui doit déjà sonner
+		// juste, pas retomber sur le bip de secours.
+		if (settings.sound_enabled) preloadSounds();
 		initSettings();
 		initLibrary();
 		const stop = listen(handle);
@@ -756,6 +759,9 @@
 				const next = !settings.sound_enabled;
 				saveSoundEnabled(next);
 				applySound(next);
+				// Le contexte audio est refermé quand on coupe le son : en le
+				// rallumant, il faut redécoder les fichiers.
+				if (next) preloadSounds();
 				notify(next ? 'Sons activés.' : 'Sons coupés.');
 			}}
 			onToggleBootVideo={() => {
