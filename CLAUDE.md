@@ -73,7 +73,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Seuils **asymétriques** : engagement à 0,65, relâchement à 0,40. Sans cette hystérésis, un stick qui traîne au repos fait défiler la sélection tout seul — c'est le bug qu'on a eu dans la version Godot.
 - Maintenir une direction répète l'action après 350 ms, puis toutes les 120 ms.
 - Les boutons ne déclenchent qu'au front montant : un appui = une action.
-- **L1 / R1** (LB / RB) passent d'un onglet à l'autre sans remonter dans la barre. Au clavier : `PageUp` / `PageDown`, ou `A` / `E`.
+- **L1 / R1** (LB / RB) **ne changent pas de section** : on passe d'un onglet à l'autre par la barre du haut. Ils parcourent les catégories là où il y en a, c'est-à-dire les filtres de la bibliothèque. Au clavier : `PageUp` / `PageDown`, ou `A` / `E`.
 - `padLayout()` choisit la famille de glyphes d'après l'identifiant de la manette (formes PlayStation si Sony, lettres Xbox sinon). Les index des boutons, eux, ne changent jamais.
 
 ## Lancement d'un jeu
@@ -95,7 +95,9 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - **Jamais de bannière 16/9 étirée dans une tuile 2/3** : c'est laid et ça coupe les titres. `steam_details` ne renvoie dans `cover` qu'une **vraie jaquette verticale** (`library_600x900`) ; sinon le champ reste vide.
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
-- L'utilisateur peut changer l'affiche d'un jeu (menu d'options d'une tuile) : jaquette, artwork ou bannière. Le choix est gardé par jeu (`artStyles`).
+- L'utilisateur choisit l'affiche d'un jeu par « Changer l'affiche » (menu d'options d'une tuile) : `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
+- Le choix passe par `pick_game_art` : l'image **remplace** le fichier local du jeu (`<app data>/artwork/<id>-<kind>.<ext>`) et `artStyles[game.id]` retient le type choisi. Rien ne dépend plus d'une recherche en ligne, et le choix survit au redémarrage.
+- Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
 
 ## Jaquettes manquantes : SteamGridDB
 
@@ -152,11 +154,14 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
   ```
   `?screen=home|detail` et `?index=N` ouvrent directement un état donné.
 
-## Recherche
+## Recherche et clavier à l'écran
 
-- Écran dédié, sans modale : le clavier reste affiché à gauche, les résultats à droite se mettent à jour à chaque lettre.
+- L'écran reprend la mise en page de la bibliothèque (même titre, même grille de jaquettes) : on ne change pas de monde en appuyant sur Y. S'y ajoutent une **grande barre de saisie** en tête et le clavier juste en dessous.
+- Le clavier est un composant à part (`Keyboard.svelte`), sa disposition vit dans `searchKeys.ts` : les deux doivent lire la même grille.
+- Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges et portent une icône, pas une légende en bas de page.
+- Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
 - A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.
-- Le passage clavier ↔ résultats se fait au bord (à droite depuis la dernière colonne, à gauche depuis la première tuile).
+- Descendre sous la dernière rangée fait passer aux résultats : le clavier **se replie** (hauteur animée) et la grille récupère la place. Remonter depuis la première rangée de jaquettes le ramène.
 - Comparaison via `normalizeForSearch` : sans accents ni ponctuation, « repo » trouve « R.E.P.O. ».
 - La hauteur de la fenêtre de résultats est en **unités d'écran** : un pourcentage à l'intérieur d'une variable CSS se résout contre la hauteur du parent, pas sa largeur — le calcul partait faux.
 

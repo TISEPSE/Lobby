@@ -118,7 +118,7 @@
 				<div class="viewport">
 					<div class="grid" style="--columns: {COLUMNS}; --row: {selectedRow}">
 						{#each candidates as candidate, i}
-							<figure class="item" class:selected={i === index} class:wide={candidate.kind !== 'cover'}>
+							<figure class="item" class:selected={i === index}>
 								<img src={candidate.thumb} alt="" loading="lazy" />
 								<figcaption>
 									{KIND_LABELS[candidate.kind] ?? candidate.kind} · {candidate.source}
