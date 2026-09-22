@@ -14,6 +14,7 @@
 		buttonLayout = 'ps5',
 		bootVideo = '',
 		bootVideoEnabled = true,
+		soundEnabled = true,
 		onBack,
 		onReturnToHub = onBack,
 		onOpenAvatarPicker,
@@ -24,6 +25,7 @@
 		onChangeLayout,
 		onCycleBootVideo,
 		onToggleBootVideo,
+		onToggleSound,
 	}: {
 		focused?: boolean;
 		profileName: string;
@@ -35,6 +37,7 @@
 		buttonLayout: string;
 		bootVideo?: string;
 		bootVideoEnabled?: boolean;
+		soundEnabled?: boolean;
 		onBack: () => void;
 		onReturnToHub?: () => void;
 		onOpenAvatarPicker: () => void;
@@ -45,6 +48,7 @@
 		onChangeLayout: (layout: string) => void;
 		onCycleBootVideo?: () => void;
 		onToggleBootVideo?: () => void;
+		onToggleSound?: () => void;
 	} = $props();
 
 	type CategoryId = 'profile' | 'games' | 'appearance' | 'system';
@@ -111,7 +115,7 @@
 			case 'games':
 				return 2 + gameFolders.length; // [0: scanner, 1: ajouter dossier, 2..N: dossiers]
 			case 'appearance':
-				return 3; // [0: touches, 1: vidéo d'intro, 2: jouer au démarrage]
+				return 4; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons]
 			case 'system':
 				return 0;
 			default:
@@ -213,6 +217,8 @@
 				onCycleBootVideo?.();
 			} else if (focusRow === 2) {
 				onToggleBootVideo?.();
+			} else if (focusRow === 3) {
+				onToggleSound?.();
 			}
 		}
 	}
@@ -473,6 +479,23 @@
 							<span class="desc">Passe directement à l'accueil si désactivé</span>
 						</div>
 						<span class="badge-layout">{bootVideoEnabled ? 'Oui ▸' : 'Non ▸'}</span>
+					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 3}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 3;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Retours sonores</span>
+							<span class="desc">Petits sons de navigation, de validation et de lancement</span>
+						</div>
+						<span class="badge-layout">{soundEnabled ? 'Oui ▸' : 'Non ▸'}</span>
 					</button>
 				</div>
 

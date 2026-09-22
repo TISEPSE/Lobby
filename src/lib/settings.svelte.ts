@@ -14,6 +14,7 @@ export const settings = $state<UserSettings>({
 	game_folders: ['D:/Jeux'],
 	boot_video: '/assets/boot/steamos_startup.webm',
 	boot_video_enabled: true,
+	sound_enabled: true,
 });
 
 export async function initSettings() {
@@ -30,6 +31,7 @@ export async function initSettings() {
 				settings.game_folders = loaded.game_folders ?? ['D:/Jeux'];
 				settings.boot_video = loaded.boot_video ?? '';
 				settings.boot_video_enabled = loaded.boot_video_enabled ?? true;
+				settings.sound_enabled = loaded.sound_enabled ?? true;
 				return;
 			}
 		} catch (e) {
@@ -100,6 +102,11 @@ export function setBootVideo(path: string) {
 
 export function setBootVideoEnabled(enabled: boolean) {
 	settings.boot_video_enabled = enabled;
+	saveSettings();
+}
+
+export function setSoundEnabled(enabled: boolean) {
+	settings.sound_enabled = enabled;
 	saveSettings();
 }
 

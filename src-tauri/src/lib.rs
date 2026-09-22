@@ -184,6 +184,9 @@ pub struct UserSettings {
   /// Permet de garder la vidéo choisie tout en la désactivant.
   #[serde(default = "default_true")]
   pub boot_video_enabled: bool,
+  /// Retours sonores de l'interface.
+  #[serde(default = "default_true")]
+  pub sound_enabled: bool,
 }
 
 fn default_true() -> bool {
@@ -271,6 +274,7 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     game_folders: default_folders,
     boot_video: "/assets/boot/steamos_startup.webm".to_string(),
     boot_video_enabled: true,
+    sound_enabled: true,
   })
 }
 

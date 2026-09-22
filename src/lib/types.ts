@@ -57,4 +57,6 @@ export interface UserSettings {
 	/** Vidéo jouée au lancement ; vide pour aller droit à l'accueil. */
 	boot_video: string;
 	boot_video_enabled: boolean;
+	/** Retours sonores de l'interface. */
+	sound_enabled: boolean;
 }

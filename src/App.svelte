@@ -11,6 +11,7 @@
 	import BootVideo from './lib/BootVideo.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import { watchDownloads } from './lib/downloads.svelte.js';
+	import { play as playSound, setSoundEnabled as applySound } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
@@ -41,6 +42,7 @@
 		setButtonLayout,
 		setBootVideo,
 		setBootVideoEnabled,
+		setSoundEnabled as saveSoundEnabled,
 		addGameFolder,
 		removeGameFolder,
 	} from './lib/settings.svelte.js';
@@ -392,6 +394,13 @@
 			bootPlaying = false;
 			return;
 		}
+
+		// Un seul endroit décide du son : les écrans n'ont pas à y penser.
+		if (action === 'accept') playSound('accept');
+		else if (action === 'cancel') playSound('cancel');
+		else if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
+			playSound('move');
+		}
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
@@ -423,6 +432,7 @@
 	}
 
 	async function launch() {
+		playSound('launch');
 		if (!selected) return;
 		notify(await play(selected));
 	}
@@ -431,6 +441,7 @@
 		// Les téléchargements Steam sont relus régulièrement tant que
 		// l'interface est ouverte.
 		const stopDownloads = watchDownloads();
+		applySound(settings.sound_enabled);
 		initSettings();
 		initLibrary();
 		const stop = listen(handle);
@@ -620,6 +631,13 @@
 					BOOT_VIDEOS[(BOOT_VIDEOS.indexOf(settings.boot_video) + 1) % BOOT_VIDEOS.length];
 				setBootVideo(next);
 				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
+			}}
+			soundEnabled={settings.sound_enabled}
+			onToggleSound={() => {
+				const next = !settings.sound_enabled;
+				saveSoundEnabled(next);
+				applySound(next);
+				notify(next ? 'Sons activés.' : 'Sons coupés.');
 			}}
 			onToggleBootVideo={() => {
 				setBootVideoEnabled(!settings.boot_video_enabled);
