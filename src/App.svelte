@@ -20,7 +20,7 @@
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
 	import { cycleArtStyle, artwork, details } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
-	import { SEARCH_KEYS, SEARCH_COLUMNS, normalizeForSearch } from './lib/searchKeys';
+	import { SEARCH_ROWS, keyAt, rowLength, nearestColumn, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
 	import {
@@ -75,7 +75,7 @@
 	/** Recherche : texte saisi, zone active (clavier ou résultats), curseurs. */
 	let query = $state('');
 	let searchZone = $state<'keys' | 'results'>('keys');
-	let searchKey = $state(0);
+	let searchKey = $state({ row: 0, col: 0 });
 	let searchResult = $state(0);
 
 	/**
@@ -101,7 +101,7 @@
 		'/assets/boot/sonic_advance.webm',
 		'/assets/boot/radagon_elden_ring.webm',
 	];
-	const SEARCH_RESULT_COLUMNS = 6;
+	const SEARCH_RESULT_COLUMNS = 8;
 
 	let filter = $state<Filter>('all');
 	let sort = $state<Sort>('title');
@@ -258,10 +258,7 @@
 			if (row === 0) onTabs = true;
 			else libraryIndex = Math.max(0, libraryIndex - COLUMNS);
 		} else if (action === 'accept') openDetail(libraryGames[libraryIndex]);
-		else if (action === 'options') {
-			filter = FILTERS[(FILTERS.indexOf(filter) + 1) % FILTERS.length];
-			libraryIndex = 0;
-		} else if (action === 'search') {
+		else if (action === 'search') {
 			sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
 			libraryIndex = 0;
 		} else if (action === 'cancel') goToSection('home');
@@ -270,45 +267,56 @@
 	/** Clavier à gauche, résultats à droite : le passage se fait au bord. */
 	function handleSearch(action: Action) {
 		if (searchZone === 'keys') {
-			const row = Math.floor(searchKey / SEARCH_COLUMNS);
-			const col = searchKey % SEARCH_COLUMNS;
-			const lastRow = Math.floor((SEARCH_KEYS.length - 1) / SEARCH_COLUMNS);
+			const { row, col } = searchKey;
+			const lastRow = SEARCH_ROWS.length - 1;
 
-			if (action === 'left') searchKey = Math.max(0, searchKey - 1);
+			if (action === 'left') searchKey = { row, col: Math.max(0, col - 1) };
 			else if (action === 'right') {
-				// Au bout d'une ligne, on passe aux résultats plutôt que de boucler.
-				if (col === SEARCH_COLUMNS - 1) searchZone = 'results';
-				else searchKey = Math.min(SEARCH_KEYS.length - 1, searchKey + 1);
+				searchKey = { row, col: Math.min(rowLength(row) - 1, col + 1) };
 			} else if (action === 'up') {
 				if (row === 0) onTabs = true;
-				else searchKey -= SEARCH_COLUMNS;
+				else searchKey = { row: row - 1, col: nearestColumn(row, col, row - 1) };
 			} else if (action === 'down') {
-				if (row < lastRow) searchKey = Math.min(SEARCH_KEYS.length - 1, searchKey + SEARCH_COLUMNS);
+				// Sous la dernière rangée de touches, on tombe dans les résultats :
+				// le clavier se replie et la grille prend la place.
+				if (row === lastRow) searchZone = 'results';
+				else searchKey = { row: row + 1, col: nearestColumn(row, col, row + 1) };
 			} else if (action === 'accept') {
-				query += SEARCH_KEYS[searchKey];
-				searchResult = 0;
+				pressKey();
 			} else if (action === 'cancel') {
 				// B efface une lettre ; à vide, il quitte l'écran.
 				if (query) query = query.slice(0, -1);
 				else goToSection('home');
 			} else if (action === 'search') {
 				query += ' ';
+				searchResult = 0;
 			}
 			return;
 		}
 
 		const total = searchResults.length;
 		const row = Math.floor(searchResult / SEARCH_RESULT_COLUMNS);
-		if (action === 'left') {
-			if (searchResult % SEARCH_RESULT_COLUMNS === 0) searchZone = 'keys';
-			else searchResult -= 1;
-		} else if (action === 'right') searchResult = Math.min(total - 1, searchResult + 1);
+		if (action === 'left') searchResult = Math.max(0, searchResult - 1);
+		else if (action === 'right') searchResult = Math.min(total - 1, searchResult + 1);
 		else if (action === 'down') searchResult = Math.min(total - 1, searchResult + SEARCH_RESULT_COLUMNS);
 		else if (action === 'up') {
-			if (row === 0) onTabs = true;
+			// La première rangée ramène au clavier, pas à la barre du haut : on
+			// est encore en train de chercher.
+			if (row === 0) searchZone = 'keys';
 			else searchResult = Math.max(0, searchResult - SEARCH_RESULT_COLUMNS);
 		} else if (action === 'accept') openDetail(searchResults[searchResult]);
 		else if (action === 'cancel') searchZone = 'keys';
+	}
+
+	/** Une touche du clavier : elle écrit une lettre, ou fait son action. */
+	function pressKey() {
+		const key = keyAt(searchKey.row, searchKey.col);
+		if (!key) return;
+		if (key.action === 'space') query += ' ';
+		else if (key.action === 'backspace') query = query.slice(0, -1);
+		else if (key.action === 'clear') query = '';
+		else query += key.value;
+		searchResult = 0;
 	}
 
 	function handleDetail(action: Action) {
@@ -439,12 +447,16 @@
 			return settingsComponent.handleAction(action);
 		}
 		if (action === 'menu') return openPower();
+		// L1 / R1 ne changent plus de section : on passe d'un onglet à l'autre
+		// par la barre du haut. Ils servent là où il y a des catégories à
+		// parcourir, c'est-à-dire la bibliothèque.
 		if (action === 'prev' || action === 'next') {
+			if (section !== 'library' || opened || optionsOpen) return;
 			const step = action === 'next' ? 1 : -1;
-			const at = SECTIONS.indexOf(section);
-			opened = null;
-			optionsOpen = false;
-			return goToSection(SECTIONS[Math.min(SECTIONS.length - 1, Math.max(0, at + step))]);
+			const at = FILTERS.indexOf(filter);
+			filter = FILTERS[(at + step + FILTERS.length) % FILTERS.length];
+			libraryIndex = 0;
+			return;
 		}
 		if (optionsOpen) return handleOptions(action);
 		if (opened) return handleDetail(action);
@@ -592,7 +604,7 @@
 							: section === 'library'
 								? [
 										{ button: 'a' as const, label: 'Ouvrir' },
-										{ button: 'x' as const, label: 'Filtre' },
+										{ button: 'r1' as const, label: 'Catégorie' },
 										{ button: 'y' as const, label: 'Tri' },
 										{ button: 'b' as const, label: 'Accueil' },
 									]
@@ -723,7 +735,8 @@
 			games={searchResults}
 			{query}
 			zone={searchZone}
-			keyIndex={searchKey}
+			keyRow={searchKey.row}
+			keyCol={searchKey.col}
 			resultIndex={searchResult}
 			columns={SEARCH_RESULT_COLUMNS}
 		/>

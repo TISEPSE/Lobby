@@ -6,14 +6,21 @@
 	 * images viennent de `public/assets/buttons/` — jeu Xbox ou PlayStation
 	 * selon la manette branchée, comme sur une console.
 	 */
-	type Entry = { button: 'a' | 'b' | 'x' | 'y'; label: string };
+	type Entry = { button: 'a' | 'b' | 'x' | 'y' | 'l1' | 'r1'; label: string };
 
 	let { entries }: { entries: Entry[] } = $props();
 
 	/** Correspondance entre nos actions et les fichiers de chaque famille. */
 	const FILES: Record<'xbox' | 'ps5', Record<Entry['button'], string>> = {
-		xbox: { a: 'xbox/a', b: 'xbox/b', x: 'xbox/x', y: 'xbox/y' },
-		ps5: { a: 'ps5/cross', b: 'ps5/circle', x: 'ps5/square', y: 'ps5/triangle' },
+		xbox: { a: 'xbox/a', b: 'xbox/b', x: 'xbox/x', y: 'xbox/y', l1: 'xbox/lb', r1: 'xbox/rb' },
+		ps5: {
+			a: 'ps5/cross',
+			b: 'ps5/circle',
+			x: 'ps5/square',
+			y: 'ps5/triangle',
+			l1: 'ps5/l1',
+			r1: 'ps5/r1',
+		},
 	};
 
 	let layout = $state<'xbox' | 'ps5'>('xbox');
