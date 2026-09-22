@@ -4,6 +4,7 @@
 	import TopBar from './lib/TopBar.svelte';
 	import Home from './lib/Home.svelte';
 	import Library from './lib/Library.svelte';
+	import Search from './lib/Search.svelte';
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
@@ -14,6 +15,7 @@
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
 	import { cycleArtStyle, artwork, details } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section } from './lib/types';
+	import { SEARCH_KEYS, SEARCH_COLUMNS, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
 	import {
@@ -60,6 +62,13 @@
 
 	let homeIndex = $state(wantedIndex);
 	let libraryIndex = $state(wanted === 'library' ? wantedIndex : 0);
+	/** Recherche : texte saisi, zone active (clavier ou résultats), curseurs. */
+	let query = $state('');
+	let searchZone = $state<'keys' | 'results'>('keys');
+	let searchKey = $state(0);
+	let searchResult = $state(0);
+	const SEARCH_RESULT_COLUMNS = 6;
+
 	let filter = $state<Filter>('all');
 	let sort = $state<Sort>('title');
 
@@ -93,8 +102,23 @@
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
 
 	const libraryGames = $derived(view(filter, sort));
+
+	/**
+	 * Résultats de la recherche : comparaison sans accents ni ponctuation, pour
+	 * que « repo » trouve « R.E.P.O. » et « spiderman » « Spider-Man ».
+	 */
+	const searchResults = $derived.by(() => {
+		const needle = normalizeForSearch(query);
+		if (!needle) return games;
+		return games.filter((game) => normalizeForSearch(game.title).includes(needle));
+	});
 	const selected = $derived(
-		opened ?? (section === 'library' ? libraryGames[libraryIndex] : games[homeIndex])
+		opened ??
+			(section === 'library'
+				? libraryGames[libraryIndex]
+				: section === 'search'
+					? searchResults[searchResult]
+					: games[homeIndex])
 	);
 
 	/**
@@ -194,6 +218,50 @@
 			sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
 			libraryIndex = 0;
 		} else if (action === 'cancel') goToSection('home');
+	}
+
+	/** Clavier à gauche, résultats à droite : le passage se fait au bord. */
+	function handleSearch(action: Action) {
+		if (searchZone === 'keys') {
+			const row = Math.floor(searchKey / SEARCH_COLUMNS);
+			const col = searchKey % SEARCH_COLUMNS;
+			const lastRow = Math.floor((SEARCH_KEYS.length - 1) / SEARCH_COLUMNS);
+
+			if (action === 'left') searchKey = Math.max(0, searchKey - 1);
+			else if (action === 'right') {
+				// Au bout d'une ligne, on passe aux résultats plutôt que de boucler.
+				if (col === SEARCH_COLUMNS - 1) searchZone = 'results';
+				else searchKey = Math.min(SEARCH_KEYS.length - 1, searchKey + 1);
+			} else if (action === 'up') {
+				if (row === 0) onTabs = true;
+				else searchKey -= SEARCH_COLUMNS;
+			} else if (action === 'down') {
+				if (row < lastRow) searchKey = Math.min(SEARCH_KEYS.length - 1, searchKey + SEARCH_COLUMNS);
+			} else if (action === 'accept') {
+				query += SEARCH_KEYS[searchKey];
+				searchResult = 0;
+			} else if (action === 'cancel') {
+				// B efface une lettre ; à vide, il quitte l'écran.
+				if (query) query = query.slice(0, -1);
+				else goToSection('home');
+			} else if (action === 'search') {
+				query += ' ';
+			}
+			return;
+		}
+
+		const total = searchResults.length;
+		const row = Math.floor(searchResult / SEARCH_RESULT_COLUMNS);
+		if (action === 'left') {
+			if (searchResult % SEARCH_RESULT_COLUMNS === 0) searchZone = 'keys';
+			else searchResult -= 1;
+		} else if (action === 'right') searchResult = Math.min(total - 1, searchResult + 1);
+		else if (action === 'down') searchResult = Math.min(total - 1, searchResult + SEARCH_RESULT_COLUMNS);
+		else if (action === 'up') {
+			if (row === 0) onTabs = true;
+			else searchResult = Math.max(0, searchResult - SEARCH_RESULT_COLUMNS);
+		} else if (action === 'accept') openDetail(searchResults[searchResult]);
+		else if (action === 'cancel') searchZone = 'keys';
 	}
 
 	function handleDetail(action: Action) {
@@ -315,6 +383,7 @@
 		if (opened) return handleDetail(action);
 		if (onTabs) return handleTabs(action);
 		if (section === 'library') return handleLibrary(action);
+		if (section === 'search') return handleSearch(action);
 		if (section === 'home') return handleHome(action);
 		if (section === 'settings') return settingsComponent?.handleAction(action);
 		if (action === 'up') onTabs = true;
@@ -426,11 +495,22 @@
 										{ button: 'y' as const, label: 'Tri' },
 										{ button: 'b' as const, label: 'Accueil' },
 									]
-								: section === 'settings'
-									? [
-											{ button: 'a' as const, label: 'Valider' },
-											{ button: 'b' as const, label: 'Retour' },
-										]
+								: section === 'search'
+									? searchZone === 'keys'
+										? [
+												{ button: 'a' as const, label: 'Taper' },
+												{ button: 'y' as const, label: 'Espace' },
+												{ button: 'b' as const, label: query ? 'Effacer' : 'Retour' },
+											]
+										: [
+												{ button: 'a' as const, label: 'Ouvrir' },
+												{ button: 'b' as const, label: 'Clavier' },
+											]
+									: section === 'settings'
+										? [
+												{ button: 'a' as const, label: 'Valider' },
+												{ button: 'b' as const, label: 'Retour' },
+											]
 									: [
 											{ button: 'a' as const, label: 'Ouvrir' },
 											{ button: 'x' as const, label: 'Options' },
@@ -504,10 +584,14 @@
 			onChangeLayout={setButtonLayout}
 		/>
 	{:else}
-		<section class="todo">
-			<h1>Recherche</h1>
-			<p>Cet écran arrive à l'étape suivante.</p>
-		</section>
+		<Search
+			games={searchResults}
+			{query}
+			zone={searchZone}
+			keyIndex={searchKey}
+			resultIndex={searchResult}
+			columns={SEARCH_RESULT_COLUMNS}
+		/>
 	{/if}
 </main>
 
