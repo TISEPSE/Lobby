@@ -497,25 +497,61 @@ async fn download_once(
     return String::new();
   }
 
-  // L'extension suit l'adresse : une jaquette Steam est en .jpg, un logo en .png.
-  let extension = url
+  let safe_id = safe_game_id(game_id);
+  // Un fichier déjà là — quel que soit son suffixe de version — est le bon :
+  // c'est celui que l'utilisateur voit, et peut-être celui qu'il a choisi.
+  if let Some(existing) = existing_art(dir, &safe_id, kind) {
+    return existing;
+  }
+
+  let path = dir.join(format!("{safe_id}-{kind}.{}", extension_of(url)));
+  download_to(client, url, &path).await
+}
+
+/// Nom de fichier sûr pour un identifiant de jeu.
+fn safe_game_id(game_id: &str) -> String {
+  game_id
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect()
+}
+
+/// L'extension suit l'adresse : une jaquette Steam est en .jpg, un logo en .png.
+fn extension_of(url: &str) -> String {
+  url
     .split('?')
     .next()
     .and_then(|clean| clean.rsplit('.').next())
     .filter(|ext| ext.len() <= 4 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
     .unwrap_or("jpg")
-    .to_lowercase();
+    .to_lowercase()
+}
 
-  let safe_id: String = game_id
-    .chars()
-    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-    .collect();
-  let path = dir.join(format!("{safe_id}-{kind}.{extension}"));
-
-  if path.exists() {
-    return path.to_string_lossy().replace('\\', "/");
+/// Les fichiers d'un jeu pour un type donné : `<id>-cover.jpg`, mais aussi
+/// `<id>-cover-<horodatage>.png` quand l'utilisateur a choisi lui-même.
+fn art_files(dir: &Path, safe_id: &str, kind: &str) -> Vec<PathBuf> {
+  let exact = format!("{safe_id}-{kind}.");
+  let versioned = format!("{safe_id}-{kind}-");
+  let mut found = Vec::new();
+  if let Ok(entries) = fs::read_dir(dir) {
+    for entry in entries.flatten() {
+      let name = entry.file_name().to_string_lossy().to_string();
+      if name.starts_with(&exact) || name.starts_with(&versioned) {
+        found.push(entry.path());
+      }
+    }
   }
+  found
+}
 
+fn existing_art(dir: &Path, safe_id: &str, kind: &str) -> Option<String> {
+  art_files(dir, safe_id, kind)
+    .first()
+    .map(|path| path.to_string_lossy().replace('\\', "/"))
+}
+
+/// Télécharge une image vers un chemin précis et rend ce chemin.
+async fn download_to(client: &reqwest::Client, url: &str, path: &Path) -> String {
   let bytes = match client.get(url).send().await {
     Ok(response) if response.status().is_success() => match response.bytes().await {
       Ok(b) => b,
@@ -528,7 +564,7 @@ async fn download_once(
   if bytes.len() < 1024 {
     return String::new();
   }
-  if fs::write(&path, &bytes).is_err() {
+  if fs::write(path, &bytes).is_err() {
     return String::new();
   }
   path.to_string_lossy().replace('\\', "/")
@@ -777,56 +813,32 @@ async fn pick_game_art(
     .build()
     .map_err(|error| error.to_string())?;
 
-  // Les anciens fichiers de ce type partent : sans ça, `download_once` verrait
-  // un fichier existant et garderait l'affiche précédente.
-  // Le nom de fichier est assaini comme dans `download_once` : sinon un jeu au
-  // titre exotique ne retrouverait pas ses propres fichiers.
-  let safe_id: String = game_id
-    .chars()
-    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-    .collect();
-  if let Ok(entries) = fs::read_dir(&dir) {
-    let prefix = format!("{safe_id}-{kind}.");
-    for entry in entries.flatten() {
-      if entry.file_name().to_string_lossy().starts_with(&prefix) {
-        let _ = fs::remove_file(entry.path());
-      }
-    }
-  }
+  let safe_id = safe_game_id(&game_id);
 
-  let local = download_once(&client, &dir, &game_id, &kind, &url).await;
+  // Le fichier retenu porte un horodatage : son **adresse change**, donc le
+  // webview affiche la nouvelle image au lieu de resservir l'ancienne depuis
+  // son cache. Un paramètre d'URL ne suffisait pas — le protocole d'accès aux
+  // fichiers le prend pour une partie du chemin.
+  let stamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  let path = dir.join(format!("{safe_id}-{kind}-{stamp}.{}", extension_of(&url)));
+
+  let local = download_to(&client, &url, &path).await;
   if local.is_empty() {
     return Err("Cette image n'a pas pu être téléchargée.".into());
   }
-  Ok(local)
-}
 
-/// Oublie les visuels d'un jeu : les fichiers partent du disque, pour que la
-/// prochaine recherche reparte de zéro.
-///
-/// Sans ça, `download_once` verrait les fichiers existants et garderait la
-/// mauvaise jaquette — celle d'un jeu voisin, quand la recherche par titre
-/// s'était trompée.
-#[tauri::command]
-fn forget_game_art(app: tauri::AppHandle, game_id: String) -> Result<u32, String> {
-  let dir = artwork_dir(&app)?;
-  let safe_id: String = game_id
-    .chars()
-    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
-    .collect();
-
-  let mut removed = 0;
-  if let Ok(entries) = fs::read_dir(&dir) {
-    for entry in entries.flatten() {
-      let name = entry.file_name().to_string_lossy().to_string();
-      for kind in ["cover", "hero", "logo", "banner"] {
-        if name.starts_with(&format!("{safe_id}-{kind}.")) && fs::remove_file(entry.path()).is_ok() {
-          removed += 1;
-        }
-      }
+  // Les anciens fichiers de ce type partent seulement une fois la nouvelle
+  // image écrite : en cas d'échec, le jeu garde son affiche.
+  for old in art_files(&dir, &safe_id, &kind) {
+    if old != path {
+      let _ = fs::remove_file(old);
     }
   }
-  Ok(removed)
+
+  Ok(local)
 }
 
 /// Récupère en ligne les jaquettes et illustrations officielles (Steam CDN ou Lutris/IGDB gratuit, 0 clé).
@@ -1030,7 +1042,6 @@ pub fn run() {
       art_candidates,
       test_steamgriddb_key,
       pick_game_art,
-      forget_game_art,
       steam_downloads,
       open_url,
       scan_installed_games,

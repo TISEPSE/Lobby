@@ -58,12 +58,6 @@
 		})();
 	});
 
-	const KIND_LABELS: Record<string, string> = {
-		cover: 'Jaquette',
-		hero: 'Artwork',
-		banner: 'Bannière',
-	};
-
 	export function handleAction(action: Action) {
 		if (!open) return;
 		if (action === 'cancel') return close();
@@ -136,9 +130,6 @@
 									<Cover {game} override={candidate.url} />
 								{/if}
 								<span class="caption">{game?.title ?? ''}</span>
-								<span class="tag">
-									{KIND_LABELS[candidate.kind] ?? candidate.kind} · {candidate.source}
-								</span>
 							</figure>
 						{/each}
 					</div>
@@ -258,20 +249,6 @@
 		font-weight: 600;
 		text-align: center;
 		background: linear-gradient(to top, rgba(0, 0, 0, 0.88), transparent);
-	}
-
-	/* La provenance est une étiquette de la fenêtre, pas un élément de la
-	   jaquette : elle se tient en haut, discrète. */
-	.tag {
-		position: absolute;
-		top: 8px;
-		left: 8px;
-		padding: 3px 8px;
-		border-radius: 6px;
-		background: rgba(0, 0, 0, 0.65);
-		font-size: 11px;
-		font-weight: 600;
-		color: var(--text-dim);
 	}
 
 	.ghost {

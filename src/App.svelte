@@ -20,7 +20,7 @@
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
-	import { artwork, details, refreshArtwork } from './lib/steam.svelte.js';
+	import { artwork, details } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { SEARCH_ROWS, keyAt, rowLength, nearestColumn, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
@@ -557,7 +557,6 @@
 						icon: 'star',
 					},
 					{ id: 'art', label: "Changer l'affiche", icon: 'image' },
-					{ id: 'refresh-art', label: 'Retrouver les visuels', icon: 'restart' },
 					{ id: 'update', label: 'Mettre à jour', icon: 'download' },
 					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
 					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
@@ -585,12 +584,6 @@
 				// On ne fait plus défiler les affiches à l'aveugle : la fenêtre
 				// montre tout ce qui existe et l'utilisateur choisit.
 				artPickerOpen = true;
-				break;
-			case 'refresh-art':
-				// Réparation d'une jaquette attachée au mauvais jeu : on efface
-				// les fichiers et on recommence la recherche.
-				await refreshArtwork(selected);
-				notify(`Visuels de ${selected.title} relancés.`);
 				break;
 			case 'update':
 				if (selected.appid) notify(await updateGame(selected.appid));

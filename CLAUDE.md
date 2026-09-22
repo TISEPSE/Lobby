@@ -99,8 +99,11 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
 - L'utilisateur choisit l'affiche d'un jeu par « Changer l'affiche » (menu d'options d'une tuile) : `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
 - L'aperçu d'un candidat passe par **`Cover.svelte` lui-même** (prop `override`), dans une tuile au format, au rayon, à la légende et au contour de l'accueil : rien n'est reproduit à la main, donc rien ne peut diverger. L'aperçu charge l'image **pleine**, pas la miniature — une vignette au cadrage différent donnait une fausse idée du résultat sur les bannières.
-- Une affiche choisie **remplace le fichier au même chemin** : l'adresse reçoit un marqueur `?v=<date>`, sinon le webview réafficherait l'ancienne image depuis son cache et le changement n'apparaîtrait qu'au redémarrage. Le fichier local passe aussi avant la fiche Steam dans `Cover.svelte`, sans quoi le choix serait recouvert.
-- Le choix passe par `pick_game_art` : l'image **remplace** le fichier local du jeu (`<app data>/artwork/<id>-<kind>.<ext>`) et `artStyles[game.id]` retient le type choisi. Rien ne dépend plus d'une recherche en ligne, et le choix survit au redémarrage.
+- Rien ne se pose **sur** l'aperçu : pas d'étiquette de provenance en haut de la tuile, elle cachait une partie de la bannière qu'on est justement en train de juger.
+- Le choix passe par `pick_game_art` : l'image est écrite sous un nom **horodaté** (`<id>-<kind>-<epoch>.<ext>`), les anciens fichiers de ce type sont effacés ensuite, et `artStyles[game.id]` retient le type choisi.
+- L'horodatage n'est pas décoratif : **l'adresse doit changer**, sinon le webview resservait l'ancienne image depuis son cache et rien ne bougeait à l'écran. Un paramètre d'URL (`?v=…`) ne marche pas — le protocole d'accès aux fichiers le prend pour une partie du chemin, et l'image ne se charge plus du tout.
+- `download_once` cherche donc un fichier existant **quel que soit son suffixe** (`art_files()`) : le choix de l'utilisateur est retrouvé tel quel, même après un vidage du stockage du navigateur.
+- Le fichier local passe avant la fiche Steam dans `Cover.svelte`, sans quoi le choix serait recouvert.
 - Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
 
 ## Jaquettes manquantes : SteamGridDB
@@ -151,7 +154,6 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Comparer les titres en **deux passes** : nom identique d'abord, ressemblance ensuite. Sinon « Hollow Knight » tombe sur « Hollow Knight: Silksong ».
 - La ressemblance passe par `titles_match()` : une simple inclusion ne suffit pas. « osu » est contenu dans des dizaines de noms et « Ball » dans « Golf Ballgame » — c'est ainsi qu'une jaquette se retrouvait sur le mauvais jeu. Il faut au moins cinq caractères et que le titre court fasse 70 % du long.
 - Un exécutable générique (`game.exe`, `launcher.exe`, `start.exe`…) n'est **pas** utilisé comme variante de titre : le chercher revenait à tirer une jaquette au hasard.
-- Réparation d'une mauvaise association : « Retrouver les visuels » (menu d'options) efface les fichiers du jeu (`forget_game_art`) et relance la recherche — sans cet effacement, `download_once` reverrait les anciens fichiers et rien ne changerait.
 - La note Metacritic est ramenée sur 5 (`score / 20`) et s'affiche en étoiles (icône Font Awesome dans `public/assets/icons/star.svg`). À 0, on n'affiche rien : une rangée éteinte ferait croire à une mauvaise note.
 
 ## Intégration système (dossier `system/`)

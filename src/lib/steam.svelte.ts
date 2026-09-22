@@ -151,29 +151,6 @@ export function forgetArtwork(gameId: string) {
 	saveArtwork();
 }
 
-/**
- * Oublie les visuels d'un jeu **et les fichiers sur le disque**, puis relance
- * la recherche. C'est la réparation quand une jaquette s'est attachée au
- * mauvais jeu : sans effacer les fichiers, la prochaine recherche les
- * retrouverait tels quels.
- */
-export async function refreshArtwork(game: {
-	id: string;
-	title: string;
-	appid?: string;
-	executable?: string;
-}) {
-	const tauri = (window as any).__TAURI_INTERNALS__;
-	if (!tauri) return;
-	const { invoke } = await import('@tauri-apps/api/core');
-	await invoke('forget_game_art', { gameId: game.id });
-	delete artwork[game.id];
-	delete artStyles[game.id];
-	saveArtwork();
-	artPending.delete(game.id);
-	ensureArtwork(game);
-}
-
 /** Une affiche proposée dans « Changer l'affiche ». */
 export interface ArtCandidate {
 	url: string;
@@ -219,11 +196,11 @@ export async function chooseArt(gameId: string, candidate: ArtCandidate): Promis
 	});
 
 	const current = artwork[gameId] ?? { cover: '', hero: '', logo: '', banner: '' };
-	// Le fichier remplace le précédent **au même chemin** : sans ce marqueur,
-	// le webview réafficherait l'ancienne image depuis son cache et le
-	// changement n'apparaîtrait qu'au redémarrage.
-	const fresh = `${convertFileSrc(local)}?v=${Date.now()}`;
-	artwork[gameId] = { ...current, [candidate.kind]: fresh };
+	// Rust écrit l'image sous un nom horodaté : l'adresse change, donc le
+	// webview affiche la nouvelle au lieu de resservir l'ancienne. Un paramètre
+	// d'URL ne marcherait pas — le protocole d'accès aux fichiers le prendrait
+	// pour une partie du chemin.
+	artwork[gameId] = { ...current, [candidate.kind]: convertFileSrc(local) };
 	saveArtwork();
 
 	// Une affiche choisie à la main prime : on remet le style sur « jaquette »
