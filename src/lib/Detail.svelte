@@ -1,8 +1,8 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails, coverOf } from './steam.svelte.js';
+	import { details, ensureDetails } from './steam.svelte.js';
+	import Cover from './Cover.svelte';
 	import { downloadFor, phaseLabel, sizeText } from './downloads.svelte.js';
-	import { generateProceduralCover } from './art';
 
 	/**
 	 * Fiche d'un jeu. La jaquette arrive depuis sa place sur l'accueil : le
@@ -39,15 +39,13 @@
 </script>
 
 <div class="detail">
-	<img
-		class="cover"
-		src={(game.appid ? coverOf(game.appid, game.cover) : '') || game.cover || generateProceduralCover(game.title, game.source)}
-		alt={game.title}
-		style="view-transition-name: cover-{game.id}"
-		onerror={(e) => {
-			(e.currentTarget as HTMLImageElement).src = generateProceduralCover(game.title, game.source);
-		}}
-	/>
+	<!-- La fiche montre la **même** affiche que la tuile : elle lisait la
+	     jaquette de la fiche Steam, donc le choix de l'utilisateur n'y
+	     apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait
+	     rien du tout. -->
+	<div class="cover" style="view-transition-name: cover-{game.id}">
+		<Cover {game} />
+	</div>
 
 	<div class="info">
 		<h1>{game.title}</h1>
@@ -114,9 +112,10 @@
 	}
 
 	.cover {
+		position: relative;
 		width: 100%;
 		aspect-ratio: 2 / 3;
-		object-fit: cover;
+		overflow: hidden;
 		border-radius: var(--radius-lg);
 		box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
 		align-self: center;

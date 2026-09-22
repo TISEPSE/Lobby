@@ -114,6 +114,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - `download_once` cherche donc un fichier existant **quel que soit son suffixe** (`art_files()`) : le choix de l'utilisateur est retrouvé tel quel, même après un vidage du stockage du navigateur.
 - Le fichier local passe avant la fiche Steam dans `Cover.svelte`, sans quoi le choix serait recouvert.
 - Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
+- **Tout ce qui montre une jaquette passe par `Cover.svelte`** — tuiles, fenêtre de choix et fiche de jeu. La fiche lisait la jaquette de la fiche Steam : le choix de l'utilisateur n'y apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait rien du tout.
 
 ## Jaquettes manquantes : SteamGridDB
 
