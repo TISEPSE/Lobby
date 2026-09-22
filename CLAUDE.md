@@ -65,6 +65,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Transition entre écrans : `view-transition-name` partagé sur la jaquette. Le navigateur anime le déplacement, on ne mesure aucun rectangle à la main.
 - Le voile posé sur un artwork est un dégradé (`Backdrop.svelte`) : lisible en bas, artwork préservé en haut. Sur une fiche, il s'appuie à gauche, là où se trouve le texte.
 - L'artwork ne change qu'une fois la nouvelle image chargée : deux couches se relaient, sinon on verrait un clignotement noir à chaque déplacement de la sélection.
+- Toute grille à défilement réserve `--hover-room` autour d'elle (marge négative + padding) : sans cette gouttière, l'agrandissement et le contour de la sélection se faisaient trancher par le `overflow: hidden` de la fenêtre.
 - La tuile sélectionnée **pousse** ses voisines (marges animées) au lieu de passer par-dessus, et la rangée glisse pour la garder centrée.
 
 ## Manette (`src/lib/gamepad.ts`)
@@ -96,6 +97,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - **Jamais de bannière 16/9 étirée dans une tuile 2/3** : c'est laid et ça coupe les titres. `steam_details` ne renvoie dans `cover` qu'une **vraie jaquette verticale** (`library_600x900`) ; sinon le champ reste vide.
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
 - L'utilisateur choisit l'affiche d'un jeu par « Changer l'affiche » (menu d'options d'une tuile) : `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
+- L'aperçu d'un candidat est rendu **comme la vraie tuile** (format 2/3, cadrage `cover`, titre en bas) : ce qu'on voit dans la fenêtre est exactement ce qu'on verra dans la bibliothèque.
 - Le choix passe par `pick_game_art` : l'image **remplace** le fichier local du jeu (`<app data>/artwork/<id>-<kind>.<ext>`) et `artStyles[game.id]` retient le type choisi. Rien ne dépend plus d'une recherche en ligne, et le choix survit au redémarrage.
 - Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
 
@@ -103,7 +105,9 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - Dernier recours quand Steam puis Lutris ne donnent rien : `fetch_steamgriddb_art()` (recherche par titre, puis `grids` 600x900, `heroes`, `logos`).
 - **La clé n'est jamais dans le code ni dans le dépôt** : elle est saisie dans Réglages → Jeux (« Clé SteamGridDB ») et vit dans `settings.json` du dossier de données (`steamgriddb_key`). Sans clé, la chaîne s'arrête simplement avant, comme aujourd'hui.
-- L'interface ne réaffiche jamais la clé en entier : `Configurée ····<4 derniers caractères>`.
+- L'interface ne réaffiche jamais la clé en entier : `Configurée ····<4 derniers caractères>`, suivi de son état.
+- La clé est **essayée à la saisie** (`test_steamgriddb_key`, une simple recherche) : une faute de copie se voit tout de suite au lieu d'attendre le prochain jeu sans jaquette.
+- SteamGridDB peut avoir **plusieurs fiches pour un même jeu** (deux entrées « Rhythia », une jaquette chacune) : on interroge toutes celles dont le titre correspond exactement, pas seulement la première. L'API ignore toute limite demandée, la troncature (24) se fait côté Rust.
 
 ## Menu d'options d'une tuile
 
@@ -124,6 +128,10 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Après `screensaver_minutes` sans aucune action (5 min par défaut, réglable dans Réglages → Apparence, `0` = jamais), `ScreenSaver.svelte` prend l'écran : artworks de la bibliothèque qui se relaient toutes les 12 s avec un lent panoramique, heure et date en bas à gauche.
 - La première action **réveille seulement** : elle n'est pas transmise à l'écran en dessous, pour ne pas lancer un jeu en voulant rallumer l'écran.
 - Pas de veille pendant la vidéo d'introduction, ni s'il n'y a aucun artwork à montrer.
+
+## Réglages
+
+- `saveSettings()` envoie **tous** les champs : la commande Rust réécrit le fichier entier et les champs absents y reprennent leur valeur par défaut. N'en envoyer qu'une partie effaçait silencieusement la clé SteamGridDB et la vidéo d'introduction au premier changement de pseudo.
 
 ## Données de jeu
 
@@ -157,7 +165,9 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Recherche et clavier à l'écran
 
 - L'écran reprend la mise en page de la bibliothèque (même titre, même grille de jaquettes) : on ne change pas de monde en appuyant sur Y. S'y ajoutent une **grande barre de saisie** en tête et le clavier juste en dessous.
-- Le clavier est un composant à part (`Keyboard.svelte`), sa disposition vit dans `searchKeys.ts` : les deux doivent lire la même grille.
+- Le clavier est un composant à part (`Keyboard.svelte`), utilisé **aussi par la saisie des réglages** (`VirtualKeyboard.svelte`) : une touche a la même allure partout, et son style ne se règle qu'à un endroit. Les dispositions vivent dans `searchKeys.ts` (`SEARCH_ROWS` pour la recherche, `textKeyboardRows(caps)` pour les réglages).
+- Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts.
+- Une touche sélectionnée **inverse ses couleurs**, sans agrandissement ni halo : sur une grille serrée, un agrandissement ferait sauter tout le clavier à chaque déplacement.
 - Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges et portent une icône, pas une légende en bas de page.
 - Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
 - A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.

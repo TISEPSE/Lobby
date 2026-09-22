@@ -1,18 +1,22 @@
 /**
- * Disposition du clavier de recherche. Elle vit à part du composant : l'écran
- * l'affiche, la navigation s'en sert pour savoir quelle touche est sous le
- * curseur — les deux doivent lire exactement la même grille.
+ * Dispositions des claviers à l'écran. Elles vivent à part des composants :
+ * l'écran les affiche, la navigation s'en sert pour savoir quelle touche est
+ * sous le curseur — les deux doivent lire exactement la même grille.
  *
- * Les rangées n'ont pas toutes la même longueur (la dernière porte des touches
- * larges) : la sélection se repère donc en **rangée + colonne**, jamais par un
- * index à plat.
+ * Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts sur
+ * son vrai clavier, et chercher une lettre sur une grille QWERTY quand on tape
+ * en AZERTY fait perdre plus de temps que l'ordre alphabétique.
+ *
+ * Les rangées n'ont pas toutes la même longueur (les dernières portent des
+ * touches larges) : la sélection se repère donc en **rangée + colonne**, jamais
+ * par un index à plat.
  */
 
 export interface SearchKey {
 	/** Caractère inséré. Vide pour une touche d'action. */
 	value: string;
 	/** Ce que fait la touche quand elle n'écrit pas de caractère. */
-	action?: 'space' | 'backspace' | 'clear' | 'done';
+	action?: 'space' | 'backspace' | 'clear' | 'caps' | 'cancel' | 'confirm';
 	/** Icône de `public/assets/icons/` : une flèche vaut mieux que le mot « Effacer ». */
 	icon?: string;
 	/** Texte affiché à côté de l'icône, pour les touches larges. */
@@ -21,15 +25,19 @@ export interface SearchKey {
 	span?: number;
 }
 
-function letters(row: string): SearchKey[] {
+function keys(row: string): SearchKey[] {
 	return [...row].map((value) => ({ value }));
 }
 
+/** Les trois rangées de lettres, dans l'ordre d'un clavier français. */
+const AZERTY = ['AZERTYUIOP', 'QSDFGHJKLM', 'WXCVBN-\':!'];
+
+export const SEARCH_COLUMNS = 10;
+
+/** Clavier de l'écran de recherche : on tape un titre, rien d'autre. */
 export const SEARCH_ROWS: SearchKey[][] = [
-	letters('ABCDEFGHIJ'),
-	letters('KLMNOPQRST'),
-	letters('UVWXYZ-\':!'),
-	letters('1234567890'),
+	...AZERTY.map(keys),
+	keys('1234567890'),
 	[
 		{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 5 },
 		{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 3 },
@@ -37,16 +45,39 @@ export const SEARCH_ROWS: SearchKey[][] = [
 	],
 ];
 
-export const SEARCH_COLUMNS = 10;
+/**
+ * Clavier de saisie des réglages (pseudo, clé SteamGridDB) : mêmes lettres,
+ * plus la casse et les deux issues — annuler ou valider.
+ */
+export function textKeyboardRows(caps: boolean): SearchKey[][] {
+	const letter = (row: string) =>
+		[...row].map((value) => ({ value: caps ? value : value.toLowerCase() }));
+
+	return [
+		keys('1234567890'),
+		...AZERTY.map(letter),
+		[
+			{ value: '', action: 'caps', icon: 'shift', label: caps ? 'Maj' : 'Min', span: 2 },
+			{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 3 },
+			{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 2 },
+			{ value: '', action: 'cancel', icon: 'exit', span: 1 },
+			{ value: '', action: 'confirm', icon: 'check', label: 'Valider', span: 2 },
+		],
+	];
+}
 
 /** Nombre de touches d'une rangée ; les rangées n'ont pas toutes la même. */
-export function rowLength(row: number): number {
-	return SEARCH_ROWS[row]?.length ?? 0;
+export function rowLength(row: number, rows: SearchKey[][] = SEARCH_ROWS): number {
+	return rows[row]?.length ?? 0;
 }
 
 /** Touche sous le curseur, ou `undefined` si la position n'existe pas. */
-export function keyAt(row: number, col: number): SearchKey | undefined {
-	return SEARCH_ROWS[row]?.[col];
+export function keyAt(
+	row: number,
+	col: number,
+	rows: SearchKey[][] = SEARCH_ROWS
+): SearchKey | undefined {
+	return rows[row]?.[col];
 }
 
 /**
@@ -54,10 +85,15 @@ export function keyAt(row: number, col: number): SearchKey | undefined {
  * plus proche horizontalement, pour ne pas sauter d'un bout à l'autre en
  * descendant sur la rangée des touches larges.
  */
-export function nearestColumn(fromRow: number, fromCol: number, toRow: number): number {
-	const from = SEARCH_ROWS[fromRow];
-	const to = SEARCH_ROWS[toRow];
-	if (!from || !to) return 0;
+export function nearestColumn(
+	fromRow: number,
+	fromCol: number,
+	toRow: number,
+	rows: SearchKey[][] = SEARCH_ROWS
+): number {
+	const from = rows[fromRow];
+	const to = rows[toRow];
+	if (!from || !to || !from[fromCol]) return 0;
 
 	const ratio = (columnStart(from, fromCol) + (from[fromCol].span ?? 1) / 2) / SEARCH_COLUMNS;
 	let best = 0;

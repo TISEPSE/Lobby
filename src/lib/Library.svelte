@@ -135,8 +135,8 @@
 	.viewport {
 		flex: 1;
 		overflow: hidden;
-		margin: -16px;
-		padding: 16px;
+		margin: calc(-1 * var(--hover-room));
+		padding: var(--hover-room);
 	}
 
 	.grid {

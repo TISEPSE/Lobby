@@ -203,7 +203,9 @@
 		flex: 1;
 		min-height: 0;
 		overflow: hidden;
-		padding-top: 14px;
+		/* La gouttière laisse la sélection grandir sans se faire trancher. */
+		margin: 0 calc(-1 * var(--hover-room));
+		padding: var(--hover-room);
 		/* La rangée suivante s'estompe au lieu d'être tranchée net : on comprend
 		   qu'il y a une suite sans voir une bande de jaquettes coupées. */
 		mask-image: linear-gradient(to bottom, #000 82%, transparent);

@@ -136,6 +136,7 @@
 		handleAction: (action: Action) => void;
 		isKeyboardActive?: () => boolean;
 		focusProfile?: () => void;
+		checkSteamGridKey?: (key: string) => Promise<string>;
 	} | null = $state(null);
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
@@ -580,8 +581,19 @@
 		if (id !== 'favorite') optionsOpen = false;
 	}
 
+	const keyboardOpen = $derived(
+		section === 'settings' && (settingsComponent?.isKeyboardActive?.() ?? false)
+	);
+
 	const help = $derived(
-		powerOpen
+		keyboardOpen
+			? [
+					{ button: 'a' as const, label: 'Taper' },
+					{ button: 'x' as const, label: 'Effacer' },
+					{ button: 'y' as const, label: 'Espace' },
+					{ button: 'b' as const, label: 'Annuler' },
+				]
+			: powerOpen
 			? [
 					{ button: 'a' as const, label: 'Valider' },
 					{ button: 'b' as const, label: 'Annuler' },
@@ -719,9 +731,18 @@
 			screensaverMinutes={settings.screensaver_minutes}
 			steamGridKey={settings.steamgriddb_key}
 			initialCategory={params.get('cat') ?? 'profile'}
-			onChangeSteamGridKey={(key) => {
+			initialKeyboard={params.get('modal') === 'keyboard'}
+			onChangeSteamGridKey={async (key) => {
 				setSteamGridKey(key);
-				notify(key ? 'Clé SteamGridDB enregistrée.' : 'Clé SteamGridDB retirée.');
+				if (!key) return notify('Clé SteamGridDB retirée.');
+
+				// La clé est essayée tout de suite : une faute de copie se voit
+				// ici plutôt qu'au prochain jeu sans jaquette.
+				const result = await settingsComponent?.checkSteamGridKey?.(key);
+				if (result === 'ok') notify('Clé SteamGridDB valide.');
+				else if (result === 'unauthorized') {
+					notify('Clé refusée par SteamGridDB : vérifie la copie.', false);
+				} else notify('Clé enregistrée, mais SteamGridDB est injoignable.', false);
 			}}
 			onCycleScreensaver={() => {
 				const steps = [0, 5, 10, 20];

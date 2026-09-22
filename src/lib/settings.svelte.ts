@@ -65,14 +65,12 @@ export async function saveSettings() {
 	if (tauri) {
 		try {
 			const { invoke } = await import('@tauri-apps/api/core');
-			await invoke('save_user_settings', {
-				settings: {
-					profile_name: settings.profile_name,
-					avatar_path: settings.avatar_path,
-					button_layout: settings.button_layout,
-					game_folders: settings.game_folders,
-				},
-			});
+			// **Tous** les champs, toujours : la commande Rust remplace le fichier
+			// entier, et les champs absents y reprennent leur valeur par défaut.
+			// N'en envoyer que quatre effaçait silencieusement la clé
+			// SteamGridDB et la vidéo d'introduction au premier changement de
+			// pseudo.
+			await invoke('save_user_settings', { settings: { ...settings } });
 		} catch (e) {
 			console.warn('Impossible de sauvegarder les réglages via Tauri:', e);
 		}

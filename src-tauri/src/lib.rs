@@ -633,6 +633,11 @@ async fn art_candidates(
 
 /// Les jaquettes communautaires : celles-ci sont nombreuses, d'où un choix à
 /// faire par l'utilisateur plutôt qu'une première réponse prise au hasard.
+///
+/// SteamGridDB peut avoir **plusieurs fiches pour un même jeu** (deux entrées
+/// « Rhythia », une jaquette chacune). On interroge donc toutes les fiches qui
+/// portent exactement ce titre, pas seulement la première, sinon la moitié des
+/// affiches reste invisible.
 async fn steamgriddb_candidates(
   client: &reqwest::Client,
   key: &str,
@@ -654,45 +659,107 @@ async fn steamgriddb_candidates(
     Err(_) => return Vec::new(),
   };
 
-  let Some(game_id) = found["data"]
-    .as_array()
-    .and_then(|list| list.first())
-    .and_then(|first| first["id"].as_i64())
-  else {
+  let Some(results) = found["data"].as_array() else {
     return Vec::new();
   };
 
-  let mut out = Vec::new();
-  for (kind, endpoint, query) in [
-    ("cover", "grids", "?dimensions=600x900&limit=18"),
-    ("hero", "heroes", "?limit=6"),
-  ] {
-    let url = format!("https://www.steamgriddb.com/api/v2/{endpoint}/game/{game_id}{query}");
-    let body: serde_json::Value = match client.get(&url).bearer_auth(key).send().await {
-      Ok(response) => match response.json().await {
-        Ok(body) => body,
-        Err(_) => continue,
-      },
-      Err(_) => continue,
-    };
-    let Some(items) = body["data"].as_array() else {
-      continue;
-    };
-    for item in items {
-      let Some(full) = item["url"].as_str() else {
-        continue;
-      };
-      out.push(ArtCandidate {
-        // `thumb` est la miniature fournie par l'API : c'est elle qu'on affiche
-        // dans la grille, l'image pleine taille n'est tirée qu'au choix.
-        thumb: item["thumb"].as_str().unwrap_or(full).to_string(),
-        url: full.to_string(),
-        source: "SteamGridDB".into(),
-        kind: kind.into(),
-      });
+  // Les fiches au titre identique d'abord ; à défaut, la première proposée.
+  let wanted = scanner::normalize(title);
+  let mut game_ids: Vec<i64> = results
+    .iter()
+    .filter(|entry| {
+      entry["name"]
+        .as_str()
+        .map(|name| scanner::normalize(name) == wanted)
+        .unwrap_or(false)
+    })
+    .filter_map(|entry| entry["id"].as_i64())
+    .take(3)
+    .collect();
+
+  if game_ids.is_empty() {
+    if let Some(first) = results.first().and_then(|entry| entry["id"].as_i64()) {
+      game_ids.push(first);
     }
   }
+
+  let mut out: Vec<ArtCandidate> = Vec::new();
+  let mut seen: Vec<String> = Vec::new();
+
+  for game_id in game_ids {
+    for (kind, endpoint, query) in [
+      ("cover", "grids", "?dimensions=600x900"),
+      ("hero", "heroes", ""),
+    ] {
+      let url = format!("https://www.steamgriddb.com/api/v2/{endpoint}/game/{game_id}{query}");
+      let body: serde_json::Value = match client.get(&url).bearer_auth(key).send().await {
+        Ok(response) => match response.json().await {
+          Ok(body) => body,
+          Err(_) => continue,
+        },
+        Err(_) => continue,
+      };
+      let Some(items) = body["data"].as_array() else {
+        continue;
+      };
+      for item in items {
+        let Some(full) = item["url"].as_str() else {
+          continue;
+        };
+        // Une même image peut revenir d'une fiche à l'autre.
+        if seen.iter().any(|known| known == full) {
+          continue;
+        }
+        seen.push(full.to_string());
+        out.push(ArtCandidate {
+          // `thumb` est la miniature fournie par l'API : c'est elle qu'on affiche
+          // dans la grille, l'image pleine taille n'est tirée qu'au choix.
+          thumb: item["thumb"].as_str().unwrap_or(full).to_string(),
+          url: full.to_string(),
+          source: "SteamGridDB".into(),
+          kind: kind.into(),
+        });
+      }
+    }
+  }
+
+  // L'API ignore toute limite demandée : certains jeux ont cinquante grids, et
+  // la fenêtre de choix n'a pas vocation à tous les montrer.
+  out.truncate(24);
   out
+}
+
+/// Vérifie qu'une clé SteamGridDB fonctionne vraiment, au moment où
+/// l'utilisateur la saisit : une clé mal copiée resterait sinon silencieuse
+/// jusqu'au prochain jeu sans jaquette.
+///
+/// Rend « ok », « unauthorized » ou « offline » — la clé n'est ni écrite ni
+/// renvoyée, seulement essayée.
+#[tauri::command]
+async fn test_steamgriddb_key(key: String) -> Result<String, String> {
+  if key.trim().is_empty() {
+    return Ok("empty".into());
+  }
+
+  let client = reqwest::Client::builder()
+    .user_agent("InterfaceConsole/0.1")
+    .build()
+    .map_err(|error| error.to_string())?;
+
+  let response = client
+    .get("https://www.steamgriddb.com/api/v2/search/autocomplete/hades")
+    .bearer_auth(key.trim())
+    .send()
+    .await;
+
+  match response {
+    Ok(response) if response.status().is_success() => Ok("ok".into()),
+    Ok(response) if response.status().as_u16() == 401 || response.status().as_u16() == 403 => {
+      Ok("unauthorized".into())
+    }
+    Ok(response) => Ok(format!("http {}", response.status().as_u16())),
+    Err(_) => Ok("offline".into()),
+  }
 }
 
 /// Enregistre l'affiche choisie par l'utilisateur, en remplaçant celle qui
@@ -933,6 +1000,7 @@ pub fn run() {
       steam_details,
       cache_game_art,
       art_candidates,
+      test_steamgriddb_key,
       pick_game_art,
       steam_downloads,
       open_url,

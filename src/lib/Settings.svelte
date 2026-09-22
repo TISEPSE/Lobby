@@ -18,6 +18,7 @@
 		screensaverMinutes = 5,
 		steamGridKey = '',
 		initialCategory = 'profile',
+		initialKeyboard = false,
 		onBack,
 		onReturnToHub = onBack,
 		onOpenAvatarPicker,
@@ -47,6 +48,8 @@
 		steamGridKey?: string;
 		/** Catégorie ouverte au premier affichage (outil de capture). */
 		initialCategory?: string;
+		/** Ouvre le clavier au premier affichage (outil de capture). */
+		initialKeyboard?: boolean;
 		onBack: () => void;
 		onReturnToHub?: () => void;
 		onOpenAvatarPicker: () => void;
@@ -102,7 +105,7 @@
 	let focusCol = $state<'categories' | 'content'>('categories');
 	let focusRow = $state(0);
 
-	let isKeyboardOpen = $state(false);
+	let isKeyboardOpen = $state(initialKeyboard);
 	/** Ce que le clavier est en train de saisir : le pseudo ou la clé d'API. */
 	let keyboardTarget = $state<'name' | 'steamgrid'>('name');
 	let keyboardComponent = $state<any>(null);
@@ -117,9 +120,54 @@
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
 	);
 
-	const steamGridKeyLabel = $derived(
-		steamGridKey ? `Configurée ····${steamGridKey.slice(-4)}` : 'Non configurée'
-	);
+	/**
+	 * État de la clé : une clé mal recopiée resterait sinon silencieuse jusqu'au
+	 * prochain jeu sans jaquette. On la teste à la saisie et on le dit ici.
+	 */
+	let steamGridStatus = $state<'unknown' | 'testing' | 'ok' | 'bad' | 'offline'>('unknown');
+
+	const steamGridKeyLabel = $derived.by(() => {
+		if (!steamGridKey) return 'Non configurée';
+		const masked = `Configurée ····${steamGridKey.slice(-4)}`;
+		if (steamGridStatus === 'testing') return `${masked} · vérification…`;
+		if (steamGridStatus === 'ok') return `${masked} · vérifiée`;
+		if (steamGridStatus === 'bad') return `${masked} · refusée`;
+		if (steamGridStatus === 'offline') return `${masked} · non vérifiée`;
+		return masked;
+	});
+
+	/** Clé déjà essayée, pour ne pas relancer la vérification à chaque rendu. */
+	let testedKey = $state('');
+
+	$effect(() => {
+		const key = steamGridKey;
+		if (!key || testedKey === key) return;
+		testedKey = key;
+		void checkSteamGridKey(key);
+	});
+
+	/** Essaie la clé auprès de SteamGridDB sans jamais l'afficher ni l'envoyer ailleurs. */
+	export async function checkSteamGridKey(key: string): Promise<string> {
+		if (!key) {
+			steamGridStatus = 'unknown';
+			return 'empty';
+		}
+		const tauri = (window as any).__TAURI_INTERNALS__;
+		if (!tauri) {
+			steamGridStatus = 'unknown';
+			return 'offline';
+		}
+		steamGridStatus = 'testing';
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const result = await invoke<string>('test_steamgriddb_key', { key });
+			steamGridStatus = result === 'ok' ? 'ok' : result === 'unauthorized' ? 'bad' : 'offline';
+			return result;
+		} catch {
+			steamGridStatus = 'offline';
+			return 'offline';
+		}
+	}
 
 	/** « /assets/boot/steamos_startup.webm » se lit « Steamos startup ». */
 	const bootVideoName = $derived.by(() => {

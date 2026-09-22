@@ -111,6 +111,15 @@
 			</header>
 
 			{#if loading}
+				<!-- Tuiles fantômes au format d'une jaquette : on voit tout de
+				     suite ce qui va arriver, et où. -->
+				<div class="viewport">
+					<div class="grid" style="--columns: {COLUMNS}; --row: 0">
+						{#each Array(COLUMNS) as _, i}
+							<div class="ghost" style="--delay: {i * 110}ms"></div>
+						{/each}
+					</div>
+				</div>
 				<p class="state">Recherche des affiches…</p>
 			{:else if error}
 				<p class="state">{error}</p>
@@ -118,11 +127,15 @@
 				<div class="viewport">
 					<div class="grid" style="--columns: {COLUMNS}; --row: {selectedRow}">
 						{#each candidates as candidate, i}
+							<!-- L'aperçu est rendu **comme la vraie tuile** : même format, même
+							     cadrage, même légende. Ce qu'on voit ici est exactement ce
+							     qu'on verra dans la bibliothèque. -->
 							<figure class="item" class:selected={i === index}>
 								<img src={candidate.thumb} alt="" loading="lazy" />
-								<figcaption>
+								<span class="caption">{game?.title ?? ''}</span>
+								<span class="tag">
 									{KIND_LABELS[candidate.kind] ?? candidate.kind} · {candidate.source}
-								</figcaption>
+								</span>
 							</figure>
 						{/each}
 					</div>
@@ -182,9 +195,12 @@
 		--row-height: 26vh;
 
 		/* Deux rangées au maximum ; avec moins d'affiches, la fenêtre se
-		   resserre au lieu de garder une moitié vide. */
-		max-height: calc(2 * var(--row-height) + var(--gap));
+		   resserre au lieu de garder une moitié vide. La gouttière laisse
+		   l'agrandissement de la sélection déborder sans être rogné. */
+		max-height: calc(2 * var(--row-height) + var(--gap) + 2 * var(--hover-room));
 		overflow: hidden;
+		margin: calc(-1 * var(--hover-room));
+		padding: var(--hover-room);
 	}
 
 	.grid {
@@ -199,21 +215,23 @@
 		position: relative;
 		height: var(--row-height);
 		margin: 0;
-		border-radius: 12px;
+		border-radius: var(--radius);
 		overflow: hidden;
-		background: rgba(0, 0, 0, 0.4);
+		background: var(--surface);
+		box-shadow: 0 12px 30px rgba(0, 0, 0, 0.45);
 		transition:
 			transform var(--fast) var(--ease),
 			box-shadow var(--fast) var(--ease);
 	}
 
+	/* Exactement le cadrage d'une tuile (`Cover.svelte`) : une bannière choisie
+	   sera recadrée ici comme elle le sera dans la bibliothèque, sans surprise
+	   au moment de valider. */
 	.item img {
 		width: 100%;
 		height: 100%;
-		/* Une jaquette verticale se montre entière ; une bannière serait
-		   déformée si on la recadrait en 2/3. */
-		object-fit: contain;
-		background: rgba(0, 0, 0, 0.5);
+		object-fit: cover;
+		background: #0c0e13;
 	}
 
 	.item.selected {
@@ -222,14 +240,48 @@
 		box-shadow: 0 0 30px 6px var(--accent-soft);
 	}
 
-	figcaption {
+	/* Le titre se pose comme sur une tuile de la bibliothèque. */
+	.caption {
 		position: absolute;
 		inset: auto 0 0;
-		padding: 18px 8px 8px;
-		font-size: 13px;
+		padding: 28px 8px 10px;
+		font-size: 14px;
 		font-weight: 600;
 		text-align: center;
-		background: linear-gradient(to top, rgba(0, 0, 0, 0.92), transparent);
+		background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+	}
+
+	/* La provenance est une étiquette de la fenêtre, pas un élément de la
+	   jaquette : elle se tient en haut, discrète. */
+	.tag {
+		position: absolute;
+		top: 8px;
+		left: 8px;
+		padding: 3px 8px;
+		border-radius: 6px;
+		background: rgba(0, 0, 0, 0.65);
+		font-size: 11px;
+		font-weight: 600;
+		color: var(--text-dim);
+	}
+
+	.ghost {
+		height: var(--row-height);
+		border-radius: var(--radius);
+		background: rgba(255, 255, 255, 0.06);
+		animation: breathe 1.4s var(--ease) infinite;
+		animation-delay: var(--delay);
+	}
+
+	/* Respiration lente : on voit que ça travaille sans que ça clignote. */
+	@keyframes breathe {
+		0%,
+		100% {
+			opacity: 0.35;
+		}
+		50% {
+			opacity: 0.75;
+		}
 	}
 
 	@keyframes fade-in {

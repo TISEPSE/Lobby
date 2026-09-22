@@ -23,6 +23,10 @@
 
 	--tile: clamp(140px, 11vw, 210px);
 	--tile-focus-scale: 1.24;
+	/* Place réservée autour d'une grille pour que la tuile sélectionnée puisse
+	   grandir et porter son contour sans être tranchée par le `overflow` de sa
+	   fenêtre. Toute grille à défilement la reprend. */
+	--hover-room: 18px;
 	/* Espacement entre deux jaquettes de l'accueil. */
 	--tile-gap: 12px;
 	/* Décalage de la sélection par rapport au centre, sur l'accueil : une tuile

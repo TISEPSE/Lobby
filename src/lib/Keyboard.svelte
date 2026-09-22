@@ -1,30 +1,42 @@
 <script lang="ts">
 	/**
-	 * Clavier à l'écran, partagé par les écrans qui demandent du texte.
+	 * Clavier à l'écran, partagé par tous les écrans qui demandent du texte :
+	 * la recherche et les champs des réglages. Une touche a donc la même
+	 * allure partout, et son style se change à un seul endroit.
 	 *
 	 * Les lettres sont volontairement grandes : un clavier de console se lit à
 	 * trois mètres, et de petites capitales serrées font tout de suite « boîte
 	 * de dialogue » plutôt que console de salon. Les touches qui n'écrivent
 	 * rien portent une icône, pas une légende en bas de page.
 	 */
-	import { SEARCH_ROWS, SEARCH_COLUMNS } from './searchKeys';
+	import { SEARCH_ROWS, SEARCH_COLUMNS, type SearchKey } from './searchKeys';
 
 	let {
+		rows = SEARCH_ROWS,
 		row = 0,
 		col = 0,
 		active = true,
-	}: { row?: number; col?: number; active?: boolean } = $props();
+		onPress,
+	}: {
+		rows?: SearchKey[][];
+		row?: number;
+		col?: number;
+		active?: boolean;
+		/** Clic à la souris, pour le développement au navigateur. */
+		onPress?: (row: number, col: number) => void;
+	} = $props();
 </script>
 
 <div class="keyboard" class:dimmed={!active} style="--columns: {SEARCH_COLUMNS}">
-	{#each SEARCH_ROWS as keys, r}
+	{#each rows as keys, r}
 		<div class="krow">
 			{#each keys as key, c}
-				<span
+				<button
+					type="button"
 					class="key"
-					class:wide={(key.span ?? 1) > 1}
 					class:selected={active && r === row && c === col}
 					style="--span: {key.span ?? 1}"
+					onclick={() => onPress?.(r, c)}
 				>
 					{#if key.icon}
 						<img src="/assets/icons/{key.icon}.svg" alt="" />
@@ -34,7 +46,7 @@
 					{:else}
 						{key.value}
 					{/if}
-				</span>
+				</button>
 			{/each}
 		</div>
 	{/each}
@@ -68,14 +80,17 @@
 		/* Les touches d'une même rangée gardent la même hauteur, quelle que soit
 		   leur largeur : une touche « Espace » plus plate casserait la grille. */
 		height: var(--key-size, 58px);
+		padding: 0 8px;
 		border-radius: 12px;
 		background: rgba(255, 255, 255, 0.07);
 		font-size: var(--key-font, 26px);
 		font-weight: 600;
+		/* Une touche ne grossit pas et ne s'auréole pas : elle **inverse ses
+		   couleurs**. Sur une grille serrée, un agrandissement ferait sauter
+		   tout le clavier à chaque déplacement. */
 		transition:
 			background var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease),
-			transform var(--fast) var(--ease);
+			color var(--fast) var(--ease);
 	}
 
 	.key img {
@@ -92,8 +107,6 @@
 	.key.selected {
 		background: var(--accent);
 		color: #06210f;
-		transform: scale(1.08);
-		box-shadow: 0 0 22px 5px var(--accent-soft);
 	}
 
 	/* Sur fond d'accent, une icône blanche disparaîtrait : on l'assombrit. */
