@@ -1234,7 +1234,6 @@ pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<St
     "deadcells" => Some("588650"),
     "ghostrunner2" => Some("2144740"),
     "handoffate2" => Some("456670"),
-    "osu" | "osulazer" => Some("1222440"),
     "combatmaster" => Some("2281730"),
     "balatro" => Some("2379780"),
     "hades" => Some("1145360"),
@@ -1353,9 +1352,14 @@ pub async fn fetch_lutris_art(client: &reqwest::Client, title: &str) -> Option<(
     if let Ok(res) = client.get(&direct_url).send().await {
       if res.status().is_success() {
         if let Ok(json) = res.json::<serde_json::Value>().await {
+          // Le slug peut tomber sur un homonyme : on vérifie le nom rendu.
+          let same = json["name"]
+            .as_str()
+            .map(|name| titles_match(name, &cleaned))
+            .unwrap_or(false);
           let cover = json["coverart"].as_str().unwrap_or("").to_string();
           let banner = json["banner_url"].as_str().unwrap_or("").to_string();
-          if !cover.is_empty() {
+          if same && !cover.is_empty() {
             return Some((cover, banner));
           }
         }
@@ -1381,8 +1385,16 @@ pub async fn fetch_lutris_art(client: &reqwest::Client, title: &str) -> Option<(
               }
             }
           }
-          // Passe 2 : premier résultat valide ayant une jaquette
+          // Passe 2 : ressemblance du nom, jamais « le premier qui a une
+          // jaquette ». Une recherche « osu » renvoie chez Lutris une liste de
+          // jeux sans rapport, et on accrochait la jaquette du premier venu.
           for item in results {
+            let Some(name) = item["name"].as_str() else {
+              continue;
+            };
+            if !titles_match(name, &cleaned) {
+              continue;
+            }
             let cover = item["coverart"].as_str().unwrap_or("").to_string();
             let banner = item["banner_url"].as_str().unwrap_or("").to_string();
             if !cover.is_empty() {

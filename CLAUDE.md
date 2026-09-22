@@ -165,6 +165,8 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Comparer les titres en **deux passes** : nom identique d'abord, ressemblance ensuite. Sinon « Hollow Knight » tombe sur « Hollow Knight: Silksong ».
 - La ressemblance passe par `titles_match()` : une simple inclusion ne suffit pas. « osu » est contenu dans des dizaines de noms et « Ball » dans « Golf Ballgame » — c'est ainsi qu'une jaquette se retrouvait sur le mauvais jeu. Il faut au moins cinq caractères et que le titre court fasse 70 % du long.
 - Un exécutable générique (`game.exe`, `launcher.exe`, `start.exe`…) n'est **pas** utilisé comme variante de titre : le chercher revenait à tirer une jaquette au hasard.
+- **Aucune source ne renvoie « le premier résultat venu »** : Lutris comme Steam passent par `titles_match`, y compris sur la réponse d'un slug direct (un slug peut tomber sur un homonyme). C'est la passe « premier jeu qui a une jaquette » de Lutris qui collait GOLF KEEPER sur osu!(lazer), la recherche « osu » y renvoyant n'importe quoi.
+- La table statique d'appids (`match_steam_app`) ne se vérifie pas toute seule : elle contenait `osu → 1222440`, un jeu délisté dont les images CDN sont celles de GOLF KEEPER. Avant d'y ajouter une ligne, ouvrir `store.steampowered.com/app/<id>`.
 - La note Metacritic est ramenée sur 5 (`score / 20`) et s'affiche en étoiles (icône Font Awesome dans `public/assets/icons/star.svg`). À 0, on n'affiche rien : une rangée éteinte ferait croire à une mauvaise note.
 
 ## Intégration système (dossier `system/`)
@@ -195,7 +197,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts.
 - Une touche sélectionnée **inverse ses couleurs**, sans agrandissement ni halo : sur une grille serrée, un agrandissement ferait sauter tout le clavier à chaque déplacement.
 - Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges, portent une icône, **et le glyphe du bouton manette qui fait la même chose** : le raccourci se lit sur la touche, pas dans une légende en bas de page.
-- Ce glyphe est posé **en absolu au bord droit** de la touche : dans le flux, il poussait l'icône et le mot vers la gauche et plus rien n'était centré.
+- Sur une touche d'action, ce glyphe **prend la place de l'icône**, juste avant le mot : c'est le bouton qui compte, l'icône décorative n'apportait rien et décentrait la touche.
 - L'écran de recherche a un **fond plein** : l'artwork derrière brouillait les lettres du clavier.
 - Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
 - A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.

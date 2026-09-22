@@ -53,17 +53,17 @@
 					style="--span: {key.span ?? 1}"
 					onclick={() => onPress?.(r, c)}
 				>
-					{#if key.icon}
+					{#if key.button}
+						<!-- Sur une touche d'action, c'est le bouton de la manette qui
+						     compte : il prend la place de l'icône, juste avant le mot. -->
+						<img class="pad" src="/assets/buttons/{FILES[layout][key.button]}.svg" alt="" />
+					{:else if key.icon}
 						<img src="/assets/icons/{key.icon}.svg" alt="" />
 					{/if}
 					{#if key.label}
 						<span class="label">{key.label}</span>
 					{:else}
 						{key.value}
-					{/if}
-					{#if key.button}
-						<!-- Le raccourci manette se lit sur la touche même. -->
-						<img class="pad" src="/assets/buttons/{FILES[layout][key.button]}.svg" alt="" />
 					{/if}
 				</button>
 			{/each}
@@ -127,16 +127,12 @@
 		font-weight: 600;
 	}
 
-	/* Le glyphe se pose au bord droit de la touche : dans le flux, il décalait
-	   l'icône et le mot vers la gauche et plus rien n'était centré. */
+	/* Le glyphe tient la place de l'icône, dans le flux : touche et mot restent
+	   centrés ensemble. */
 	.key .pad {
-		position: absolute;
-		right: 12px;
-		top: 50%;
-		width: 22px;
-		height: 22px;
-		transform: translateY(-50%);
-		opacity: 0.75;
+		width: 26px;
+		height: 26px;
+		opacity: 0.95;
 	}
 
 	.key.selected {
