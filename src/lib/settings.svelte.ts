@@ -12,6 +12,8 @@ export const settings = $state<UserSettings>({
 	avatar_path: '/assets/avatars/a11_face.svg',
 	button_layout: 'ps5',
 	game_folders: ['D:/Jeux'],
+	boot_video: '/assets/boot/steamos_startup.webm',
+	boot_video_enabled: true,
 });
 
 export async function initSettings() {
@@ -26,6 +28,8 @@ export async function initSettings() {
 				settings.avatar_path = loaded.avatar_path || '/assets/avatars/a11_face.svg';
 				settings.button_layout = loaded.button_layout || 'ps5';
 				settings.game_folders = loaded.game_folders ?? ['D:/Jeux'];
+				settings.boot_video = loaded.boot_video ?? '';
+				settings.boot_video_enabled = loaded.boot_video_enabled ?? true;
 				return;
 			}
 		} catch (e) {
@@ -85,6 +89,17 @@ export function setAvatar(path: string) {
 export function setButtonLayout(layout: string) {
 	if (layout === settings.button_layout) return;
 	settings.button_layout = layout;
+	saveSettings();
+}
+
+/** Choisit la vidéo d'introduction ; chaîne vide pour n'en jouer aucune. */
+export function setBootVideo(path: string) {
+	settings.boot_video = path;
+	saveSettings();
+}
+
+export function setBootVideoEnabled(enabled: boolean) {
+	settings.boot_video_enabled = enabled;
 	saveSettings();
 }
 

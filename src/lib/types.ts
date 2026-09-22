@@ -54,4 +54,7 @@ export interface UserSettings {
 	avatar_path: string;
 	button_layout: string;
 	game_folders: string[];
+	/** Vidéo jouée au lancement ; vide pour aller droit à l'accueil. */
+	boot_video: string;
+	boot_video_enabled: boolean;
 }

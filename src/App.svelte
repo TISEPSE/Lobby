@@ -8,6 +8,7 @@
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
+	import BootVideo from './lib/BootVideo.svelte';
 	import Settings from './lib/Settings.svelte';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
@@ -36,6 +37,8 @@
 		setProfileName,
 		setAvatar,
 		setButtonLayout,
+		setBootVideo,
+		setBootVideoEnabled,
 		addGameFolder,
 		removeGameFolder,
 	} from './lib/settings.svelte.js';
@@ -67,6 +70,23 @@
 	let searchZone = $state<'keys' | 'results'>('keys');
 	let searchKey = $state(0);
 	let searchResult = $state(0);
+
+	/**
+	 * Vidéo d'introduction : jouée une fois au lancement, par-dessus l'interface
+	 * déjà construite derrière. `?boot=0` la saute (outil de capture).
+	 */
+	let bootPlaying = $state(params.get('boot') !== '0');
+
+	/** Vidéos livrées avec l'interface ; la première entrée n'en joue aucune. */
+	const BOOT_VIDEOS = [
+		'',
+		'/assets/boot/steamos_startup.webm',
+		'/assets/boot/steamos_splash.webm',
+		'/assets/boot/steam_frame_boot.webm',
+		'/assets/boot/xbox_boot_2026.webm',
+		'/assets/boot/sonic_advance.webm',
+		'/assets/boot/radagon_elden_ring.webm',
+	];
 	const SEARCH_RESULT_COLUMNS = 6;
 
 	let filter = $state<Filter>('all');
@@ -365,6 +385,11 @@
 	}
 
 	function handle(action: Action) {
+		// N'importe quelle touche passe l'introduction.
+		if (bootPlaying) {
+			bootPlaying = false;
+			return;
+		}
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
@@ -582,6 +607,18 @@
 			onAddFolder={addGameFolder}
 			onRemoveFolder={removeGameFolder}
 			onChangeLayout={setButtonLayout}
+			bootVideo={settings.boot_video}
+			bootVideoEnabled={settings.boot_video_enabled}
+			onCycleBootVideo={() => {
+				const next =
+					BOOT_VIDEOS[(BOOT_VIDEOS.indexOf(settings.boot_video) + 1) % BOOT_VIDEOS.length];
+				setBootVideo(next);
+				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
+			}}
+			onToggleBootVideo={() => {
+				setBootVideoEnabled(!settings.boot_video_enabled);
+				notify(settings.boot_video_enabled ? 'Vidéo activée.' : 'Vidéo désactivée.');
+			}}
 		/>
 	{:else}
 		<Search
@@ -594,6 +631,10 @@
 		/>
 	{/if}
 </main>
+
+{#if bootPlaying && settings.boot_video_enabled && settings.boot_video}
+	<BootVideo src={settings.boot_video} onFinished={() => (bootPlaying = false)} />
+{/if}
 
 {#if powerOpen}
 	<PowerMenu index={powerIndex} pending={powerPending} />

@@ -12,6 +12,8 @@
 		totalPlaytime = '0 min',
 		gameFolders = [],
 		buttonLayout = 'ps5',
+		bootVideo = '',
+		bootVideoEnabled = true,
 		onBack,
 		onReturnToHub = onBack,
 		onOpenAvatarPicker,
@@ -20,6 +22,8 @@
 		onAddFolder,
 		onRemoveFolder,
 		onChangeLayout,
+		onCycleBootVideo,
+		onToggleBootVideo,
 	}: {
 		focused?: boolean;
 		profileName: string;
@@ -29,6 +33,8 @@
 		totalPlaytime: string;
 		gameFolders: string[];
 		buttonLayout: string;
+		bootVideo?: string;
+		bootVideoEnabled?: boolean;
 		onBack: () => void;
 		onReturnToHub?: () => void;
 		onOpenAvatarPicker: () => void;
@@ -37,6 +43,8 @@
 		onAddFolder: (path: string) => void;
 		onRemoveFolder: (path: string) => void;
 		onChangeLayout: (layout: string) => void;
+		onCycleBootVideo?: () => void;
+		onToggleBootVideo?: () => void;
 	} = $props();
 
 	type CategoryId = 'profile' | 'games' | 'appearance' | 'system';
@@ -87,6 +95,14 @@
 
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
 
+	/** « /assets/boot/steamos_startup.webm » se lit « Steamos startup ». */
+	const bootVideoName = $derived.by(() => {
+		if (!bootVideo) return 'Aucune';
+		const base = bootVideo.split('/').pop()?.replace(/\.[^.]+$/, '') ?? '';
+		const words = base.replace(/[_-]+/g, ' ').trim();
+		return words.charAt(0).toUpperCase() + words.slice(1);
+	});
+
 	// Nombre d'éléments interactifs dans le panneau de droite selon la catégorie
 	const contentRowsCount = $derived.by(() => {
 		switch (currentCategory.id) {
@@ -95,7 +111,7 @@
 			case 'games':
 				return 2 + gameFolders.length; // [0: scanner, 1: ajouter dossier, 2..N: dossiers]
 			case 'appearance':
-				return 1; // [0: toggle layout]
+				return 3; // [0: touches, 1: vidéo d'intro, 2: jouer au démarrage]
 			case 'system':
 				return 0;
 			default:
@@ -193,6 +209,10 @@
 			if (focusRow === 0) {
 				const next = buttonLayout === 'ps5' ? 'xbox' : buttonLayout === 'xbox' ? 'auto' : 'ps5';
 				onChangeLayout(next);
+			} else if (focusRow === 1) {
+				onCycleBootVideo?.();
+			} else if (focusRow === 2) {
+				onToggleBootVideo?.();
 			}
 		}
 	}
@@ -419,6 +439,40 @@
 						<span class="badge-layout">
 							{buttonLayout === 'ps5' ? 'PlayStation ▸' : buttonLayout === 'xbox' ? 'Xbox ▸' : 'Auto ▸'}
 						</span>
+					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 1}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 1;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Vidéo d'introduction</span>
+							<span class="desc">Jouée au lancement de la console</span>
+						</div>
+						<span class="badge-layout">{bootVideoName} ▸</span>
+					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 2}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 2;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Jouer au démarrage</span>
+							<span class="desc">Passe directement à l'accueil si désactivé</span>
+						</div>
+						<span class="badge-layout">{bootVideoEnabled ? 'Oui ▸' : 'Non ▸'}</span>
 					</button>
 				</div>
 
