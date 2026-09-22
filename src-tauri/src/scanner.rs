@@ -1158,11 +1158,16 @@ pub fn title_variants(title: &str, executable: &str) -> Vec<String> {
       .map(|s| s.to_string_lossy().to_string())
       .unwrap_or_default();
     let from_exe = clean_game_title(&stem);
-    push(from_exe.clone());
-    if !from_exe.contains(' ') {
-      push(split_camel_case(&from_exe));
+    // Un exécutable générique (« game.exe », « launcher.exe ») ne donne aucune
+    // indication : le chercher revenait à tirer une jaquette au hasard.
+    let generic = GENERIC_EXECUTABLES.contains(&normalize(&from_exe).as_str());
+    if !generic {
+      push(from_exe.clone());
+      if !from_exe.contains(' ') {
+        push(split_camel_case(&from_exe));
+      }
+      push(split_camel_case(&stem));
     }
-    push(split_camel_case(&stem));
   }
 
   variants
@@ -1181,6 +1186,39 @@ pub async fn match_steam_app_variants(
   }
   None
 }
+
+/// Deux titres désignent-ils le même jeu ?
+///
+/// L'inclusion seule ne suffit pas : « osu » est contenu dans des dizaines de
+/// noms, et un jeu au nom très court (« Ball ») est contenu dans « Golf
+/// Ballgame ». C'est ainsi qu'une jaquette se retrouvait sur le mauvais jeu.
+/// On exige donc des titres assez longs **et** une forte proportion commune.
+pub fn titles_match(a: &str, b: &str) -> bool {
+  let (a, b) = (normalize(a), normalize(b));
+  if a.is_empty() || b.is_empty() {
+    return false;
+  }
+  if a == b {
+    return true;
+  }
+
+  let (short, long) = if a.len() <= b.len() { (&a, &b) } else { (&b, &a) };
+  // En dessous de cinq caractères, une inclusion ne veut plus rien dire.
+  if short.len() < 5 || !long.contains(short.as_str()) {
+    return false;
+  }
+  // Le titre le plus court doit représenter l'essentiel de l'autre : « Hades »
+  // ne doit pas attraper « Hades II », mais « Dome Keeper » accepte
+  // « Dome Keeper Demo ».
+  short.len() * 10 >= long.len() * 7
+}
+
+/// Noms d'exécutables qui ne disent rien du jeu : les prendre pour un titre
+/// lançait une recherche au hasard, et donc une jaquette au hasard.
+const GENERIC_EXECUTABLES: &[&str] = &[
+  "game", "games", "launcher", "start", "startup", "play", "run", "main", "client", "app",
+  "application", "bin", "win64", "win32", "x64", "shipping", "setup", "install", "launch",
+];
 
 pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<String> {
   let cleaned = clean_game_title(title);
@@ -1217,8 +1255,7 @@ pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<St
       if let Some(items) = json["items"].as_array() {
         for item in items {
           if let (Some(id_num), Some(name)) = (item["id"].as_u64(), item["name"].as_str()) {
-            let norm_item = normalize(name);
-            if norm_item == norm_title || norm_item.contains(&norm_title) || norm_title.contains(&norm_item) {
+            if titles_match(name, &cleaned) {
               return Some(id_num.to_string());
             }
           }
@@ -1243,11 +1280,11 @@ pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<St
     }
   }
 
-  // Passe 2 : correspondance partielle
+  // Passe 2 : correspondance approchée, mais jamais sur une simple inclusion
+  // de quelques lettres (voir `titles_match`).
   for item in list {
     if let (Some(appid), Some(name)) = (item["appid"].as_str(), item["name"].as_str()) {
-      let norm_item = normalize(name);
-      if norm_item.contains(&norm_title) || norm_title.contains(&norm_item) {
+      if titles_match(name, &cleaned) {
         return Some(appid.to_string());
       }
     }

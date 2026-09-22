@@ -83,6 +83,12 @@
 			<button class="action ghost" class:focus-ring={selected === 1}>
 				{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
 			</button>
+			<!-- Tout ce qui modifie le jeu (affiche, mise à jour, fichiers) passe
+			     par ici : la fiche n'a pas à porter cinq boutons. -->
+			<button class="action ghost square" class:focus-ring={selected === 2} title="Options">
+				<img src="/assets/icons/settings.svg" alt="" />
+				Options
+			</button>
 		</div>
 	</div>
 </div>
@@ -223,6 +229,19 @@
 	.ghost {
 		background: var(--surface);
 		color: var(--text-dim);
+	}
+
+	.square {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		padding: 18px 28px;
+	}
+
+	.square img {
+		width: 22px;
+		height: 22px;
+		opacity: 0.85;
 	}
 
 	/* Le halo suit la sélection : un seul bouton actif à la fois. */

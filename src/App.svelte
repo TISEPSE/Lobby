@@ -17,9 +17,10 @@
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
 	import ArtPicker from './lib/ArtPicker.svelte';
+	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
-	import { artwork, details } from './lib/steam.svelte.js';
+	import { artwork, details, refreshArtwork } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { SEARCH_ROWS, keyAt, rowLength, nearestColumn, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
@@ -122,6 +123,8 @@
 
 	/** Menu d'options de la tuile sélectionnée, sur l'accueil. */
 	let optionsOpen = $state(params.get('options') === '1');
+	/** Même menu, ouvert depuis une fiche : il n'y a pas de tuile à prolonger. */
+	let detailOptionsOpen = $state(params.get('options') === 'detail');
 	let optionsIndex = $state(0);
 
 	/** Modales et scan */
@@ -326,13 +329,21 @@
 
 	function handleDetail(action: Action) {
 		if (!opened) return;
+		if (detailOptionsOpen) return handleOptions(action);
+
 		if (action === 'cancel') closeDetail();
-		else if (action === 'left') detailButton = 0;
-		else if (action === 'right') detailButton = 1;
+		else if (action === 'left') detailButton = Math.max(0, detailButton - 1);
+		else if (action === 'right') detailButton = Math.min(2, detailButton + 1);
 		else if (action === 'accept') {
 			if (detailButton === 0) launch();
-			else switchFavorite();
-		} else if (action === 'options') switchFavorite();
+			else if (detailButton === 1) switchFavorite();
+			else openDetailOptions();
+		} else if (action === 'options') openDetailOptions();
+	}
+
+	function openDetailOptions() {
+		optionsIndex = 0;
+		detailOptionsOpen = true;
 	}
 
 	function switchFavorite() {
@@ -546,6 +557,7 @@
 						icon: 'star',
 					},
 					{ id: 'art', label: "Changer l'affiche", icon: 'image' },
+					{ id: 'refresh-art', label: 'Retrouver les visuels', icon: 'restart' },
 					{ id: 'update', label: 'Mettre à jour', icon: 'download' },
 					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
 					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
@@ -556,7 +568,10 @@
 	async function handleOptions(action: Action) {
 		if (action === 'up') optionsIndex = Math.max(0, optionsIndex - 1);
 		else if (action === 'down') optionsIndex = Math.min(tileActions.length - 1, optionsIndex + 1);
-		else if (action === 'cancel' || action === 'options') optionsOpen = false;
+		else if (action === 'cancel' || action === 'options') {
+			optionsOpen = false;
+			detailOptionsOpen = false;
+		}
 		else if (action === 'accept') await runTileAction(tileActions[optionsIndex]?.id);
 	}
 
@@ -571,6 +586,12 @@
 				// montre tout ce qui existe et l'utilisateur choisit.
 				artPickerOpen = true;
 				break;
+			case 'refresh-art':
+				// Réparation d'une jaquette attachée au mauvais jeu : on efface
+				// les fichiers et on recommence la recherche.
+				await refreshArtwork(selected);
+				notify(`Visuels de ${selected.title} relancés.`);
+				break;
 			case 'update':
 				if (selected.appid) notify(await updateGame(selected.appid));
 				break;
@@ -581,7 +602,10 @@
 				if (selected.appid) notify(await uninstallGame(selected.appid));
 				break;
 		}
-		if (id !== 'favorite') optionsOpen = false;
+		if (id !== 'favorite') {
+			optionsOpen = false;
+			detailOptionsOpen = false;
+		}
 	}
 
 	const keyboardOpen = $derived(
@@ -623,11 +647,20 @@
 								{ button: 'b' as const, label: 'Fermer' },
 							]
 						: opened
-							? [
-									{ button: 'a' as const, label: detailButton === 0 ? 'Jouer' : 'Favori' },
-									{ button: 'x' as const, label: isFavorite(opened.id) ? 'Retirer des favoris' : 'Favori' },
-									{ button: 'b' as const, label: 'Retour' },
-								]
+							? detailOptionsOpen
+								? [
+										{ button: 'a' as const, label: 'Choisir' },
+										{ button: 'b' as const, label: 'Fermer' },
+									]
+								: [
+										{
+											button: 'a' as const,
+											label:
+												detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Favori' : 'Options',
+										},
+										{ button: 'x' as const, label: 'Options' },
+										{ button: 'b' as const, label: 'Retour' },
+									]
 							: section === 'library'
 								? [
 										{ button: 'a' as const, label: 'Ouvrir' },
@@ -802,6 +835,8 @@
 	onSelect={setAvatar}
 	onClose={() => (avatarPickerOpen = false)}
 />
+
+<OptionsMenu actions={tileActions} index={optionsIndex} open={detailOptionsOpen} />
 
 <ArtPicker
 	bind:this={artPickerComponent}

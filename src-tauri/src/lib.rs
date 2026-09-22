@@ -801,6 +801,34 @@ async fn pick_game_art(
   Ok(local)
 }
 
+/// Oublie les visuels d'un jeu : les fichiers partent du disque, pour que la
+/// prochaine recherche reparte de zéro.
+///
+/// Sans ça, `download_once` verrait les fichiers existants et garderait la
+/// mauvaise jaquette — celle d'un jeu voisin, quand la recherche par titre
+/// s'était trompée.
+#[tauri::command]
+fn forget_game_art(app: tauri::AppHandle, game_id: String) -> Result<u32, String> {
+  let dir = artwork_dir(&app)?;
+  let safe_id: String = game_id
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect();
+
+  let mut removed = 0;
+  if let Ok(entries) = fs::read_dir(&dir) {
+    for entry in entries.flatten() {
+      let name = entry.file_name().to_string_lossy().to_string();
+      for kind in ["cover", "hero", "logo", "banner"] {
+        if name.starts_with(&format!("{safe_id}-{kind}.")) && fs::remove_file(entry.path()).is_ok() {
+          removed += 1;
+        }
+      }
+    }
+  }
+  Ok(removed)
+}
+
 /// Récupère en ligne les jaquettes et illustrations officielles (Steam CDN ou Lutris/IGDB gratuit, 0 clé).
 #[tauri::command]
 async fn fetch_game_art(
@@ -1002,6 +1030,7 @@ pub fn run() {
       art_candidates,
       test_steamgriddb_key,
       pick_game_art,
+      forget_game_art,
       steam_downloads,
       open_url,
       scan_installed_games,

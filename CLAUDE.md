@@ -99,6 +99,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sans jaquette, `Cover.svelte` en **compose** une : l'artwork du jeu en fond assombri, le logo détouré par-dessus (`logo.png` du CDN quand il existe), et à défaut le titre. Le résultat reste au format d'une tuile.
 - L'utilisateur choisit l'affiche d'un jeu par « Changer l'affiche » (menu d'options d'une tuile) : `ArtPicker.svelte` montre **tout ce qui existe** pour ce jeu — jaquettes et bannières Steam, Lutris, jusqu'à dix-huit grids SteamGridDB (commande Rust `art_candidates`). La grille affiche les vignettes ; seule l'image retenue est tirée en pleine taille.
 - L'aperçu d'un candidat passe par **`Cover.svelte` lui-même** (prop `override`), dans une tuile au format, au rayon, à la légende et au contour de l'accueil : rien n'est reproduit à la main, donc rien ne peut diverger. L'aperçu charge l'image **pleine**, pas la miniature — une vignette au cadrage différent donnait une fausse idée du résultat sur les bannières.
+- Une affiche choisie **remplace le fichier au même chemin** : l'adresse reçoit un marqueur `?v=<date>`, sinon le webview réafficherait l'ancienne image depuis son cache et le changement n'apparaîtrait qu'au redémarrage. Le fichier local passe aussi avant la fiche Steam dans `Cover.svelte`, sans quoi le choix serait recouvert.
 - Le choix passe par `pick_game_art` : l'image **remplace** le fichier local du jeu (`<app data>/artwork/<id>-<kind>.<ext>`) et `artStyles[game.id]` retient le type choisi. Rien ne dépend plus d'une recherche en ligne, et le choix survit au redémarrage.
 - Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
 
@@ -115,6 +116,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - **X** sur l'accueil ouvre un panneau **dans la rangée**, à droite de la tuile sélectionnée : il pousse les tuiles suivantes au lieu de les recouvrir, en animant sa largeur. On voit donc toujours de quel jeu il s'agit.
 - Entrées : favori, changer l'affiche, mettre à jour, vérifier les fichiers, désinstaller.
 - Le panneau est **un tiroir de la tuile** : il reprend sa hauteur, son contour d'accent et ses coins, et se colle à son bord droit (marges négatives qui annulent l'espacement de la rangée). Tuile et panneau se lisent comme un seul bloc.
+- Sur une **fiche de jeu**, il n'y a pas de tuile à prolonger : un troisième bouton « Options » (et la touche X) ouvre le même jeu d'actions dans `OptionsMenu.svelte`, avec des lignes identiques à celles du tiroir.
 - Tout ce qui touche à l'installation est **confié à Steam** par un lien `steam://` (`install`, `validate`, `uninstall`), ouvert par la commande Rust `open_url` — qui n'accepte que ce protocole, pour ne pas devenir un moyen d'exécuter n'importe quoi depuis la page.
 
 ## Erreurs
@@ -147,6 +149,9 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Les images viennent du CDN public de Steam. Toutes les jaquettes verticales n'existent pas : on retombe sur `header.jpg` plutôt que d'afficher une case vide.
 - Fiches (note, genres, date, résumé) : `store.steampowered.com/api/appdetails` ; recherche par titre : `steamcommunity.com/actions/SearchApps`. Aucun compte, aucune clé.
 - Comparer les titres en **deux passes** : nom identique d'abord, ressemblance ensuite. Sinon « Hollow Knight » tombe sur « Hollow Knight: Silksong ».
+- La ressemblance passe par `titles_match()` : une simple inclusion ne suffit pas. « osu » est contenu dans des dizaines de noms et « Ball » dans « Golf Ballgame » — c'est ainsi qu'une jaquette se retrouvait sur le mauvais jeu. Il faut au moins cinq caractères et que le titre court fasse 70 % du long.
+- Un exécutable générique (`game.exe`, `launcher.exe`, `start.exe`…) n'est **pas** utilisé comme variante de titre : le chercher revenait à tirer une jaquette au hasard.
+- Réparation d'une mauvaise association : « Retrouver les visuels » (menu d'options) efface les fichiers du jeu (`forget_game_art`) et relance la recherche — sans cet effacement, `download_once` reverrait les anciens fichiers et rien ne changerait.
 - La note Metacritic est ramenée sur 5 (`score / 20`) et s'affiche en étoiles (icône Font Awesome dans `public/assets/icons/star.svg`). À 0, on n'affiche rien : une rangée éteinte ferait croire à une mauvaise note.
 
 ## Intégration système (dossier `system/`)

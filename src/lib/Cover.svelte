@@ -41,11 +41,14 @@
 		if (style === 'auto' && online?.cover) {
 			return online.cover;
 		}
-		if (style === 'banner' && (sheet?.banner || online?.banner || game.hero)) {
-			return sheet?.banner || online?.banner || game.hero;
+		// Le fichier local passe avant la fiche Steam : c'est l'affiche que
+		// l'utilisateur a choisie, elle ne doit pas être recouverte par celle
+		// que Steam propose.
+		if (style === 'banner' && (online?.banner || sheet?.banner || game.hero)) {
+			return online?.banner || sheet?.banner || game.hero;
 		}
-		if (style === 'artwork' && (sheet?.hero || online?.hero || game.hero)) {
-			return sheet?.hero || online?.hero || game.hero;
+		if (style === 'artwork' && (online?.hero || sheet?.hero || game.hero)) {
+			return online?.hero || sheet?.hero || game.hero;
 		}
 		if (sheet?.cover && sheet.cover.trim().length > 0) {
 			return sheet.cover;
