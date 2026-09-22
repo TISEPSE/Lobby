@@ -1127,6 +1127,61 @@ pub async fn scan_all_games(custom_folders: &[String]) -> Vec<ScannedGame> {
 
 
 /// Recherche un jeu dans l'annuaire public Steam pour trouver son AppID.
+/// Variantes d'un titre à essayer auprès des catalogues en ligne.
+///
+/// Le nom d'un dossier est souvent collé (« Fallguys », « rocketleague ») et
+/// aucun moteur de recherche ne le retrouve. Celui de l'exécutable, lui, est
+/// presque toujours en CamelCase (« FallGuys_client.exe », « Spider-Man2.exe »)
+/// : une fois découpé, il donne le vrai titre. On essaie donc les deux, du plus
+/// probable au moins probable.
+pub fn title_variants(title: &str, executable: &str) -> Vec<String> {
+  let mut variants = Vec::new();
+  let mut push = |value: String| {
+    let trimmed = value.trim().to_string();
+    if !trimmed.is_empty() && !variants.contains(&trimmed) {
+      variants.push(trimmed);
+    }
+  };
+
+  let cleaned = clean_game_title(title);
+  push(cleaned.clone());
+
+  // Le titre collé, séparé : « Fallguys » reste tel quel, mais « HandOfFate2 »
+  // devient « Hand Of Fate 2 ».
+  if !cleaned.contains(' ') {
+    push(split_camel_case(&cleaned));
+  }
+
+  if !executable.is_empty() {
+    let stem = Path::new(executable)
+      .file_stem()
+      .map(|s| s.to_string_lossy().to_string())
+      .unwrap_or_default();
+    let from_exe = clean_game_title(&stem);
+    push(from_exe.clone());
+    if !from_exe.contains(' ') {
+      push(split_camel_case(&from_exe));
+    }
+    push(split_camel_case(&stem));
+  }
+
+  variants
+}
+
+/// Premier identifiant Steam trouvé en essayant chaque variante du titre.
+pub async fn match_steam_app_variants(
+  client: &reqwest::Client,
+  title: &str,
+  executable: &str,
+) -> Option<String> {
+  for variant in title_variants(title, executable) {
+    if let Some(appid) = match_steam_app(client, &variant).await {
+      return Some(appid);
+    }
+  }
+  None
+}
+
 pub async fn match_steam_app(client: &reqwest::Client, title: &str) -> Option<String> {
   let cleaned = clean_game_title(title);
   let norm_title = normalize(&cleaned);
@@ -1235,6 +1290,21 @@ pub fn slugify(title: &str) -> String {
 }
 
 /// Récupère la jaquette officielle IGDB et la bannière depuis l'API publique ouverte Lutris (100% gratuite, sans clé API).
+/// Visuels Lutris en essayant chaque variante du titre : c'est la source des
+/// jeux absents de Steam (Valorant, Overwatch, Fall Guys, Rocket League).
+pub async fn fetch_lutris_art_variants(
+  client: &reqwest::Client,
+  title: &str,
+  executable: &str,
+) -> Option<(String, String)> {
+  for variant in title_variants(title, executable) {
+    if let Some(found) = fetch_lutris_art(client, &variant).await {
+      return Some(found);
+    }
+  }
+  None
+}
+
 pub async fn fetch_lutris_art(client: &reqwest::Client, title: &str) -> Option<(String, String)> {
   let cleaned = clean_game_title(title);
   let slug = slugify(&cleaned);

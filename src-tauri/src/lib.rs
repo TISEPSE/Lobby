@@ -269,9 +269,107 @@ pub struct OnlineArtwork {
   pub banner: String,
 }
 
+/// Dossier des visuels téléchargés, un fichier par jeu.
+fn artwork_dir(app: &tauri::AppHandle) -> Result<PathBuf, String> {
+  let dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("Dossier de données introuvable : {error}"))?
+    .join("artwork");
+  fs::create_dir_all(&dir).map_err(|error| format!("Dossier des visuels impossible : {error}"))?;
+  Ok(dir)
+}
+
+/// Télécharge une image **une seule fois** et rend son chemin local.
+///
+/// C'est ce qui fige l'association jeu ↔ jaquette : une fois le bon visuel
+/// trouvé, il est posé sur le disque sous le nom du jeu. Plus de requête au
+/// démarrage, plus de risque qu'une recherche renvoie autre chose demain, et
+/// l'interface s'affiche hors ligne.
+async fn download_once(
+  client: &reqwest::Client,
+  dir: &Path,
+  game_id: &str,
+  kind: &str,
+  url: &str,
+) -> String {
+  if url.is_empty() {
+    return String::new();
+  }
+
+  // L'extension suit l'adresse : une jaquette Steam est en .jpg, un logo en .png.
+  let extension = url
+    .split('?')
+    .next()
+    .and_then(|clean| clean.rsplit('.').next())
+    .filter(|ext| ext.len() <= 4 && ext.chars().all(|c| c.is_ascii_alphanumeric()))
+    .unwrap_or("jpg")
+    .to_lowercase();
+
+  let safe_id: String = game_id
+    .chars()
+    .map(|c| if c.is_ascii_alphanumeric() || c == '-' || c == '_' { c } else { '_' })
+    .collect();
+  let path = dir.join(format!("{safe_id}-{kind}.{extension}"));
+
+  if path.exists() {
+    return path.to_string_lossy().replace('\\', "/");
+  }
+
+  let bytes = match client.get(url).send().await {
+    Ok(response) if response.status().is_success() => match response.bytes().await {
+      Ok(b) => b,
+      Err(_) => return String::new(),
+    },
+    _ => return String::new(),
+  };
+
+  // Une réponse minuscule n'est pas une image : inutile de la garder.
+  if bytes.len() < 1024 {
+    return String::new();
+  }
+  if fs::write(&path, &bytes).is_err() {
+    return String::new();
+  }
+  path.to_string_lossy().replace('\\', "/")
+}
+
+/// Trouve les visuels d'un jeu **et les enregistre sur le disque**.
+///
+/// L'interface n'a plus qu'à afficher les fichiers locaux : l'association est
+/// faite une fois pour toutes.
+#[tauri::command]
+async fn cache_game_art(
+  app: tauri::AppHandle,
+  game_id: String,
+  title: String,
+  appid: Option<String>,
+  executable: Option<String>,
+) -> Result<OnlineArtwork, String> {
+  let dir = artwork_dir(&app)?;
+  let found = fetch_game_art(title, appid, executable).await?;
+
+  let client = reqwest::Client::builder()
+    .user_agent("InterfaceConsole/0.1")
+    .build()
+    .map_err(|error| error.to_string())?;
+
+  Ok(OnlineArtwork {
+    cover: download_once(&client, &dir, &game_id, "cover", &found.cover).await,
+    hero: download_once(&client, &dir, &game_id, "hero", &found.hero).await,
+    logo: download_once(&client, &dir, &game_id, "logo", &found.logo).await,
+    banner: download_once(&client, &dir, &game_id, "banner", &found.banner).await,
+  })
+}
+
 /// Récupère en ligne les jaquettes et illustrations officielles (Steam CDN ou Lutris/IGDB gratuit, 0 clé).
 #[tauri::command]
-async fn fetch_game_art(title: String, appid: Option<String>) -> Result<OnlineArtwork, String> {
+async fn fetch_game_art(
+  title: String,
+  appid: Option<String>,
+  executable: Option<String>,
+) -> Result<OnlineArtwork, String> {
+  let exe = executable.unwrap_or_default();
   let client = reqwest::Client::builder()
     .user_agent("InterfaceConsole/0.1")
     .build()
@@ -281,7 +379,7 @@ async fn fetch_game_art(title: String, appid: Option<String>) -> Result<OnlineAr
   let mut target_appid = appid;
 
   if target_appid.is_none() {
-    target_appid = scanner::match_steam_app(&client, &title).await;
+    target_appid = scanner::match_steam_app_variants(&client, &title, &exe).await;
   }
 
   let mut cover = String::new();
@@ -312,7 +410,7 @@ async fn fetch_game_art(title: String, appid: Option<String>) -> Result<OnlineAr
 
   // Si pas de jaquette Steam trouvée, interroge Lutris / IGDB (100% gratuit, 0 clé)
   if cover.is_empty() {
-    if let Some((lutris_cover, lutris_banner)) = scanner::fetch_lutris_art(&client, &title).await {
+    if let Some((lutris_cover, lutris_banner)) = scanner::fetch_lutris_art_variants(&client, &title, &exe).await {
       cover = lutris_cover;
       if hero.is_empty() && !lutris_banner.is_empty() {
         hero = lutris_banner.clone();
@@ -439,6 +537,7 @@ pub fn run() {
       is_running,
       power_action,
       steam_details,
+      cache_game_art,
       open_url,
       scan_installed_games,
       save_library,

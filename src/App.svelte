@@ -12,7 +12,7 @@
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
-	import { cycleArtStyle } from './lib/steam.svelte.js';
+	import { cycleArtStyle, artwork, details } from './lib/steam.svelte.js';
 	import type { TileAction, Game, Section } from './lib/types';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import { play } from './lib/launcher';
@@ -96,6 +96,16 @@
 	const selected = $derived(
 		opened ?? (section === 'library' ? libraryGames[libraryIndex] : games[homeIndex])
 	);
+
+	/**
+	 * Artwork de fond : celui de la fiche Steam, sinon celui téléchargé pour ce
+	 * jeu, sinon celui du fichier de bibliothèque.
+	 */
+	const backdropSrc = $derived.by(() => {
+		if (!selected) return '';
+		const sheet = selected.appid ? details[selected.appid] : undefined;
+		return sheet?.hero || artwork[selected.id]?.hero || selected.hero || '';
+	});
 
 	const favoriteCount = $derived(games.filter((g) => isFavorite(g.id)).length);
 	const totalPlaytimeMinutes = $derived(
@@ -429,7 +439,7 @@
 	);
 </script>
 
-<Backdrop src={selected?.hero ?? ''} dimmed={opened !== null || section !== 'home'} />
+<Backdrop src={backdropSrc} dimmed={opened !== null || section !== 'home'} />
 
 <TopBar
 	{section}

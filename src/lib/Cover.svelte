@@ -1,28 +1,41 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails, artStyles } from './steam.svelte.js';
+	import { details, ensureDetails, artStyles, artwork, ensureArtwork } from './steam.svelte.js';
 	import { generateProceduralCover } from './art';
 
 	let { game }: { game: Game } = $props();
 
 	$effect(() => {
+		// Les métadonnées (note, genres, résumé) viennent de l'appid…
 		if (game.appid) {
 			ensureDetails(game.appid);
 		}
+		// …mais la jaquette est téléchargée une fois pour tous les jeux, avec ou
+		// sans appid : ensuite elle s'affiche depuis le disque.
+		ensureArtwork(game);
 	});
+
+	const online = $derived(artwork[game.id]);
 
 	const sheet = $derived(game.appid ? details[game.appid] : undefined);
 	const style = $derived(game.appid ? (artStyles[game.appid] ?? 'auto') : 'auto');
 
 	const coverSrc = $derived.by(() => {
-		if (style === 'banner' && (sheet?.banner || game.hero)) {
-			return sheet?.banner || game.hero;
+		// Le fichier local d'abord : c'est la jaquette retenue pour ce jeu.
+		if (style === 'auto' && online?.cover) {
+			return online.cover;
 		}
-		if (style === 'artwork' && (sheet?.hero || game.hero)) {
-			return sheet?.hero || game.hero;
+		if (style === 'banner' && (sheet?.banner || online?.banner || game.hero)) {
+			return sheet?.banner || online?.banner || game.hero;
+		}
+		if (style === 'artwork' && (sheet?.hero || online?.hero || game.hero)) {
+			return sheet?.hero || online?.hero || game.hero;
 		}
 		if (sheet?.cover && sheet.cover.trim().length > 0) {
 			return sheet.cover;
+		}
+		if (online?.cover && online.cover.trim().length > 0) {
+			return online.cover;
 		}
 		if (game.cover && game.cover.trim().length > 0) {
 			return game.cover;
@@ -37,6 +50,8 @@
 			failed = true;
 			if (game.appid) {
 				ensureDetails(game.appid);
+			} else {
+				ensureArtwork(game);
 			}
 		}
 	}

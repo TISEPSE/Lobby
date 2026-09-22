@@ -103,12 +103,12 @@
 	.rail {
 		display: flex;
 		align-items: flex-end;
-		gap: 18px;
+		gap: var(--tile-gap);
 		padding: 40px 0 0;
 		/* La sélection se tient un peu à droite du centre : pile au milieu, la
 		   rangée paraît figée et la lecture est moins naturelle. */
 		transform: translateX(
-			calc(50vw + var(--selection-shift) - (var(--index) + 0.5) * (var(--tile) + 18px))
+			calc(50vw + var(--selection-shift) - (var(--index) + 0.5) * (var(--tile) + var(--tile-gap)))
 		);
 		transition: transform var(--normal) var(--ease);
 		will-change: transform;

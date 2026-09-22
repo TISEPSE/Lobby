@@ -35,7 +35,10 @@
 		flex: 0 0 auto;
 		width: 0;
 		overflow: hidden;
-		align-self: stretch;
+		/* Exactement la hauteur de la tuile sélectionnée : plus haut, le panneau
+		   dépassait de la rangée et décalait tout le reste. */
+		height: calc(var(--tile) * 1.5 * var(--tile-focus-scale));
+		align-self: flex-end;
 		transition: width var(--normal) var(--ease);
 	}
 
@@ -50,7 +53,7 @@
 		gap: 8px;
 		width: 320px;
 		height: 100%;
-		padding: 14px 14px 14px 20px;
+		padding: 10px 14px 10px 18px;
 	}
 
 	.row {
