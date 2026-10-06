@@ -382,8 +382,12 @@ export type Filter = 'all' | 'installed' | 'favorites';
 
 /** Ordre des filtres, tel qu'on les parcourt avec LT / RT. */
 export const FILTERS: Filter[] = ['all', 'installed', 'favorites'];
-export const SORTS: Sort[] = ['title', 'recent', 'playtime'];
-export type Sort = 'title' | 'recent' | 'playtime';
+export const SORTS: Sort[] = ['title', 'recent', 'playtime', 'steam', 'epic'];
+/**
+ * `steam` / `epic` : les jeux de cette boutique en tête, puis les autres —
+ * chaque groupe par titre. Un tri, pas un filtre : aucun jeu ne disparaît.
+ */
+export type Sort = 'title' | 'recent' | 'playtime' | 'steam' | 'epic';
 
 export const FILTER_LABELS: Record<Filter, string> = {
 	all: 'Tous',
@@ -395,6 +399,8 @@ export const SORT_LABELS: Record<Sort, string> = {
 	title: 'Titre',
 	recent: 'Récemment joué',
 	playtime: 'Temps de jeu',
+	steam: 'Jeux Steam',
+	epic: 'Jeux Epic',
 };
 
 /**
@@ -456,8 +462,16 @@ export function view(filter: Filter, sort: Sort, list: Game[] = games): Game[] {
 	return kept.sort((a, b) => {
 		if (sort === 'recent') return byRecent(a, b);
 		if (sort === 'playtime') return playtimeOf(b.id) - playtimeOf(a.id);
+		if (sort === 'steam' || sort === 'epic') {
+			return Number(storeOf(b) === sort) - Number(storeOf(a) === sort) || byTitle(a, b);
+		}
 		return byTitle(a, b);
 	});
+}
+
+/** Boutique d'un jeu : sa source, ou Steam s'il a un appid sans source connue. */
+function storeOf(game: Game): string {
+	return game.source || (game.appid ? 'steam' : '');
 }
 
 function byTitle(a: Game, b: Game): number {

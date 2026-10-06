@@ -208,6 +208,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - **Chargement par lots** (`BATCH` = 48, six rangées) : avec les bibliothèques Steam et Epic (plus de 600 jeux), toutes les jaquettes étaient construites et demandées d'un coup et le défilement saccadait. Quand la sélection approche du bas du lot (`PRELOAD_ROWS`), une rangée « Chargement des jeux suivants… » apparaît et le lot suivant arrive après `BATCH_DELAY` ; une touche maintenue qui dépasse le lot le fait rattraper aussitôt. Nouveau filtre ou tri : retour au premier lot. Le minuteur vit **hors de l'effet** : sinon chaque déplacement pendant la pause l'annulait et la grille restait bloquée sur « Chargement… ».
 - Filtres (LT / RT) : **Tous · Installés · Favoris**. Pas de filtre « Récemment joué » : le tri « Dernière partie » le fait déjà sur « Tous ». Le filtre et le tri sont **mémorisés d'une session à l'autre** (`library_filter`, `library_sort` dans les réglages, `setLibraryView`).
 - Le tri « dernière partie » s'affiche **« Récemment joué »**, plus clair.
+- Tri : Titre · Récemment joué · Temps de jeu · **Jeux Steam** · **Jeux Epic**. Les deux derniers mettent les jeux de cette boutique en tête, puis les autres (chacun par titre) : un tri, pas un filtre, aucun jeu ne disparaît.
 - View / Create reste un raccourci du tri. Capture : `?screen=library&zone=header`, `?screen=library&options=library`.
 
 ## Synchronisation de la bibliothèque
