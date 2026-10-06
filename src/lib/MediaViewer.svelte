@@ -10,7 +10,19 @@
 	 * (Linux) sait les lire seul, WebView2 (Windows) non — hls.js prend alors
 	 * le relais, chargé seulement quand une vidéo s'ouvre.
 	 */
-	let { items, index, title }: { items: MediaItem[]; index: number; title: string } = $props();
+	let {
+		items,
+		index,
+		title,
+		volume = 1,
+	}: { items: MediaItem[]; index: number; title: string; /** 0 à 1 (Réglages → Audio). */ volume?: number } = $props();
+
+	// Volume des vidéos réglé dans Réglages → Audio ; à zéro, la lecture est muette.
+	$effect(() => {
+		if (!video) return;
+		video.volume = volume;
+		if (volume <= 0) video.muted = true;
+	});
 
 	const item = $derived(items[index]);
 	let video = $state<HTMLVideoElement | null>(null);
@@ -112,14 +124,17 @@
 		place-items: center;
 		width: 100%;
 		height: 100%;
-		padding: calc(var(--safe-y) + 50px) var(--safe-x) calc(var(--safe-y) + 40px);
 		animation: fade var(--fast) var(--ease) both;
 	}
 
+	/* Bornée sur l'écran, pas en pourcentage : dans une grille aux rangées
+	   automatiques, `max-height: 100%` ne s'appliquait pas et l'image
+	   débordait en bas. Même marge en haut et en bas : elle est pile au
+	   centre de l'écran, la légende tient dans la marge du haut. */
 	.stage img,
 	.stage video {
-		max-width: 100%;
-		max-height: 100%;
+		max-width: calc(100vw - 2 * var(--safe-x));
+		max-height: calc(100vh - 2 * var(--viewer-inset));
 		border-radius: var(--radius);
 		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.6);
 		background: #000;

@@ -67,6 +67,12 @@
 	   ne retire la notification (3,6 s, `STAY`). */
 	--toast-stay: 2700ms;
 
+	/* Visionneuse : marge en haut et en bas de l'image (la légende tient dans
+	   celle du haut). */
+	--viewer-inset: calc(var(--safe-y) + 50px);
+	/* Jauge de volume (Réglages → Audio). */
+	--volume-bar: 220px;
+	--volume-bar-height: 8px;
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;

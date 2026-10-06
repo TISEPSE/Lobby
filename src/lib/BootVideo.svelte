@@ -6,8 +6,9 @@
 	 */
 	let {
 		src,
+		volume = 1,
 		onFinished,
-	}: { src: string; onFinished: () => void } = $props();
+	}: { src: string; /** 0 à 1 (Réglages → Audio). */ volume?: number; onFinished: () => void } = $props();
 
 	let hintVisible = $state(false);
 	let video = $state<HTMLVideoElement | null>(null);
@@ -30,7 +31,8 @@
 		bind:this={video}
 		{src}
 		autoplay
-		muted={false}
+		muted={volume <= 0}
+		{volume}
 		playsinline
 		onended={onFinished}
 		onerror={onFinished}

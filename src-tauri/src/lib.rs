@@ -296,6 +296,22 @@ pub struct UserSettings {
   pub library_filter: String,
   #[serde(default = "default_library_sort")]
   pub library_sort: String,
+  /// Volumes en pour cent : général, puis par famille de sons (déplacements
+  /// et validations, notifications, lancement d'un jeu, vidéos).
+  #[serde(default = "default_volume")]
+  pub volume_master: u32,
+  #[serde(default = "default_volume")]
+  pub volume_menu: u32,
+  #[serde(default = "default_volume")]
+  pub volume_alerts: u32,
+  #[serde(default = "default_volume")]
+  pub volume_launch: u32,
+  #[serde(default = "default_volume")]
+  pub volume_video: u32,
+}
+
+fn default_volume() -> u32 {
+  100
 }
 
 fn default_library_filter() -> String {
@@ -460,6 +476,11 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     home_order: default_home_order(),
     library_filter: default_library_filter(),
     library_sort: default_library_sort(),
+    volume_master: default_volume(),
+    volume_menu: default_volume(),
+    volume_alerts: default_volume(),
+    volume_launch: default_volume(),
+    volume_video: default_volume(),
   })
 }
 

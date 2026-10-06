@@ -77,6 +77,17 @@ function loadArt(): Record<string, ArtStyle> {
 }
 
 /**
+ * `?media=demo` : des images du CDN de Steam, pour juger le slider et la
+ * visionneuse dans un navigateur. Une jaquette verticale parmi elles : c'est
+ * le cas qui débordait de l'écran dans la visionneuse.
+ */
+export const DEMO_MEDIA: MediaItem[] = [
+	...['1145360', '588650', '252950'].map((id) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`),
+	'https://cdn.cloudflare.steamstatic.com/steam/apps/1145360/library_600x900.jpg',
+	...['753640', '413150'].map((id) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`),
+].map((src) => ({ kind: 'image' as const, thumb: src, src }));
+
+/**
  * Médias d'une fiche, dans l'ordre de la grille : quelques bandes-annonces
  * d'abord (ce qu'on vient voir), puis les captures. Douze au plus : c'est ce
  * que la grille montre d'un coup, sans défilement.

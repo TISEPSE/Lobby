@@ -41,6 +41,28 @@ const TONES: Record<Cue, { from: number; to: number; duration: number }> = {
 let context: AudioContext | null = null;
 let enabled = true;
 
+/** Famille de chaque son, pour les volumes réglables (Réglages → Audio). */
+const GROUP: Record<Cue, 'menu' | 'alerts' | 'launch'> = {
+	move: 'menu',
+	accept: 'menu',
+	cancel: 'menu',
+	error: 'alerts',
+	pad: 'alerts',
+	launch: 'launch',
+};
+
+/** Volumes de 0 à 1 : général et par famille. */
+const volumes = { master: 1, menu: 1, alerts: 1, launch: 1 };
+
+export function setVolumes(next: { master: number; menu: number; alerts: number; launch: number }) {
+	Object.assign(volumes, next);
+}
+
+/** Volume effectif d'un son : le sien, multiplié par le volume général. */
+function levelOf(cue: Cue): number {
+	return CUES[cue].gain * volumes.master * volumes[GROUP[cue]];
+}
+
 /** Sons décodés, prêts à rejouer. */
 const buffers = new Map<Cue, AudioBuffer>();
 /** Fichiers dont le chargement a échoué : inutile de réessayer à chaque appui. */
@@ -96,9 +118,12 @@ export function play(cue: Cue) {
 	if (!ctx) return;
 	if (ctx.state === 'suspended') void ctx.resume();
 
+	// À zéro, on ne joue rien du tout (pas même le repli synthétique).
+	if (levelOf(cue) <= 0) return;
+
 	const buffer = buffers.get(cue);
 	if (buffer) {
-		playBuffer(ctx, buffer, CUES[cue].gain);
+		playBuffer(ctx, buffer, levelOf(cue));
 		return;
 	}
 
@@ -123,7 +148,7 @@ function playBuffer(ctx: AudioContext, buffer: AudioBuffer, gain: number) {
 
 function playTone(ctx: AudioContext, cue: Cue) {
 	const { from, to, duration } = TONES[cue];
-	const gain = CUES[cue].gain * 0.1;
+	const gain = levelOf(cue) * 0.1;
 	const now = ctx.currentTime;
 
 	const oscillator = ctx.createOscillator();

@@ -107,4 +107,13 @@ export interface UserSettings {
 	/** Filtre et tri de la bibliothèque, retrouvés d'une session à l'autre. */
 	library_filter: string;
 	library_sort: string;
+	/** Volumes en pour cent (0 à 100) : général, puis par famille de sons. */
+	volume_master: number;
+	volume_menu: number;
+	volume_alerts: number;
+	volume_launch: number;
+	volume_video: number;
 }
+
+/** Réglages de volume, dans l'ordre de la page Audio. */
+export type VolumeKey = 'volume_master' | 'volume_menu' | 'volume_alerts' | 'volume_launch' | 'volume_video';

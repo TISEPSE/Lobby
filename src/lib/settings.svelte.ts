@@ -3,7 +3,21 @@
  * et dossiers de jeux suivis.
  * Persisté via Tauri (disque) et localStorage (secours).
  */
-import type { UserSettings } from './types';
+import type { UserSettings, VolumeKey } from './types';
+
+export const VOLUME_KEYS: VolumeKey[] = ['volume_master', 'volume_menu', 'volume_alerts', 'volume_launch', 'volume_video'];
+
+function clampVolume(value: number): number {
+	return Math.max(0, Math.min(100, Math.round(value / 10) * 10));
+}
+
+/** Change un volume par pas de 10 %, entre 0 et 100. */
+export function stepVolume(key: VolumeKey, delta: number) {
+	const next = clampVolume(settings[key] + delta);
+	if (next === settings[key]) return;
+	settings[key] = next;
+	saveSettings();
+}
 
 const STORAGE_KEY = 'interface-console.settings';
 
@@ -20,6 +34,11 @@ export const settings = $state<UserSettings>({
 	home_order: 'recent',
 	library_filter: 'all',
 	library_sort: 'title',
+	volume_master: 100,
+	volume_menu: 100,
+	volume_alerts: 100,
+	volume_launch: 100,
+	volume_video: 100,
 });
 
 export async function initSettings() {
@@ -42,6 +61,7 @@ export async function initSettings() {
 				settings.home_order = loaded.home_order === 'title' ? 'title' : 'recent';
 				settings.library_filter = loaded.library_filter || 'all';
 				settings.library_sort = loaded.library_sort || 'title';
+				for (const key of VOLUME_KEYS) settings[key] = clampVolume(loaded[key] ?? 100);
 				return;
 			}
 		} catch (e) {

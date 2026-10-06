@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails, mediaOf } from './steam.svelte.js';
+	import { details, ensureDetails, mediaOf, DEMO_MEDIA } from './steam.svelte.js';
 	import Cover from './Cover.svelte';
 	import { downloadFor, phaseLabel, sizeText } from './downloads.svelte.js';
 
@@ -46,14 +46,8 @@
 			playtime,
 		].filter((fact) => fact.trim() !== '')
 	);
-	/** `?media=demo` : des images du CDN de Steam, pour juger le slider dans un navigateur. */
-	const DEMO = ['1145360', '588650', '252950', '753640', '1794680', '413150'].map((id) => ({
-		kind: 'image' as const,
-		thumb: `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`,
-		src: `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`,
-	}));
 	const media = $derived(
-		new URLSearchParams(location.search).get('media') === 'demo' ? DEMO : mediaOf(sheet)
+		new URLSearchParams(location.search).get('media') === 'demo' ? DEMO_MEDIA : mediaOf(sheet)
 	);
 
 	/**

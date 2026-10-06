@@ -13,7 +13,7 @@
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads } from './lib/downloads.svelte.js';
-	import { play as playSound, setSoundEnabled as applySound, preloadSounds } from './lib/sound';
+	import { play as playSound, setSoundEnabled as applySound, preloadSounds, setVolumes } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
 	import Stats from './lib/Stats.svelte';
 	import Profile from './lib/Profile.svelte';
@@ -24,7 +24,7 @@
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame, installGame, installEpicGame } from './lib/steamActions';
-	import { artwork, details, heroFor, mediaOf, initArtStore } from './lib/steam.svelte.js';
+	import { artwork, details, heroFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
 	import PadToast from './lib/PadToast.svelte';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
@@ -80,6 +80,7 @@
 		setScreensaverMinutes,
 		setHomeOrder,
 		setLibraryView,
+		stepVolume,
 		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
@@ -114,7 +115,8 @@
 	/** Fiche : boutons de la présentation, ou grille des médias en dessous. */
 	let detailZone = $state<'actions' | 'media'>(params.get('media') ? 'media' : 'actions');
 	let mediaIndex = $state(Number(params.get('slide') ?? 0));
-	let viewerOpen = $state(false);
+	/** Visionneuse ouverte ; `?viewer=1` l'ouvre (capture, avec `media=demo`). */
+	let viewerOpen = $state(params.get('viewer') === '1');
 	let viewerComponent: { togglePause: () => void } | null = $state(null);
 	/** Plein écran sans bordure (mode console) ou fenêtre classique. */
 	let fullscreen = $state(true);
@@ -186,6 +188,19 @@
 	const sort = $derived<Sort>(
 		SORTS.includes(settings.library_sort as Sort) ? (settings.library_sort as Sort) : 'title'
 	);
+
+	/** Volume des vidéos (intro, bandes-annonces) : le leur, multiplié par le général. */
+	const videoVolume = $derived((settings.volume_master / 100) * (settings.volume_video / 100));
+
+	// Les volumes des sons suivent les réglages, dès le chargement et à chaque changement.
+	$effect(() => {
+		setVolumes({
+			master: settings.volume_master / 100,
+			menu: settings.volume_menu / 100,
+			alerts: settings.volume_alerts / 100,
+			launch: settings.volume_launch / 100,
+		});
+	});
 
 	let clock = $state(formatClock());
 	let pads = $state(0);
@@ -445,7 +460,7 @@
 	/** Médias de la fiche ouverte : bandes-annonces puis captures. */
 	const detailMedia = $derived(
 		params.get('media') === 'demo'
-			? Array.from({ length: 6 }, () => ({ kind: 'image' as const, thumb: '', src: '' }))
+			? DEMO_MEDIA
 			: opened?.appid
 				? mediaOf(details[opened.appid])
 				: []
@@ -1069,6 +1084,19 @@
 				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
 			}}
 			soundEnabled={settings.sound_enabled}
+			volumes={{
+				volume_master: settings.volume_master,
+				volume_menu: settings.volume_menu,
+				volume_alerts: settings.volume_alerts,
+				volume_launch: settings.volume_launch,
+				volume_video: settings.volume_video,
+			}}
+			onStepVolume={(key, delta) => {
+				stepVolume(key, delta);
+				// Aperçu du son réglé, au nouveau volume.
+				const preview = { volume_master: 'move', volume_menu: 'move', volume_alerts: 'pad', volume_launch: 'launch' } as const;
+				if (key in preview) playSound(preview[key as keyof typeof preview]);
+			}}
 			homeOrderLabel={HOME_ORDER_LABELS[settings.home_order]}
 			onCycleHomeOrder={() => {
 				const next = settings.home_order === 'recent' ? 'title' : 'recent';
@@ -1122,7 +1150,7 @@
 </main>
 
 {#if bootPlaying && settings.boot_video_enabled && settings.boot_video}
-	<BootVideo src={settings.boot_video} onFinished={() => (bootPlaying = false)} />
+	<BootVideo src={settings.boot_video} volume={videoVolume} onFinished={() => (bootPlaying = false)} />
 {/if}
 
 {#if saverOn}
@@ -1161,6 +1189,7 @@
 		items={detailMedia}
 		index={mediaIndex}
 		title={opened.title}
+		volume={videoVolume}
 	/>
 {/if}
 

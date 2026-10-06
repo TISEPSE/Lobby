@@ -1,6 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
 	import type { Action } from './gamepad';
+	import type { VolumeKey } from './types';
 	import VirtualKeyboard from './VirtualKeyboard.svelte';
 
 	let {
@@ -10,6 +11,8 @@
 		bootVideo = '',
 		bootVideoEnabled = true,
 		soundEnabled = true,
+		volumes = { volume_master: 100, volume_menu: 100, volume_alerts: 100, volume_launch: 100, volume_video: 100 },
+		onStepVolume,
 		screensaverMinutes = 5,
 		steamGridKey = '',
 		initialCategory = 'games',
@@ -36,6 +39,10 @@
 		bootVideo?: string;
 		bootVideoEnabled?: boolean;
 		soundEnabled?: boolean;
+		/** Volumes en pour cent (Réglages → Audio). */
+		volumes?: Record<VolumeKey, number>;
+		/** Monte ou baisse un volume de `delta` points. */
+		onStepVolume?: (key: VolumeKey, delta: number) => void;
 		screensaverMinutes?: number;
 		steamGridKey?: string;
 		/** Catégorie ouverte au premier affichage (outil de capture). */
@@ -61,7 +68,7 @@
 		onChangeSteamGridKey?: (key: string) => void;
 	} = $props();
 
-	type CategoryId = 'games' | 'appearance' | 'system';
+	type CategoryId = 'games' | 'appearance' | 'audio' | 'system';
 
 	interface Category {
 		id: CategoryId;
@@ -84,10 +91,16 @@
 			hint: 'Style de l’interface et disposition des touches manette.',
 		},
 		{
+			id: 'audio',
+			label: 'Audio',
+			icon: 'volume',
+			hint: 'Sons de l’interface et volume de chaque famille de sons.',
+		},
+		{
 			id: 'system',
 			label: 'Système',
 			icon: 'settings',
-			hint: 'Affichage et état de la console.',
+			hint: 'Affichage de la console.',
 		},
 	];
 
@@ -105,6 +118,20 @@
 	let newFolderInput = $state('');
 
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
+
+	/** Volumes réglables, dans l'ordre de la page Audio. */
+	const VOLUMES: { key: VolumeKey; title: string; desc: string }[] = [
+		{ key: 'volume_master', title: 'Volume général', desc: 'Tous les sons et les vidéos de l’interface' },
+		{ key: 'volume_menu', title: 'Menus', desc: 'Déplacements, validation et retour' },
+		{ key: 'volume_alerts', title: 'Notifications', desc: 'Manette connectée, erreurs' },
+		{ key: 'volume_launch', title: 'Lancement d’un jeu', desc: 'Le son joué quand une partie démarre' },
+		{ key: 'volume_video', title: 'Vidéos', desc: 'Vidéo d’introduction et bandes-annonces' },
+	];
+
+	/** Ligne de volume sélectionnée, ou null. */
+	const focusedVolume = $derived(
+		currentCategory.id === 'audio' && focusCol === 'content' && focusRow >= 1 ? VOLUMES[focusRow - 1] : null
+	);
 	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
 	const screensaverLabel = $derived(
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
@@ -174,7 +201,9 @@
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 6; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons, 4: veille, 5: ordre de l'accueil]
+				return 5; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: veille, 4: ordre de l'accueil]
+			case 'audio':
+				return 1 + VOLUMES.length; // [0: sons activés, 1..: volumes]
 			case 'system':
 				return 1; // [0: plein écran]
 			default:
@@ -244,6 +273,9 @@
 				if (focusRow < contentRowsCount - 1) {
 					focusRow++;
 				}
+			} else if (focusedVolume && (action === 'left' || action === 'right')) {
+				// Sur un volume, gauche / droite le règlent ; B revient aux catégories.
+				onStepVolume?.(focusedVolume.key, action === 'left' ? -10 : 10);
 			} else if (action === 'left' || action === 'cancel') {
 				focusCol = 'categories';
 			} else if (action === 'accept') {
@@ -282,11 +314,17 @@
 			} else if (focusRow === 2) {
 				onToggleBootVideo?.();
 			} else if (focusRow === 3) {
-				onToggleSound?.();
-			} else if (focusRow === 4) {
 				onCycleScreensaver?.();
-			} else if (focusRow === 5) {
+			} else if (focusRow === 4) {
 				onCycleHomeOrder?.();
+			}
+		} else if (cat === 'audio') {
+			if (focusRow === 0) {
+				onToggleSound?.();
+			} else if (focusedVolume) {
+				// A fait le tour : +10 %, puis retour à 0 après 100 %.
+				const value = volumes[focusedVolume.key];
+				onStepVolume?.(focusedVolume.key, value >= 100 ? -100 : 10);
 			}
 		}
 	}
@@ -518,10 +556,10 @@
 						}}
 					>
 						<div class="row-label">
-							<span class="title">Retours sonores</span>
-							<span class="desc">Petits sons de navigation, de validation et de lancement</span>
+							<span class="title">Écran de veille</span>
+							<span class="desc">Artworks de la bibliothèque après un moment sans rien toucher</span>
 						</div>
-						<span class="badge-layout">{soundEnabled ? 'Oui ▸' : 'Non ▸'}</span>
+						<span class="badge-layout">{screensaverLabel} ▸</span>
 					</button>
 
 					<button
@@ -535,28 +573,57 @@
 						}}
 					>
 						<div class="row-label">
-							<span class="title">Écran de veille</span>
-							<span class="desc">Artworks de la bibliothèque après un moment sans rien toucher</span>
-						</div>
-						<span class="badge-layout">{screensaverLabel} ▸</span>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 5}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 5;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
 							<span class="title">Ordre de l'accueil</span>
 							<span class="desc">Les jeux auxquels tu as joué en dernier d'abord, ou par titre</span>
 						</div>
 						<span class="badge-layout">{homeOrderLabel} ▸</span>
 					</button>
+				</div>
+
+			{:else if currentCategory.id === 'audio'}
+				<div class="rows-list">
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 0}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 0;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Sons de l'interface</span>
+							<span class="desc">Petits sons de navigation, de validation et de lancement</span>
+						</div>
+						<span class="badge-layout">{soundEnabled ? 'Oui ▸' : 'Non ▸'}</span>
+					</button>
+
+					{#each VOLUMES as entry, i (entry.key)}
+						{@const value = volumes[entry.key]}
+						<button
+							type="button"
+							class="setting-row"
+							class:focused={focused && focusCol === 'content' && focusRow === i + 1}
+							class:muted={!soundEnabled && entry.key !== 'volume_video'}
+							onclick={() => {
+								focusCol = 'content';
+								focusRow = i + 1;
+								executeContentAction();
+							}}
+						>
+							<div class="row-label">
+								<span class="title">{entry.title}</span>
+								<span class="desc">{entry.desc}</span>
+							</div>
+							<span class="volume">
+								<span class="arrow">◂</span>
+								<span class="bar"><span class="fill" style="width: {value}%"></span></span>
+								<span class="percent">{value} %</span>
+								<span class="arrow">▸</span>
+							</span>
+						</button>
+					{/each}
 				</div>
 
 			{:else if currentCategory.id === 'system'}
@@ -577,26 +644,6 @@
 						</div>
 						<span class="badge-layout">{fullscreen ? 'Plein écran ▸' : 'Fenêtre ▸'}</span>
 					</button>
-				</div>
-
-				<!-- Télémétrie Système -->
-				<div class="system-grid">
-					<div class="sys-card">
-						<span class="sys-title">Plateforme</span>
-						<span class="sys-val">Windows (WebView2)</span>
-					</div>
-					<div class="sys-card">
-						<span class="sys-title">Moteur de rendu</span>
-						<span class="sys-val">Tauri 2 + Svelte 5</span>
-					</div>
-					<div class="sys-card">
-						<span class="sys-title">Navigation</span>
-						<span class="sys-val">100% Manette / Clavier</span>
-					</div>
-					<div class="sys-card">
-						<span class="sys-title">Stockage Jeux</span>
-						<span class="sys-val">Lecteurs C: & D:</span>
-					</div>
 				</div>
 			{/if}
 		</div>
@@ -970,44 +1017,53 @@
 		border-color: transparent;
 	}
 
-	/* Grille système */
-	.system-grid {
-		display: grid;
-		grid-template-columns: repeat(2, 1fr);
-		gap: 16px;
-	}
-
-	.sys-card {
+	/* Jauge de volume : gauche / droite la règlent par pas de 10 %. */
+	.volume {
 		display: flex;
-		flex-direction: column;
-		gap: 8px;
-		padding: 20px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		border: 2px solid rgba(255, 255, 255, 0.08);
-		transition: all 180ms var(--ease);
-	}
-
-	.sys-card:hover {
-		border-color: var(--accent);
-		outline: 3px solid var(--accent);
-		box-shadow:
-			0 0 30px 6px var(--accent-soft),
-			0 12px 30px rgba(0, 0, 0, 0.5);
-		transform: translateY(-2px);
-	}
-
-	.sys-title {
-		font-size: 14px;
-		color: var(--text-dim);
-		text-transform: uppercase;
-		letter-spacing: 0.5px;
-	}
-
-	.sys-val {
-		font-size: 18px;
+		align-items: center;
+		gap: 12px;
+		font-size: 17px;
 		font-weight: 700;
-		color: var(--text);
+	}
+
+	.bar {
+		position: relative;
+		width: var(--volume-bar);
+		height: var(--volume-bar-height);
+		border-radius: 999px;
+		background: var(--surface-strong);
+		overflow: hidden;
+	}
+
+	.fill {
+		position: absolute;
+		inset: 0 auto 0 0;
+		border-radius: inherit;
+		background: var(--accent);
+		transition: width var(--fast) var(--ease);
+	}
+
+	.percent {
+		min-width: 4ch;
+		text-align: right;
+		font-variant-numeric: tabular-nums;
+	}
+
+	.arrow {
+		color: var(--text-dim);
+		opacity: 0;
+		transition: opacity var(--fast) var(--ease);
+	}
+
+	/* Les flèches n'apparaissent que sur la ligne sélectionnée : c'est là que
+	   gauche / droite agissent. */
+	.setting-row.focused .arrow {
+		opacity: 1;
+	}
+
+	/* Sons coupés : leurs volumes restent réglables, mais en retrait. */
+	.setting-row.muted {
+		opacity: 0.5;
 	}
 
 	@keyframes fade-in {

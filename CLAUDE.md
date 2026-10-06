@@ -179,7 +179,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Pas de classe `.track` pour le ruban : c'est déjà la barre de progression d'un téléchargement (8 px, contenu masqué), qui écrasait le slider.
 - Sous le slider, le panneau « Plus sur… » : description (`about`) à gauche, fiche technique (genres, sortie, développeur, éditeur, temps de jeu) à droite.
 - Capture : `?screen=detail&index=N&media=demo&slide=2` (images du CDN de Steam).
-- A ouvre la **visionneuse** (`MediaViewer.svelte`) : gauche / droite passent au média voisin, A met une vidéo en pause, B referme.
+- A ouvre la **visionneuse** (`MediaViewer.svelte`) : gauche / droite passent au média voisin, A met une vidéo en pause, B referme. L'image y est **bornée sur l'écran** (`100vw`/`100vh` moins les marges, `--viewer-inset` en haut et en bas) : en pourcentage, dans une grille aux rangées automatiques, `max-height` ne s'appliquait pas et l'image débordait en bas. Capture : `?screen=detail&media=demo&slide=N&viewer=1` (`DEMO_MEDIA`, une jaquette verticale comprise).
 - `steam_details` récupère `screenshots`, `movies`, `developers`, `publishers`, `about_the_game`. Une fiche en cache plus ancienne que `DETAILS_VERSION` est redemandée (et gardée si Steam ne répond pas) : sans ça, les jeux déjà vus n'auraient jamais de médias.
 - **Steam ne fournit plus de fichier webm/mp4** pour les bandes-annonces récentes, seulement des flux HLS (`hls_h264`, CORS ouvert). WebKitGTK les lit seul ; sous WebView2, **hls.js** prend le relais, chargé seulement à l'ouverture d'une vidéo. Lecture avec le son, et en muet si le webview la refuse sans geste de l'utilisateur.
 
@@ -245,7 +245,8 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Réglages
 
-- Trois catégories : **Jeux** (détection, clé SteamGridDB, dossiers), **Apparence**, **Système** (affichage). Le pseudo, la photo, les comptes et les statistiques sont dans le Profil.
+- Quatre catégories : **Jeux** (détection, clé SteamGridDB, dossiers), **Apparence**, **Audio**, **Système** (affichage seulement — les tuiles d'information « Plateforme », « Moteur de rendu »… ont été retirées, elles n'apportaient rien).
+- **Audio** : interrupteur des sons, puis cinq jauges par pas de 10 % — général, menus (déplacement, validation, retour), notifications (manette, erreurs), lancement d'un jeu, vidéos (intro, bandes-annonces). Gauche / droite règlent la ligne sélectionnée (B revient aux catégories), A fait le tour, et un aperçu du son joue au nouveau volume. Réglages `volume_*` (Rust `default_volume` = 100) ; `sound.ts` multiplie le gain de chaque son par le général et celui de sa famille (`GROUP`), à 0 rien ne joue. Capture : `?screen=settings&cat=audio`. Le pseudo, la photo, les comptes et les statistiques sont dans le Profil.
 
 - `saveSettings()` envoie **tous** les champs : la commande Rust réécrit le fichier entier et les champs absents y reprennent leur valeur par défaut. N'en envoyer qu'une partie effaçait silencieusement la clé SteamGridDB et la vidéo d'introduction au premier changement de pseudo.
 
