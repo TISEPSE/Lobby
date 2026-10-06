@@ -17,6 +17,9 @@ export const settings = $state<UserSettings>({
 	sound_enabled: true,
 	steamgriddb_key: '',
 	screensaver_minutes: 5,
+	home_order: 'recent',
+	library_filter: 'all',
+	library_sort: 'title',
 });
 
 export async function initSettings() {
@@ -36,6 +39,9 @@ export async function initSettings() {
 				settings.sound_enabled = loaded.sound_enabled ?? true;
 				settings.steamgriddb_key = loaded.steamgriddb_key ?? '';
 				settings.screensaver_minutes = loaded.screensaver_minutes ?? 5;
+				settings.home_order = loaded.home_order === 'title' ? 'title' : 'recent';
+				settings.library_filter = loaded.library_filter || 'all';
+				settings.library_sort = loaded.library_sort || 'title';
 				return;
 			}
 		} catch (e) {
@@ -109,6 +115,19 @@ export function setBootVideoEnabled(enabled: boolean) {
 
 export function setScreensaverMinutes(minutes: number) {
 	settings.screensaver_minutes = minutes;
+	saveSettings();
+}
+
+/** Filtre et tri de la bibliothèque : gardés pour la prochaine session. */
+export function setLibraryView(filter: string, sort: string) {
+	if (settings.library_filter === filter && settings.library_sort === sort) return;
+	settings.library_filter = filter;
+	settings.library_sort = sort;
+	saveSettings();
+}
+
+export function setHomeOrder(order: 'recent' | 'title') {
+	settings.home_order = order;
 	saveSettings();
 }
 

@@ -24,7 +24,10 @@
 			ensureDetails(game.appid);
 		}
 		// …mais la jaquette est téléchargée une fois pour tous les jeux, avec ou
-		// sans appid : ensuite elle s'affiche depuis le disque.
+		// sans appid : ensuite elle s'affiche depuis le disque. Un jeu Epic non
+		// installé arrive avec la jaquette officielle de son catalogue : inutile
+		// de lancer une recherche pour chacun des centaines de jeux possédés.
+		if (game.installed === false && game.cover) return;
 		ensureArtwork(game);
 	});
 

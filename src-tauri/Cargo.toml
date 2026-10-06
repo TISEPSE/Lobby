@@ -35,3 +35,6 @@ tokio = { version = "1", features = ["full"] }
 # hors launcher (Riot, Battle.net, installeurs classiques).
 [target.'cfg(windows)'.dependencies]
 winreg = "0.52"
+# DPAPI (coffre de Windows) : les secrets gardés sur le disque (session Epic)
+# ne sont lisibles que par ce compte Windows, sur ce PC. Déjà tiré par Tauri.
+windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }

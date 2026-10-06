@@ -11,7 +11,7 @@
  * entendu.
  */
 
-type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch';
+type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad';
 
 /** Fichier et volume de chaque signal. Sans fichier, on synthétise. */
 const CUES: Record<Cue, { file?: string; gain: number }> = {
@@ -24,6 +24,8 @@ const CUES: Record<Cue, { file?: string; gain: number }> = {
 	error: { gain: 0.9 },
 	// L'ouverture d'un jeu mérite le son le plus ample du jeu de sons.
 	launch: { file: 'ps5-popup-2.wav', gain: 0.8 },
+	// Manette branchée ou débranchée : le même signal, plus discret.
+	pad: { file: 'ps5-popup-2.wav', gain: 0.45 },
 };
 
 /** Repli synthétisé : fréquence de départ, d'arrivée et durée. */
@@ -33,6 +35,7 @@ const TONES: Record<Cue, { from: number; to: number; duration: number }> = {
 	cancel: { from: 480, to: 320, duration: 0.11 },
 	error: { from: 260, to: 200, duration: 0.2 },
 	launch: { from: 440, to: 880, duration: 0.3 },
+	pad: { from: 660, to: 880, duration: 0.18 },
 };
 
 let context: AudioContext | null = null;

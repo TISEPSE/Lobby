@@ -6,7 +6,27 @@
  * Aucune clé, aucun compte. Chaque fiche est mise en cache sur le disque par
  * Rust, et gardée ici pour la session.
  */
-import type { Details } from './types';
+import type { Details, MediaItem } from './types';
+
+/**
+ * File d'attente des requêtes vers Steam : quatre à la fois au plus. Avec la
+ * bibliothèque complète, la grille montre des centaines de jeux d'un coup —
+ * sans limite, autant de téléchargements partaient en même temps.
+ */
+const MAX_PARALLEL = 4;
+let running = 0;
+const waiting: (() => void)[] = [];
+
+async function queued<T>(task: () => Promise<T>): Promise<T> {
+	if (running >= MAX_PARALLEL) await new Promise<void>((resolve) => waiting.push(resolve));
+	running++;
+	try {
+		return await task();
+	} finally {
+		running--;
+		waiting.shift()?.();
+	}
+}
 
 /** Fiches déjà connues, par appid. Les composants les lisent directement. */
 export const details = $state<Record<string, Details>>({});
@@ -27,7 +47,7 @@ export function ensureDetails(appid: string) {
 	void (async () => {
 		try {
 			const { invoke } = await import('@tauri-apps/api/core');
-			details[appid] = await invoke<Details>('steam_details', { appid, refresh: false });
+			details[appid] = await queued(() => invoke<Details>('steam_details', { appid, refresh: false }));
 		} catch {
 			// Jeu inconnu de Steam ou machine hors ligne : on garde ce qu'on a.
 		} finally {
@@ -55,9 +75,36 @@ function loadArt(): Record<string, ArtStyle> {
 	}
 }
 
+/**
+ * Médias d'une fiche, dans l'ordre de la grille : quelques bandes-annonces
+ * d'abord (ce qu'on vient voir), puis les captures. Douze au plus : c'est ce
+ * que la grille montre d'un coup, sans défilement.
+ */
+export function mediaOf(sheet: Details | undefined): MediaItem[] {
+	if (!sheet) return [];
+	const videos: MediaItem[] = (sheet.movies ?? [])
+		.slice(0, 3)
+		.map((movie) => ({ kind: 'video', thumb: movie.thumb, src: movie.hls, name: movie.name }));
+	const images: MediaItem[] = (sheet.screenshots ?? []).map((shot) => ({
+		kind: 'image',
+		thumb: shot.thumb,
+		src: shot.full,
+	}));
+	return [...videos, ...images].slice(0, 12);
+}
+
 /** Jaquette à afficher : celle résolue par Rust si elle est arrivée. */
 export function coverOf(appid: string, fallback: string): string {
 	return details[appid]?.cover || fallback;
+}
+
+/**
+ * Artwork d'un jeu : l'image de fond choisie (fichier local) d'abord, puis
+ * celle de la fiche Steam, puis celle du fichier de bibliothèque.
+ */
+export function heroFor(game: { id: string; appid?: string | null; hero: string }): string {
+	const sheet = game.appid ? details[game.appid] : undefined;
+	return artwork[game.id]?.hero || sheet?.hero || game.hero || '';
 }
 
 /** Artwork de fond, même principe. */
@@ -122,12 +169,14 @@ export function ensureArtwork(game: { id: string; title: string; appid?: string;
 		try {
 			const { invoke } = await import('@tauri-apps/api/core');
 			const { convertFileSrc } = await import('@tauri-apps/api/core');
-			const saved = await invoke<Artwork>('cache_game_art', {
-				gameId: game.id,
-				title: game.title,
-				appid: game.appid ?? null,
-				executable: game.executable ?? null,
-			});
+			const saved = await queued(() =>
+				invoke<Artwork>('cache_game_art', {
+					gameId: game.id,
+					title: game.title,
+					appid: game.appid ?? null,
+					executable: game.executable ?? null,
+				})
+			);
 
 			// Les chemins disque deviennent des adresses que le webview sait lire.
 			artwork[game.id] = {

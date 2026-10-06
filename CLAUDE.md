@@ -17,7 +17,7 @@ Interface de type console ("10-foot UI") qui transforme un PC en console de jeux
 - **Tauri 2** (coquille Rust) + **Svelte 5** + **Vite** + TypeScript.
 - Le rendu est du web : la direction artistique vit dans le CSS, pas dans du code.
 - Cible : Linux (Arch / Bazzite), Wayland via Gamescope. Développement sous Windows (WebView2), tout doit rester portable.
-- **Aucune clé d'API nulle part** : jaquettes et fiches viennent des points d'entrée publics de Steam.
+- **Aucune clé d'API dans le code ni le dépôt** : jaquettes et fiches viennent des points d'entrée publics de Steam. La seule clé (SteamGridDB, facultative) est **saisie par l'utilisateur** et ne vit que dans `settings.json`. Steam et Epic passent par une connexion au compte, jamais par une clé.
 
 ### Pourquoi pas Godot
 
@@ -65,16 +65,19 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - La sélection doit toujours être visible (agrandissement + contour d'accent + halo) et jamais perdue.
 - Dans une grille, **descendre depuis la dernière rangée ne fait rien**. Ramener la sélection sur la toute dernière tuile la faisait sauter en diagonale, à l'autre bout de l'écran.
 - Transition entre écrans : `view-transition-name` partagé sur la jaquette. Le navigateur anime le déplacement, on ne mesure aucun rectangle à la main.
+- **Changer de section n'utilise pas `startViewTransition`** : il photographiait toute la page, dock flouté compris, et le fondu saccadait. Le contenu entre seul (`.screen`, `{#key section}` : fondu court + léger glissement), le dock ne bouge pas. Les view transitions restent pour la fiche (jaquette partagée), et le dock y porte son propre nom (`view-transition-name: dock`) pour ne pas clignoter.
 - Le voile posé sur un artwork est un dégradé (`Backdrop.svelte`) : lisible en bas, artwork préservé en haut. Sur une fiche, il s'appuie à gauche, là où se trouve le texte.
 - L'artwork ne change qu'une fois la nouvelle image chargée : deux couches se relaient, sinon on verrait un clignotement noir à chaque déplacement de la sélection.
 - Toute grille à défilement réserve `--hover-room` autour d'elle (marge négative + padding) : sans cette gouttière, l'agrandissement et le contour de la sélection se faisaient trancher par le `overflow: hidden` de la fenêtre.
 - La tuile sélectionnée **pousse** ses voisines (marges animées) au lieu de passer par-dessus, et la rangée glisse pour la garder centrée.
 
-## Hub (barre du haut, `TopBar.svelte`)
+## Hub (dock du haut, `TopBar.svelte`)
 
-- Profil à gauche, puis les sections **écrites en toutes lettres** (Accueil · Bibliothèque · Recherche · Réglages), heure et manettes à droite. Les pastilles rondes d'icônes obligeaient à deviner, et ne disaient pas où l'on se trouvait.
-- L'onglet courant est en blanc plein, souligné d'un trait d'accent dont la largeur s'anime d'un onglet à l'autre ; les autres restent gris.
-- La barre s'efface (72 %) quand la sélection est descendue dans le contenu, et s'allume quand elle reprend la main : elle reste lisible sans tirer l'œil hors du jeu regardé.
+- **Dock façon Xbox** (`--topbar-height` 76 px, boutons de 40 px, **centré à la largeur de son contenu** — étiré d'un bord à l'autre, il barrait tout l'écran ; variables `--dock-*`) : pilule translucide floutée. À gauche Accueil et Bibliothèque, au centre le **champ de recherche** (« Rechercher parmi N jeux », glyphe Y posé dessus), à droite Réglages puis le **Profil** (la photo). **L'heure et les manettes sont hors du dock**, dans le coin haut droit de l'écran : ce ne sont pas des sections. Les glyphes **LB / RB** (L1 / R1) encadrent le dock.
+- **On ne circule dans le dock qu'avec L1 / R1** : la sélection ne monte jamais dessus, elle reste dans le contenu. Monter depuis le haut d'un écran ne fait rien. Pas de bouclage aux extrémités. Ordre : Accueil · Bibliothèque · Réglages · Profil. La recherche n'est **pas** une étape : c'est une fenêtre (Y, ou clic sur le champ).
+- Le dock n'a donc pas d'état « sélectionné » : la section courante est une **pilule claire** (`--dock-active`) qui affiche son nom, sans contour d'accent — le contour reste réservé à la sélection, dans le contenu.
+- **Boutons toujours ouverts** : chaque bouton montre en permanence son icône **et son nom** (le profil : photo et pseudo). Rien ne s'ouvre ni ne se ferme au changement de section — l'ancien nom qui se dépliait sur la section courante donnait une navigation peu lisible. Le dock garde donc toujours la même taille.
+- **Survol** (`--dock-hover`) : la pilule s'éclaire, le texte passe en blanc, le bouton se soulève d'un pixel ; un appui l'enfonce légèrement. La section courante garde sa pilule claire (`--dock-active`).
 
 ## Manette (`src/lib/gamepad.ts`)
 
@@ -82,8 +85,18 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Seuils **asymétriques** : engagement à 0,65, relâchement à 0,40. Sans cette hystérésis, un stick qui traîne au repos fait défiler la sélection tout seul — c'est le bug qu'on a eu dans la version Godot.
 - Maintenir une direction répète l'action après 350 ms, puis toutes les 120 ms.
 - Les boutons ne déclenchent qu'au front montant : un appui = une action.
-- **L1 / R1** (LB / RB) **ne changent pas de section** : on passe d'un onglet à l'autre par la barre du haut. Ils parcourent les catégories là où il y en a, c'est-à-dire les filtres de la bibliothèque. Au clavier : `PageUp` / `PageDown`, ou `A` / `E`.
+- **L1 / R1** (LB / RB) : section précédente / suivante du dock, et rien d'autre (`prev` / `next`). Au clavier : `A` / `E`.
+- **L2 / R2** (LT / RT) : catégories de l'écran — filtres de la bibliothèque, périodes des statistiques (`pagePrev` / `pageNext`). Au clavier : `PageUp` / `PageDown`.
+- **Y** ouvre la recherche de partout (hors fenêtres). **View / Create** (bouton 8, action `view`, clavier `Tab`) : le tri de la bibliothèque.
+- Les glyphes viennent de `glyphs.ts`, partagé par la barre d'aide, le dock et `Glyph.svelte` (glyphe posé sur un élément : pastille Sync, périodes) ; `xbox/lt.svg` et `xbox/rt.svg` ont été dessinés sur le modèle de `lb.svg`.
 - `padLayout()` choisit la famille de glyphes d'après l'identifiant de la manette (formes PlayStation si Sony, lettres Xbox sinon). Les index des boutons, eux, ne changent jamais.
+- **Notification de manette** (`PadToast.svelte`), façon Xbox : sur `gamepadconnected` / `gamepaddisconnected`, un rond d'accent portant la manette surgit en bas au centre (à hauteur de la barre d'aide, sans cacher les jaquettes), puis la pilule s'ouvre : « Manette connectée », nom (`padName()` : DualSense, DualShock 4, Xbox, Switch Pro, 8BitDo…) et « Joueur N ». Débranchée, le rond s'éteint. Son `pad`, 3,6 s à l'écran. Une même manette s'annonce souvent **plusieurs fois d'un coup** (XInput + HID, manettes virtuelles de Steam Input) — on en a eu trois notifications à la fois : les annonces d'une même seconde (`BURST`) n'en donnent qu'**une**, au nom le plus parlant, et une nouvelle remplace celle à l'écran (`?pad=triple` le vérifie). Variables `--toast-*`. Le navigateur n'annonce une manette qu'après un premier appui sur l'une de ses touches. Capture : `?pad=xbox|ps5`.
+
+## Fenêtre
+
+- Démarrage en **plein écran sans bordure** (`fullscreen: true`, `decorations: false` dans `tauri.conf.json`).
+- **Pas de pointeur** : `set_cursor_visible(false)` sur la fenêtre au démarrage, et `cursor: none !important` sur tout élément (des boutons déclaraient `cursor: pointer` et faisaient réapparaître la main).
+- Porte de sortie : **F11** ou Réglages → Système → Affichage bascule vers une fenêtre classique avec sa barre de titre (`toggle_fullscreen`, bordures réglées *avant* le plein écran).
 
 ## Lancement d'un jeu
 
@@ -126,13 +139,98 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - SteamGridDB peut avoir **plusieurs fiches pour un même jeu** (deux entrées « Rhythia », une jaquette chacune) : on interroge toutes celles dont le titre correspond (`titles_match`), pas seulement la première. L'API ignore toute limite demandée, la troncature (24) se fait côté Rust.
 - Quand **aucune** fiche ne correspond, on ne renvoie rien. Retomber sur le premier résultat proposait les jaquettes d'un autre jeu — « Ballgame Demo » se voyait offrir celles de « Bunnies & Ballgames! ».
 
+## Compte Epic Games (`epic_account.rs`, `epicAccount.svelte.ts`)
+
+- Epic **ne garde pas le temps de jeu sur le disque** : il faut le demander à ses serveurs. Méthode des launchers libres (Legendary, Heroic) : `epic_login` ouvre une fenêtre sur la **page de connexion officielle** d'Epic (l'interface ne voit jamais le mot de passe) ; la page finale affiche un code en JSON, `on_page_load` le relit et navigue vers `https://epic-code.invalid/?code=…`, que `on_navigation` intercepte ; le code est échangé contre un jeton (`eg1`), et seul le **jeton de renouvellement** est gardé (`<app data>/epic.json`).
+- `epic_login` est **asynchrone** : sous Windows, créer une fenêtre depuis une commande synchrone (fil principal) peut bloquer l'application — c'est pour ça que la première version n'ouvrait rien.
+- Le code n'est **pas lu par `JSON.parse`** : le visualiseur JSON de WebView2 ajoute son propre texte autour. On le cherche par expression régulière (`"authorizationCode": "…"`), en réessayant quelques secondes.
+- Fermer la fenêtre sans se connecter envoie `epic-login` avec « connexion annulée » : l'interface ne reste pas bloquée sur « Connexion… ». Chaque étape laisse une trace dans le journal (`Epic : …`).
+- **« Autres méthodes de connexion »** (Google, Xbox, PlayStation, Steam…) ouvrent une pop-up (`window.open`), que Tauri **refuse par défaut** — rien ne se passait. `on_new_window` crée une vraie fenêtre (`NewWindowResponse::Create`, `window_features`) : même environnement WebView2, donc `window.opener` fonctionne et la pop-up rend la main à Epic. Fermer la fenêtre de connexion ferme aussi les pop-ups (`epic-popup-<n>`).
+- La page finale d'Epic peut se **charger plusieurs fois** : seul le **premier** code compte (`done.swap`, et `window.__epicCodeSent` côté page). Un code ne s'échange qu'une fois — les doublons étaient refusés (400) et affichaient des erreurs alors que la connexion avait réussi. Dès la fin, la fenêtre de connexion **et** les pop-ups des fournisseurs sont détruites (`close_login_windows`).
+- La session Epic (jeton de renouvellement) est **chiffrée** sur le disque (`epic.session`, `secure_store`) ; l'ancien `epic.json` en clair est converti puis supprimé à la première lecture.
+- Client id / secret : ceux du launcher Epic lui-même, publiés par ces projets — pas une clé de l'utilisateur.
+- `epic_account` renouvelle la session à chaque lecture puis lit `library-service …/playtime/account/<id>/all` : temps de jeu par `artifactId`, qui est l'`AppName` des manifestes — d'où l'identifiant `epic-<appname>` des jeux Epic. `playtimeOf` prend le plus grand de nos mesures, de Steam et d'Epic.
+- Réglages → Profil → « Compte Epic Games » : se connecter, actualiser, ou se reconnecter si la session a expiré ; une ligne en dessous déconnecte. Le résultat de la connexion arrive par l'événement `epic-login`.
+- **Bibliothèque complète** : `epic_account` lit aussi toute la bibliothèque (`library-service …/items`, paginée par `cursor`), garde les applications publiques, puis demande au **catalogue** (`catalog-public-service …/bulk/items`) titre, catégories et jaquettes (`DieselGameBoxTall` verticale, `DieselGameBox` large). Seuls les **jeux** restent (catégorie `games`, pas de `mainGameItem` : pas de DLC). Les fiches du catalogue sont en **cache chiffré** (`epic.catalog`) : la première lecture prend une trentaine de secondes pour ~550 jeux, les suivantes ne demandent que les nouveaux. Huit requêtes de catalogue à la fois.
+- Les jeux Epic non installés (`uninstalledEpicGames`, `epic-<appname>`, `installed: false`) rejoignent « Tous » comme ceux de Steam, avec la jaquette du catalogue (pas de recherche d'affiche pour eux, `Cover.svelte`). Un jeu déjà installé n'est pas doublé (identifiant ou titre). « Installer » ouvre `com.epicgames.launcher://apps/<AppName>?action=install`.
+- `epicMinutesOf` ne regarde que l'identifiant : un jeu non installé n'est pas dans `games`. Le **Profil et les Statistiques reçoivent `allGames`** (installés + possédés Steam et Epic) : sans ça, 1 450 h de Fortnite non installé n'apparaissaient nulle part.
+- Un jeu Epic repéré seulement par son dossier (`.egstore`) a un identifiant tiré du titre : son temps de jeu Epic ne lui est pas encore rattaché.
+
+## Profil (`Profile.svelte`)
+
+- **Sa propre page**, dernière section du dock (la photo), séparée des Réglages : tout ce qui parle de toi est ici — identité, comptes, statistiques.
+- Façon Xbox : à gauche la **carte d'identité** ; à droite le **temps de jeu total** et l'activité mois par mois, **les plus joués** (jaquettes), genres favoris et boutiques en pourcentage du temps.
+- **Pas de bouton « Modifier »** : la **photo** et le **pseudo** se sélectionnent eux-mêmes au joystick. A sur la photo → `AvatarPicker` ; A sur le pseudo → `VirtualKeyboard` (fenêtre de l'application, `nameKeyboardOpen`).
+- Les tuiles de compte portent le **logo de la boutique** (`icons/steam.svg`, `icons/epic.svg`, tirés de Simple Icons, licence CC0, passés en blanc) dans une pastille ronde ; la photo du compte Steam s'y accroche en médaillon.
+- Puis les tuiles **Comptes** : **Steam** — une seule tuile pour le compte **et** sa bibliothèque (A se connecte, puis synchronise ; X oublie la liste ; à la première connexion, si le pseudo est encore « Joueur », pseudo et photo Steam sont repris) —, Epic Games (A se connecte, ou actualise ; X déconnecte), et **Statistiques détaillées**. Parcours haut / bas : photo → pseudo → Steam → Epic → Statistiques.
+- **Jamais de photo carrée** : partout (dock, profil, `AvatarPicker`) l'image est ronde et remplit son cercle (`object-fit: cover`), et le contour de sélection de la photo est un anneau, pas un cadre.
+- Les chiffres viennent de `playtimeOf` (nos mesures + Steam + Epic), pas du journal. L'activité mensuelle, elle, vient du journal.
+
+## Secrets sur le disque (`secure_store.rs`)
+
+- Tout secret gardé sur le disque passe par `secure_store::write` / `read`. Sous Windows : **DPAPI** (`CryptProtectData`, via `windows-sys` déjà tiré par Tauri) — le fichier n'est lisible que par le même compte Windows sur le même PC. Sous Linux (session Gamescope, sans coffre garanti) : fichier en droits `600`, comme Steam et Heroic.
+- Un test vérifie qu'un secret écrit n'apparaît pas en clair dans le fichier. `wipe()` efface un secret de la mémoire (écriture volatile) avant de le libérer.
+
+## Compte Steam (`steam_account.rs`, `steamAccount.svelte.ts`)
+
+- **Aucune clé, aucun mot de passe** : le compte est lu dans les fichiers du client Steam. `config/loginusers.vdf` donne le compte (marqué `MostRecent`, sinon `AutoLogin`, sinon le plus récent), `config/avatarcache/<steamid>.png` sa photo (copiée dans le dossier de données, seul endroit lisible par le webview), et `userdata/<steamid − 76561197960265728>/config/localconfig.vdf` la date de dernière partie et le temps de jeu de **chaque jeu joué**.
+- Seul le bloc `Software/Valve/Steam/apps` de `localconfig.vdf` compte : d'autres blocs `apps` y ont un tout autre sens.
+- `lastPlayedAt(id)` et `playtimeOf(id)` (dans `library.svelte.ts`) combinent nos mesures et celles de Steam : la date la plus récente, le temps le plus grand. C'est ce qui donne enfin un temps de jeu aux jeux Steam (lancés par `steam -applaunch`, ils échappent à notre mesure) et l'ordre « dernière partie » même pour un jeu lancé depuis Steam.
+- Tests : `cargo test --lib steam_account` ; `cargo test dump_account -- --ignored --nocapture` affiche le compte de la machine.
+- **Bibliothèque complète, par connexion au compte (pas de clé d'API)** — `steam_library.rs`. Steam n'a pas d'OAuth pour les tiers (OpenID ne dit que *qui* on est) et ne donne plus la liste des jeux d'un profil sans être connecté. Comme pour Epic, Profil → tuile « Steam » ouvre la **page de connexion officielle** (QR code de l'application mobile, ou identifiants), Dès que Steam quitte la page de connexion (connexion réussie), `on_navigation` **bloque la page suivante au lieu de l'afficher** et cache la fenêtre : rien d'autre ne s'ouvre à l'écran, la liste se lit en arrière-plan. (Avant, la page « Jeux » du site s'affichait pendant la lecture — inutile et déroutant.) La liste n'est plus écrite dans les pages de Steam, elle vient de l'API officielle. `fetch_games` essaie donc, dans l'ordre : **`IPlayerService/GetOwnedGames` avec le jeton d'accès de la session** (seconde moitié de `steamLoginSecure`, sans clé d'API), puis avec le jeton que la boutique donne à la session (`pointssummary/ajaxgetasyncconfig` → `webapi_token`), puis l'ancienne page (`data-profile-gameslist`), puis les seuls identifiants (`dynamicstore/userdata` → `rgOwnedApps`, noms repris des fiches). Chaque échec laisse une trace sans secret dans le journal (`Steam : …`).
+- **Sécurité** — la session Steam donne un accès complet au compte sur le web, c'est le secret le plus sensible de l'application :
+  - fenêtre en **navigation privée** (`incognito`) : rien n'est écrit sur le disque par le navigateur, tout disparaît à la fermeture ;
+  - navigation **limitée à Steam en HTTPS** (`steamcommunity.com`, `*.steampowered.com`, `*.steamstatic.com`, testé contre les faux domaines), **aucune pop-up** ;
+  - le cookie `steamLoginSecure` est lu **une seule fois, en mémoire** (`cookies_for_url`, dans une tâche à part : sous Windows, la lecture bloque dans un gestionnaire d'événement), envoyé seulement aux serveurs de Steam (`api.steampowered.com`, `store.steampowered.com`, `steamcommunity.com`, client `https_only`), puis **effacé de la mémoire** (`secure_store::wipe`). Jamais enregistré, jamais transmis à l'interface, jamais journalisé ;
+  - seule la **liste des jeux** est gardée, **chiffrée** (`steam/library.bin`, `secure_store`). Pour l'actualiser (nouvel achat), on se reconnecte ; X sur la tuile l'oublie.
+- Les jeux possédés mais pas installés (`uninstalledSteamGames`, `installed: false`) **ne sont jamais enregistrés** dans la bibliothèque : ils se recalculent de la liste Steam et disparaissent une fois installés et détectés. Ils sont **mélangés dans « Tous »** (`allGames`, et dans la recherche), grisés avec un badge « Non installé » ; leur fiche propose **« Installer »** (`steam://install/<appid>`), leurs options n'offrent pas mise à jour ni désinstallation. L'accueil, lui, ne montre que les jeux installés.
+- Les requêtes vers Steam (fiches, affiches) passent par une **file de quatre** (`queued` dans `steam.svelte.ts`) : la grille peut montrer des centaines de jeux d'un coup.
+
+## Ordre de l'accueil
+
+- La rangée suit `home_order` (Réglages → Apparence) : **dernière partie d'abord** par défaut (les jamais joués ensuite, par titre), ou par titre. Persisté côté Rust (`home_order`, `default_home_order`).
+
+## Carte « Reprendre » (accueil)
+
+- En tête de la rangée, à l'index **-1**, une carte couchée (16/9, à la hauteur des tuiles, `--resume-width`) montre le dernier jeu lancé. **A le lance directement**, sans passer par sa fiche ; X ouvre le même tiroir d'options qu'une tuile.
+- L'accueil **démarre sur cette carte** : le dernier jeu se relance en un appui dès l'allumage. Sans jeu à reprendre, la carte n'existe pas et la sélection part de la première tuile (une fois la bibliothèque chargée, `libraryReady`).
+- Sur la carte, la rangée s'aligne sur la marge de gauche (`--safe-x`) au lieu de se centrer : centrée, elle laissait un grand vide à sa gauche.
+- `lastPlayed` est posé **au lancement** (`markLaunched`), pas à la fin de la partie : pour un jeu Steam, le processus rend la main aussitôt et la carte ne l'aurait jamais montré.
+- Capture : `?resume=demo` invente un jeu à reprendre.
+
+## Fiche : captures et vidéos
+
+- La fiche a **deux pages l'une sous l'autre** : la présentation, puis « Captures et vidéos ». Descendre depuis les boutons fait glisser la seconde (une page entière, `translateY(-100%)`) ; haut (ou B) revient. Un repère « Captures et vidéos ▾ » en bas dit qu'il y a une suite.
+- **Slider horizontal centré** (12 médias au plus, `mediaOf()` : jusqu'à trois bandes-annonces d'abord, avec un bouton de lecture, puis les captures). Le ruban (`.reel`, sur toute la largeur de l'écran) se décale pour que la sélection tombe pile au centre (`--slide-width`, `--slide-gap`, `--slide-duration`) ; la sélection est à pleine taille avec le contour d'accent, ses voisines plus petites et estompées débordent sur les bords. Gauche / droite pour parcourir, position « 3 / 12 » et points en dessous.
+- **Tout est préchargé et décodé** à l'ouverture de la fiche (`Image.decode()`), en pleine taille : rien ne se charge sous les yeux en faisant défiler, et chaque image n'apparaît qu'une fois prête (fondu). La visionneuse s'ouvre aussitôt.
+- Pas de classe `.track` pour le ruban : c'est déjà la barre de progression d'un téléchargement (8 px, contenu masqué), qui écrasait le slider.
+- Sous le slider, le panneau « Plus sur… » : description (`about`) à gauche, fiche technique (genres, sortie, développeur, éditeur, temps de jeu) à droite.
+- Capture : `?screen=detail&index=N&media=demo&slide=2` (images du CDN de Steam).
+- A ouvre la **visionneuse** (`MediaViewer.svelte`) : gauche / droite passent au média voisin, A met une vidéo en pause, B referme.
+- `steam_details` récupère `screenshots`, `movies`, `developers`, `publishers`, `about_the_game`. Une fiche en cache plus ancienne que `DETAILS_VERSION` est redemandée (et gardée si Steam ne répond pas) : sans ça, les jeux déjà vus n'auraient jamais de médias.
+- **Steam ne fournit plus de fichier webm/mp4** pour les bandes-annonces récentes, seulement des flux HLS (`hls_h264`, CORS ouvert). WebKitGTK les lit seul ; sous WebView2, **hls.js** prend le relais, chargé seulement à l'ouverture d'une vidéo. Lecture avec le son, et en muet si le webview la refuse sans geste de l'utilisateur.
+
+## Bibliothèque : en-tête et options
+
+- L'en-tête porte deux **vrais boutons** : « Trier : <critère> » et « Synchroniser ». On les atteint en montant depuis la première rangée (`libraryZone: 'header'`), gauche / droite entre eux, bas pour revenir. Pendant ce temps, aucune jaquette n'a de contour.
+- **X sur une jaquette ouvre les options du jeu**, comme sur l'accueil, dans la fenêtre `OptionsMenu.svelte` (avec le nom du jeu) — une grille ne peut pas « pousser » ses voisines comme le tiroir de la rangée d'accueil. État partagé avec la fiche : `menuOptionsOpen`.
+- Filtres (LT / RT) : **Tous · Installés · Favoris · Récemment joué**. Le filtre et le tri sont **mémorisés d'une session à l'autre** (`library_filter`, `library_sort` dans les réglages, `setLibraryView`).
+- View / Create reste un raccourci du tri. Capture : `?screen=library&zone=header`, `?screen=library&options=library`.
+
+## Synchronisation de la bibliothèque
+
+- Bouton **« Synchroniser »** dans l'en-tête de la bibliothèque (à côté de « Trier »), atteint en **montant depuis la première rangée** de jaquettes ; il relance la détection et met la bibliothèque à jour **sans fenêtre de validation** (`syncLibrary`) : jeu nouveau → ajouté ; jeu connu dont le dossier a bougé → nouveau chemin ; jeu introuvable dont l'exécutable n'existe plus (`paths_exist`) → retiré. Le bilan s'affiche en bas.
+- Un jeu Steam a pour exécutable le client Steam, qui existe toujours : il n'est retiré que s'il n'est plus détecté — et jamais si le scan ne trouve **aucun** jeu Steam (Steam introuvable, pas tout désinstallé).
+- Un jeu non détecté dont l'exécutable existe encore est **gardé** : la synchronisation ne doit jamais faire perdre un jeu jouable. Favoris et temps de jeu sont rangés sous l'identifiant : ils survivent à un changement de chemin.
+- La détection détaillée, avec cases à cocher, reste dans Réglages → Jeux. **B l'annule tout de suite**, même pendant le scan : un numéro de scan (`scanTicket`) fait ignorer un résultat qui arrive après la fermeture ; le scan Rust finit dans son coin sans rien afficher.
+
 ## Menu d'options d'une tuile
 
 - **X** sur l'accueil ouvre un panneau **dans la rangée**, à droite de la tuile sélectionnée : il pousse les tuiles suivantes au lieu de les recouvrir, en animant sa largeur. On voit donc toujours de quel jeu il s'agit.
 - Entrées : favori, changer l'affiche, mettre à jour, vérifier les fichiers, désinstaller.
 - Le panneau est **un tiroir de la tuile** : il reprend sa hauteur, son contour d'accent et ses coins, et se colle à son bord droit (marges négatives qui annulent l'espacement de la rangée). Tuile et panneau se lisent comme un seul bloc.
 - Sur une **fiche de jeu**, il n'y a pas de tuile à prolonger : un troisième bouton « Options » (et la touche X) ouvre le même jeu d'actions dans `OptionsMenu.svelte`, avec des lignes identiques à celles du tiroir.
-- Tout ce qui touche à l'installation est **confié à Steam** par un lien `steam://` (`install`, `validate`, `uninstall`), ouvert par la commande Rust `open_url` — qui n'accepte que ce protocole, pour ne pas devenir un moyen d'exécuter n'importe quoi depuis la page.
+- Tout ce qui touche à l'installation est **confié à Steam** (`steam://install|validate|uninstall`) ou au launcher Epic (`com.epicgames.launcher://apps/…`), par la commande Rust `open_url` — qui n'accepte que ces deux protocoles **et seulement les caractères `[A-Za-z0-9:/?=._-]`** (`url_is_safe`, testé) : sous Windows l'adresse passe par `cmd /C start`, qui interprète `&`, `|`, `^`, `%` — `steam://x&calc` lançait une autre commande.
 
 ## Erreurs
 
@@ -144,6 +242,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Sons
 
 - Les signaux viennent de `public/assets/sounds/` (design PlayStation fourni) : `ps5-scroll` pour le déplacement, `ps5-selection-button` pour la validation, `ps5-back-button` pour le retour, `ps5-popup-2` pour le lancement d'un jeu.
+- Une direction ne sonne **que si la sélection a bougé** : `handle()` compare une empreinte de la sélection (`selectionKey()`) avant et après. Buter contre un bord, ou descendre depuis une tuile de l'accueil, reste silencieux. Un écran délégué (Réglages, Statistiques) fournit sa propre empreinte ; une fenêtre qui n'en a pas sonne à chaque fois. Les changements passés par `startViewTransition` sont différés : `navTick` les compte tout de suite.
 - Les fichiers sont **décodés une fois** au démarrage (`preloadSounds()`) puis rejoués depuis la mémoire : un déplacement dans le carrousel ne doit pas attendre un chargement.
 - L'**erreur** n'a pas de fichier : elle garde le signal grave de synthèse, qui ne ressemble à aucun autre son de l'interface. Cette synthèse sert aussi de secours si un fichier manque — mieux vaut un bip qu'une interface muette.
 - Couper puis rallumer les sons ferme et rouvre le contexte audio : il faut alors redécoder (`preloadSounds()` à nouveau).
@@ -154,7 +253,19 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - La première action **réveille seulement** : elle n'est pas transmise à l'écran en dessous, pour ne pas lancer un jeu en voulant rallumer l'écran.
 - Pas de veille pendant la vidéo d'introduction, ni s'il n'y a aucun artwork à montrer.
 
+## Statistiques (`Stats.svelte`, `stats.ts`)
+
+- **Pas d'onglet dans le dock** : elles s'ouvrent **seulement depuis le Profil** (tuile « Statistiques détaillées »), en **sous-page plein écran** posée par-dessus (`statsOpen`, section `profile`). B y ramène.
+- Mise en page façon tableau de bord Xbox : « Bonsoir, <pseudo> » et le total, des **pastilles de faits marquants** (série record de jours d'affilée, jeu du moment sur 30 jours, plus longue partie — seulement celles qui ont une valeur), les **périodes** 7 j · 30 j · 90 j · Année · Tout encadrées des glyphes LT / RT, quatre chiffres (jeux, temps de jeu, jours actifs, genre favori), le **calendrier d'activité** de l'année, et à droite « Par genre » et « Les plus joués ».
+- Calendrier (`heatmap()`) : 53 colonnes d'une semaine, lundi en haut, la dernière s'arrête à aujourd'hui ; cinq niveaux (`--heat-0` à `--heat-4` : rien, ½ h, 1 h, 2 h, 4 h et plus). Les jours hors de la période restent affichés mais s'effacent. Les dates se calculent par le calendrier, jamais en ajoutant des tranches de 24 h (changement d'heure).
+- Deux zones se parcourent : le calendrier (la case sélectionnée affiche sa date et son temps de jeu — à la manette, pas de survol ; on ne tombe jamais sur un jour à venir) et le classement (A ouvre la fiche). Au bout du calendrier, droite passe au classement.
+- « Tout » compte le temps Steam (`playtimeOf`) ; les autres périodes viennent du **journal** des parties (`sessions`), Steam ne donnant qu'un total. Une partie de **moins d'une minute n'est pas comptée** (`steam -applaunch` rend la main aussitôt).
+- `stats.ts` ne fait que des calculs (fonctions pures) ; le composant n'a plus qu'à dessiner.
+- Capture : `?screen=stats&stats=demo&period=week|month|quarter|year|all` remplit le journal de parties fictives, jamais enregistrées.
+
 ## Réglages
+
+- Trois catégories : **Jeux** (détection, clé SteamGridDB, dossiers), **Apparence**, **Système** (affichage). Le pseudo, la photo, les comptes et les statistiques sont dans le Profil.
 
 - `saveSettings()` envoie **tous** les champs : la commande Rust réécrit le fichier entier et les champs absents y reprennent leur valeur par défaut. N'en envoyer qu'une partie effaçait silencieusement la clé SteamGridDB et la vidéo d'introduction au premier changement de pseudo.
 
@@ -193,18 +304,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Recherche et clavier à l'écran
 
-- L'écran reprend la mise en page de la bibliothèque (même titre, même grille de jaquettes) : on ne change pas de monde en appuyant sur Y. S'y ajoutent une **grande barre de saisie** en tête et le clavier juste en dessous.
-- Le clavier est un composant à part (`Keyboard.svelte`), utilisé **aussi par la saisie des réglages** (`VirtualKeyboard.svelte`) : une touche a la même allure partout, et son style ne se règle qu'à un endroit. Les dispositions vivent dans `searchKeys.ts` (`SEARCH_ROWS` pour la recherche, `textKeyboardRows(caps)` pour les réglages).
-- Disposition **AZERTY** : c'est celle que l'utilisateur a sous les doigts.
-- Une touche sélectionnée **inverse ses couleurs**, sans agrandissement ni halo : sur une grille serrée, un agrandissement ferait sauter tout le clavier à chaque déplacement.
-- Touches **grandes** (26 px) : un clavier de console se lit à trois mètres. Les touches qui n'écrivent pas (Espace, Effacer, Tout) sont larges, portent une icône, **et le glyphe du bouton manette qui fait la même chose** : le raccourci se lit sur la touche, pas dans une légende en bas de page.
-- Sur une touche d'action, ce glyphe **prend la place de l'icône**, juste avant le mot : c'est le bouton qui compte, l'icône décorative n'apportait rien et décentrait la touche.
-- L'écran de recherche a un **fond plein** : l'artwork derrière brouillait les lettres du clavier.
-- Les rangées n'ont **pas toutes la même longueur** : la sélection se repère en `{ row, col }`, jamais par un index à plat, et `nearestColumn()` garde l'alignement horizontal en changeant de rangée.
-- A tape, Y insère une espace, B efface une lettre — et quitte l'écran quand le champ est vide.
-- Descendre sous la dernière rangée fait passer aux résultats : le clavier **se replie** (hauteur animée) et la grille récupère la place. Remonter depuis la première rangée de jaquettes le ramène.
+- **Plus de page Recherche** : c'est une **fenêtre** (`SearchModal.svelte`), ouverte par **Y** de partout ou par le champ du dock. Elle réutilise **le clavier virtuel des réglages** (`VirtualKeyboard.svelte`) — un seul clavier dans toute l'interface — avec les jeux correspondants juste en dessous, filtrés à la frappe.
+- `VirtualKeyboard` sait donc aussi : suivre la frappe (`onInput`), laisser partir la sélection par le bas (`onLeaveBottom`), se mettre en retrait (`active`), s'élargir (`wide`) et afficher un contenu sous les touches (`children`).
+- Bas sous la dernière rangée (ou « Valider ») passe aux jeux, une rangée de 7 visible à la fois ; haut depuis la première rangée revient au clavier ; A ouvre la fiche ; B referme.
+- Les touches sont rendues par `Keyboard.svelte` ; la disposition vit dans `searchKeys.ts` (`textKeyboardRows(caps)`) : **AZERTY**, **chiffres en tête**. La sélection se repère en `{ row, col }` et `nearestColumn()` garde l'alignement en changeant de rangée.
+- Une touche sélectionnée **inverse ses couleurs**, sans agrandissement : sur une grille serrée, il ferait sauter tout le clavier. Les touches d'action portent le glyphe du bouton manette qui fait la même chose.
 - Comparaison via `normalizeForSearch` : sans accents ni ponctuation, « repo » trouve « R.E.P.O. ».
-- La hauteur de la fenêtre de résultats est en **unités d'écran** : un pourcentage à l'intérieur d'une variable CSS se résout contre la hauteur du parent, pas sa largeur — le calcul partait faux.
+- Capture : `?search=1` ouvre la fenêtre.
 
 ## Vidéo d'introduction
 
@@ -223,12 +329,25 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement — *fait*. Les visuels sont **téléchargés une fois** dans `<app data>/artwork/` (`cache_game_art`) : l'interface lit un fichier, pas une adresse web, donc l'association jeu ↔ jaquette ne peut plus changer et tout s'affiche hors ligne.
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
 7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs. — *fait*
+8. **Au niveau de warmUP** (warmup-gamelauncher.com/features) :
+   - Interface « couch gaming » 100 % manette — *fait*
+   - Statistiques (temps, parties, top jeux, genres, boutiques, par période) — *fait*. Reste : nombre total de jeux possédés / installés, et la mesure des jeux Steam (surveiller le processus du jeu, pas `steam -applaunch`).
+   - Bibliothèque unifiée : Steam, Epic, dossiers, `.lnk`, registre — *fait*. Reste : GOG, EA, Xbox, Ubisoft, Amazon, émulateurs (dossiers de ROMs, émulateur choisi par jeu).
+   - Synchronisation : X dans la bibliothèque — *fait*
+   - Reprise rapide : carte « Reprendre » en tête de l'accueil, la dernière partie se relance en un appui — *fait*
+   - Écran de pré-lancement : captures, bandes-annonces et « Plus sur… » sous la fiche — *fait*
+   - Onglet Découverte (« Pour toi ») : recommandations, sorties à venir, bandes-annonces Steam (`movies` de `appdetails`), liste de souhaits, jeux oubliés.
+   - Succès : tableau de bord unifié, taux de complétion, rareté, progression dans le temps, filtres par plateforme (Steam sans clé si le profil est public, RetroAchievements avec une clé saisie dans Réglages).
+   - Overlay FPS et historique de performances : MangoHud sous Linux, journaux relus dans les statistiques.
+   - Discord : statut du jeu en cours (Rich Presence), puis amis en ligne, messages et groupes par code d'invitation. Les fonctions sociales exigent une application Discord et une connexion OAuth, ce qui contredit « aucune clé » : à trancher avant de s'y lancer.
+   - Clavier virtuel : pensé aussi pour écrire des messages (Discord), commandes vocales plus tard.
 
 ## Règles de travail pour Claude
 
 - Lire ce fichier avant toute modification et le tenir à jour si l'architecture change.
 - Avancer étape par étape : une fonctionnalité à la fois, testable.
 - Après chaque changement, lancer `npx svelte-check --threshold error` et, si le rendu bouge, une capture pour vérifier de ses yeux.
+- **Après chaque changement, fermer puis relancer l'application** (`npm run tauri dev`) et vérifier qu'elle démarre sans erreur : arrêter d'abord `app.exe`, la session `tauri dev` et son Vite (port 5177), sinon le port reste pris.
 - Ne jamais supprimer de fichiers sans me le demander.
 - Les visuels (rendu, animations, sensation manette) sont validés par moi : indiquer clairement ce que je dois tester.
 - Répondre en français, de façon concise.

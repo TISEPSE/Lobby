@@ -194,19 +194,6 @@
 			0 0 28px 5px var(--accent-soft);
 	}
 
-	/* Une action irréversible se marque par un liseré, pas par une autre couleur :
-	   l'accent reste la seule teinte de l'interface. */
-	.choice.danger::before {
-		content: '';
-		display: block;
-		width: 34px;
-		height: 3px;
-		margin: 0 auto 10px;
-		border-radius: 2px;
-		background: var(--accent);
-		opacity: 0.5;
-	}
-
 	@keyframes fade {
 		from {
 			opacity: 0;

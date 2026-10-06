@@ -154,6 +154,7 @@
 		width: 92px;
 		height: 92px;
 		border-radius: 50%;
+		overflow: hidden;
 		background: var(--surface);
 		border: 2px solid transparent;
 		cursor: pointer;
@@ -172,10 +173,13 @@
 		background: rgba(255, 255, 255, 0.1);
 	}
 
+	/* Toujours une photo ronde : une image carrée (photo Steam) remplit le
+	   cercle au lieu d'y flotter avec ses coins. */
 	.avatar-img {
-		width: 58px;
-		height: 58px;
-		object-fit: contain;
+		width: 100%;
+		height: 100%;
+		border-radius: 50%;
+		object-fit: cover;
 	}
 
 	.initial {

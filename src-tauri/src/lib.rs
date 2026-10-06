@@ -24,6 +24,41 @@ struct GameDetails {
   summary: String,
   /// Note ramenée sur 5 ; 0 quand Metacritic ne connaît pas le jeu.
   rating: f32,
+  /// Captures d'écran du magasin : vignette et pleine taille.
+  #[serde(default)]
+  screenshots: Vec<Screenshot>,
+  /// Bandes-annonces. Steam ne fournit plus de fichier webm/mp4 pour les
+  /// récentes, seulement des flux HLS — lus côté interface par hls.js.
+  #[serde(default)]
+  movies: Vec<Movie>,
+  #[serde(default)]
+  developers: Vec<String>,
+  #[serde(default)]
+  publishers: Vec<String>,
+  /// Résumé long (section « À propos » du magasin), en texte.
+  #[serde(default)]
+  about: String,
+  /// Version du contenu de la fiche : une fiche en cache plus ancienne que
+  /// `DETAILS_VERSION` est redemandée, sinon elle n'aurait jamais de médias.
+  #[serde(default)]
+  version: u32,
+}
+
+/// À augmenter quand la fiche gagne des champs à récupérer chez Steam.
+const DETAILS_VERSION: u32 = 1;
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct Screenshot {
+  thumb: String,
+  full: String,
+}
+
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+struct Movie {
+  name: String,
+  thumb: String,
+  /// Flux HLS (`.m3u8`), CORS ouvert chez Steam.
+  hls: String,
 }
 
 /// Emplacement du cache : une fiche par jeu, relue avant toute requête.
@@ -55,13 +90,31 @@ async fn first_available(client: &reqwest::Client, urls: &[String]) -> String {
 #[tauri::command]
 async fn steam_details(app: tauri::AppHandle, appid: String, refresh: bool) -> Result<GameDetails, String> {
   let path = cache_path(&app, &appid)?;
+  let cached = fs::read_to_string(&path)
+    .ok()
+    .and_then(|text| serde_json::from_str::<GameDetails>(&text).ok());
   if !refresh {
-    if let Ok(text) = fs::read_to_string(&path) {
-      if let Ok(cached) = serde_json::from_str::<GameDetails>(&text) {
-        return Ok(cached);
+    if let Some(cached) = &cached {
+      if cached.version >= DETAILS_VERSION {
+        return Ok(cached.clone());
       }
     }
   }
+  // Fiche ancienne ou forcée : on la redemande, et on garde l'ancienne si
+  // Steam ne répond pas — mieux vaut une fiche sans médias que pas de fiche.
+  match fetch_steam_details(&appid).await {
+    Ok(details) => {
+      if let Ok(text) = serde_json::to_string_pretty(&details) {
+        let _ = fs::write(&path, text);
+      }
+      Ok(details)
+    }
+    Err(error) => cached.ok_or(error),
+  }
+}
+
+async fn fetch_steam_details(appid: &str) -> Result<GameDetails, String> {
+  let appid = appid.to_string();
 
   let client = reqwest::Client::builder()
     .user_agent("InterfaceConsole/0.1")
@@ -142,12 +195,49 @@ async fn steam_details(app: tauri::AppHandle, appid: String, refresh: bool) -> R
     summary: strip_html(data["short_description"].as_str().unwrap_or_default()),
     // Metacritic note sur 100, l'interface affiche sur 5.
     rating: data["metacritic"]["score"].as_f64().map(|score| (score as f32) / 20.0).unwrap_or(0.0),
+    screenshots: data["screenshots"]
+      .as_array()
+      .map(|list| {
+        list
+          .iter()
+          .filter_map(|shot| {
+            Some(Screenshot {
+              thumb: shot["path_thumbnail"].as_str()?.to_string(),
+              full: shot["path_full"].as_str()?.to_string(),
+            })
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+    movies: data["movies"]
+      .as_array()
+      .map(|list| {
+        list
+          .iter()
+          .filter_map(|movie| {
+            Some(Movie {
+              name: movie["name"].as_str().unwrap_or_default().to_string(),
+              thumb: movie["thumbnail"].as_str().unwrap_or_default().to_string(),
+              hls: movie["hls_h264"].as_str()?.to_string(),
+            })
+          })
+          .collect()
+      })
+      .unwrap_or_default(),
+    developers: string_list(&data["developers"]),
+    publishers: string_list(&data["publishers"]),
+    about: strip_html(data["about_the_game"].as_str().unwrap_or_default()),
+    version: DETAILS_VERSION,
   };
 
-  if let Ok(text) = serde_json::to_string_pretty(&details) {
-    let _ = fs::write(&path, text);
-  }
   Ok(details)
+}
+
+fn string_list(value: &serde_json::Value) -> Vec<String> {
+  value
+    .as_array()
+    .map(|list| list.iter().filter_map(|v| v.as_str().map(str::to_string)).collect())
+    .unwrap_or_default()
 }
 
 /// Les résumés de Steam contiennent des balises ; l'interface affiche du texte.
@@ -168,6 +258,10 @@ fn strip_html(value: &str) -> String {
 
 
 mod scanner;
+mod steam_account;
+mod epic_account;
+mod secure_store;
+mod steam_library;
 
 use scanner::ScannedGame;
 
@@ -194,6 +288,26 @@ pub struct UserSettings {
   /// Minutes d'inactivité avant l'écran de veille ; 0 pour ne jamais l'afficher.
   #[serde(default = "default_screensaver")]
   pub screensaver_minutes: u32,
+  /// Ordre de la rangée d'accueil : `recent` (dernière partie) ou `title`.
+  #[serde(default = "default_home_order")]
+  pub home_order: String,
+  /// Filtre et tri de la bibliothèque, retrouvés d'une session à l'autre.
+  #[serde(default = "default_library_filter")]
+  pub library_filter: String,
+  #[serde(default = "default_library_sort")]
+  pub library_sort: String,
+}
+
+fn default_library_filter() -> String {
+  "all".to_string()
+}
+
+fn default_library_sort() -> String {
+  "title".to_string()
+}
+
+fn default_home_order() -> String {
+  "recent".to_string()
 }
 
 fn default_screensaver() -> u32 {
@@ -288,6 +402,9 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     sound_enabled: true,
     steamgriddb_key: String::new(),
     screensaver_minutes: 5,
+    home_order: default_home_order(),
+    library_filter: default_library_filter(),
+    library_sort: default_library_sort(),
   })
 }
 
@@ -333,6 +450,60 @@ pub struct DownloadStatus {
 /// à jour en permanence : `StateFlags` dit ce qu'il fait, et les compteurs
 /// d'octets donnent l'avancement réel. C'est la même source que celle qui sert
 /// à lister les jeux installés.
+/// Ouvre la page de connexion officielle d'Epic Games ; le résultat arrive
+/// plus tard par l'événement `epic-login`.
+/// **Asynchrone** : sous Windows, créer une fenêtre depuis une commande
+/// synchrone (exécutée sur le fil principal) peut bloquer l'application.
+#[tauri::command]
+async fn epic_login(app: tauri::AppHandle) -> Result<(), String> {
+  epic_account::open_login(&app)
+}
+
+/// Compte Epic connecté et temps de jeu par jeu ; `None` sans connexion.
+#[tauri::command]
+async fn epic_account(app: tauri::AppHandle) -> Result<Option<epic_account::EpicAccount>, String> {
+  let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  epic_account::read_account(&data_dir).await
+}
+
+#[tauri::command]
+fn epic_logout(app: tauri::AppHandle) {
+  if let Ok(data_dir) = app.path().app_data_dir() {
+    epic_account::logout(&data_dir);
+  }
+}
+
+/// Pour chaque chemin, dit s'il existe encore : la synchronisation retire les
+/// jeux dont l'exécutable a disparu (dossier déplacé ou supprimé).
+#[tauri::command]
+fn paths_exist(paths: Vec<String>) -> Vec<bool> {
+  paths.iter().map(|path| Path::new(path).exists()).collect()
+}
+
+/// Bascule entre le plein écran sans bordure (mode console) et une fenêtre
+/// classique avec sa barre de titre — la porte de sortie pendant les tests.
+/// Rend le nouvel état : `true` en plein écran.
+#[tauri::command]
+fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
+  let fullscreen = !window.is_fullscreen().map_err(|e| e.to_string())?;
+  // Bordures d'abord : passer en plein écran avec elles laissait une bande de
+  // barre de titre en haut de l'écran.
+  window.set_decorations(!fullscreen).map_err(|e| e.to_string())?;
+  window.set_fullscreen(fullscreen).map_err(|e| e.to_string())?;
+  if !fullscreen {
+    let _ = window.center();
+  }
+  Ok(fullscreen)
+}
+
+/// Compte Steam connecté sur cette machine, ses jeux joués et sa photo.
+/// `None` quand Steam n'est pas installé ou qu'aucun compte n'y est connecté.
+#[tauri::command]
+fn steam_account(app: tauri::AppHandle) -> Option<steam_account::SteamAccount> {
+  let data_dir = app.path().app_data_dir().ok()?;
+  steam_account::read_account(&data_dir)
+}
+
 #[tauri::command]
 fn steam_downloads() -> Vec<DownloadStatus> {
   let mut running = Vec::new();
@@ -837,6 +1008,29 @@ async fn test_steamgriddb_key(key: String) -> Result<String, String> {
   }
 }
 
+/// Ouvre la connexion à Steam (page officielle, navigation privée) ; la
+/// bibliothèque arrive ensuite par l'événement `steam-library`.
+/// **Asynchrone** : sous Windows, créer une fenêtre depuis une commande
+/// synchrone peut bloquer l'application.
+#[tauri::command]
+async fn steam_library_login(app: tauri::AppHandle) -> Result<(), String> {
+  steam_library::open_login(&app)
+}
+
+/// Bibliothèque Steam récupérée à la dernière connexion (déchiffrée).
+#[tauri::command]
+fn steam_library(app: tauri::AppHandle) -> Result<Option<steam_library::OwnedLibrary>, String> {
+  let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  steam_library::read_library(&data_dir)
+}
+
+#[tauri::command]
+fn steam_library_forget(app: tauri::AppHandle) {
+  if let Ok(data_dir) = app.path().app_data_dir() {
+    steam_library::forget_library(&data_dir);
+  }
+}
+
 /// Enregistre l'affiche choisie par l'utilisateur, en remplaçant celle qui
 /// était déjà sur le disque pour ce jeu.
 #[tauri::command]
@@ -1020,11 +1214,38 @@ fn is_running(pid: u32) -> bool {
 
 /// Ouvre une adresse avec l'application du système : c'est ainsi qu'on demande
 /// à Steam d'installer, de vérifier ou de désinstaller un jeu (`steam://…`).
+/// Caractères admis dans une adresse `steam://` ou `com.epicgames.launcher://`.
+fn url_is_safe(url: &str) -> bool {
+  url.bytes().all(|b| b.is_ascii_alphanumeric() || b":/?=._-".contains(&b))
+}
+
+#[cfg(test)]
+mod open_url_tests {
+  use super::url_is_safe;
+
+  #[test]
+  fn rejects_shell_metacharacters() {
+    assert!(url_is_safe("steam://install/311210"));
+    assert!(url_is_safe("com.epicgames.launcher://apps/Fortnite?action=install"));
+    assert!(!url_is_safe("steam://install/1&calc"));
+    assert!(!url_is_safe("steam://x|whoami"));
+    assert!(!url_is_safe("steam://x^&y"));
+    assert!(!url_is_safe("steam://%COMSPEC%"));
+    assert!(!url_is_safe("steam://a b"));
+  }
+}
+
 #[tauri::command]
 fn open_url(url: String) -> Result<(), String> {
   // On n'ouvre que des liens Steam ou Epic : cette commande ne doit pas devenir un
   // moyen d'exécuter n'importe quoi depuis la page.
   if !url.starts_with("steam://") && !url.starts_with("com.epicgames.launcher://") {
+    return Err("Adresse refusée".into());
+  }
+  // Sous Windows, l'adresse passe par `cmd /C start`, qui interprète `&`, `|`,
+  // `^`, `%`… : `steam://x&calc` lançait une autre commande. Seuls les
+  // caractères d'une adresse de launcher sont admis.
+  if !url_is_safe(&url) {
     return Err("Adresse refusée".into());
   }
 
@@ -1082,6 +1303,15 @@ pub fn run() {
       test_steamgriddb_key,
       pick_game_art,
       steam_downloads,
+      steam_account,
+      toggle_fullscreen,
+      paths_exist,
+      steam_library_login,
+      steam_library,
+      steam_library_forget,
+      epic_login,
+      epic_account,
+      epic_logout,
       open_url,
       scan_installed_games,
       save_library,
@@ -1091,6 +1321,11 @@ pub fn run() {
       fetch_game_art
     ])
     .setup(|app| {
+      // Une console ne montre pas de pointeur : le curseur système disparaît
+      // dès qu'il passe sur la fenêtre, quel que soit l'élément survolé.
+      if let Some(window) = app.get_webview_window("main") {
+        let _ = window.set_cursor_visible(false);
+      }
       if cfg!(debug_assertions) {
         app.handle().plugin(
           tauri_plugin_log::Builder::default()

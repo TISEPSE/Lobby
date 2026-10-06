@@ -43,7 +43,13 @@
 	const totalItems = $derived(candidates.length + 1); // +1 pour le bouton d'ajout
 
 	export function handleAction(action: string) {
-		if (!open || scanning) return;
+		if (!open) return;
+		// Pendant la détection, B referme tout de suite : on n'attend pas la
+		// fin du scan pour pouvoir partir (son résultat sera ignoré).
+		if (scanning) {
+			if (action === 'cancel') onClose();
+			return;
+		}
 
 		if (action === 'up') {
 			focusedIndex = Math.max(0, focusedIndex - 1);

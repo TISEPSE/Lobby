@@ -1,27 +1,15 @@
 <script lang="ts">
 	import { hasGamepad, padLayout } from './gamepad';
+	import { glyphSrc, type GlyphButton } from './glyphs';
 
 	/**
 	 * Barre d'aide : le vrai glyphe de la touche, puis ce qu'elle fait. Les
 	 * images viennent de `public/assets/buttons/` — jeu Xbox ou PlayStation
 	 * selon la manette branchée, comme sur une console.
 	 */
-	type Entry = { button: 'a' | 'b' | 'x' | 'y' | 'l1' | 'r1'; label: string };
+	type Entry = { button: GlyphButton; label: string };
 
 	let { entries }: { entries: Entry[] } = $props();
-
-	/** Correspondance entre nos actions et les fichiers de chaque famille. */
-	const FILES: Record<'xbox' | 'ps5', Record<Entry['button'], string>> = {
-		xbox: { a: 'xbox/a', b: 'xbox/b', x: 'xbox/x', y: 'xbox/y', l1: 'xbox/lb', r1: 'xbox/rb' },
-		ps5: {
-			a: 'ps5/cross',
-			b: 'ps5/circle',
-			x: 'ps5/square',
-			y: 'ps5/triangle',
-			l1: 'ps5/l1',
-			r1: 'ps5/r1',
-		},
-	};
 
 	let layout = $state<'xbox' | 'ps5'>('xbox');
 	let pad = $state(false);
@@ -40,7 +28,7 @@
 <footer class="help">
 	{#each entries as entry}
 		<span class="entry">
-			<img src="/assets/buttons/{FILES[layout][entry.button]}.svg" alt={entry.button.toUpperCase()} />
+			<img src={glyphSrc(layout, entry.button)} alt={entry.button.toUpperCase()} />
 			{entry.label}
 		</span>
 	{/each}

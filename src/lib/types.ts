@@ -9,6 +9,11 @@ export interface Game {
 	source?: string;
 	executable?: string;
 	args?: string[];
+	/**
+	 * `false` pour un jeu Steam possédé mais pas installé (bibliothèque
+	 * complète, clé de l'API Web) : sa fiche propose « Installer ».
+	 */
+	installed?: boolean;
 }
 
 /** Ce que l'utilisateur a fait d'un jeu. Conservé à part de la liste des jeux. */
@@ -17,6 +22,16 @@ export interface GameStats {
 	playtimeMinutes: number;
 	/** Horodatage de la dernière partie, ou null si le jeu n'a jamais été lancé. */
 	lastPlayed: number | null;
+	/** Nombre de parties lancées ; absent des statistiques d'avant le journal. */
+	sessions?: number;
+}
+
+/** Une partie terminée, gardée dans le journal qui nourrit les statistiques. */
+export interface SessionRecord {
+	id: string;
+	/** Début de la partie (horodatage). */
+	start: number;
+	minutes: number;
 }
 
 /** Fiche d'un jeu récupérée auprès de Steam par la couche Rust. */
@@ -34,7 +49,20 @@ export interface Details {
 	summary: string;
 	/** Note sur 5 ; 0 quand Metacritic ne connaît pas le jeu. */
 	rating: number;
+	/** Captures du magasin ; absentes d'une fiche mise en cache avant les médias. */
+	screenshots?: { thumb: string; full: string }[];
+	/** Bandes-annonces, en flux HLS. */
+	movies?: { name: string; thumb: string; hls: string }[];
+	developers?: string[];
+	publishers?: string[];
+	/** Résumé long (« À propos » du magasin). */
+	about?: string;
 }
+
+/** Une capture ou une vidéo de la fiche d'un jeu. */
+export type MediaItem =
+	| { kind: 'video'; thumb: string; src: string; name: string }
+	| { kind: 'image'; thumb: string; src: string };
 
 /** Une entrée du menu d'options d'une tuile. */
 export interface TileAction {
@@ -46,7 +74,7 @@ export interface TileAction {
 }
 
 /** Sections de la barre du haut. */
-export type Section = 'home' | 'library' | 'search' | 'settings';
+export type Section = 'home' | 'library' | 'settings' | 'profile';
 
 /** Préférences utilisateur de la console. */
 /**
@@ -74,4 +102,9 @@ export interface UserSettings {
 	steamgriddb_key: string;
 	/** Minutes d'inactivité avant l'écran de veille ; 0 = jamais. */
 	screensaver_minutes: number;
+	/** Ordre de la rangée d'accueil : dernière partie d'abord, ou par titre. */
+	home_order: 'recent' | 'title';
+	/** Filtre et tri de la bibliothèque, retrouvés d'une session à l'autre. */
+	library_filter: string;
+	library_sort: string;
 }

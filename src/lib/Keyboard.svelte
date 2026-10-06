@@ -9,7 +9,7 @@
 	 * de dialogue » plutôt que console de salon. Les touches qui n'écrivent
 	 * rien portent une icône, pas une légende en bas de page.
 	 */
-	import { SEARCH_ROWS, SEARCH_COLUMNS, type SearchKey } from './searchKeys';
+	import { SEARCH_COLUMNS, type SearchKey } from './searchKeys';
 	import { padLayout } from './gamepad';
 
 	/** Glyphes des boutons, comme dans la barre d'aide. */
@@ -27,13 +27,13 @@
 	});
 
 	let {
-		rows = SEARCH_ROWS,
+		rows,
 		row = 0,
 		col = 0,
 		active = true,
 		onPress,
 	}: {
-		rows?: SearchKey[][];
+		rows: SearchKey[][];
 		row?: number;
 		col?: number;
 		active?: boolean;

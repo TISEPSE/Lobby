@@ -1,10 +1,11 @@
 <script lang="ts">
 	/**
-	 * Menu d'options d'un jeu, version fiche.
+	 * Menu d'options d'un jeu, en fenêtre.
 	 *
 	 * Sur l'accueil, les options sortent de la tuile (`TileOptions`). Sur une
-	 * fiche, il n'y a pas de tuile à prolonger : le menu se pose donc au-dessus
-	 * du texte, à droite, là où se trouvent déjà les boutons.
+	 * fiche ou dans la grille de la bibliothèque, il n'y a pas de tuile à
+	 * prolonger (une grille ne peut pas pousser ses voisines) : le menu se pose
+	 * au-dessus, avec le nom du jeu concerné.
 	 */
 	import type { TileAction } from './types';
 
@@ -12,13 +13,15 @@
 		actions,
 		index = 0,
 		open = false,
-	}: { actions: TileAction[]; index?: number; open?: boolean } = $props();
+		title = '',
+	}: { actions: TileAction[]; index?: number; open?: boolean; title?: string } = $props();
 </script>
 
 {#if open}
 	<div class="veil">
 		<section class="menu">
 			<h2>Options</h2>
+			{#if title}<p class="game">{title}</p>{/if}
 			{#each actions as action, i}
 				<div class="row" class:selected={i === index}>
 					<span class="mark">
@@ -53,6 +56,12 @@
 		background: var(--surface-strong);
 		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
 		animation: rise var(--normal) var(--ease) both;
+	}
+
+	.game {
+		margin: -8px 0 8px;
+		font-size: 18px;
+		color: var(--text-dim);
 	}
 
 	h2 {

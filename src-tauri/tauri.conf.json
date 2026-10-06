@@ -16,8 +16,8 @@
         "width": 1600,
         "height": 900,
         "center": true,
-        "fullscreen": false,
-        "decorations": true,
+        "fullscreen": true,
+        "decorations": false,
         "resizable": true,
         "focus": true
       }

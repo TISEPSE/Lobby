@@ -18,9 +18,14 @@ export type Action =
 	| 'search'
 	/** Bouton Options (PlayStation) / Menu (Xbox) : l'alimentation. */
 	| 'menu'
-	/** Gâchettes hautes L1/LB et R1/RB : on change d'onglet. */
+	/** L1/LB et R1/RB : section précédente / suivante du dock — leur seul rôle. */
 	| 'prev'
-	| 'next';
+	| 'next'
+	/** L2/LT et R2/RT : catégorie précédente / suivante (filtres, périodes). */
+	| 'pagePrev'
+	| 'pageNext'
+	/** Bouton View (Xbox) / Create (PS5) : le tri de la bibliothèque. */
+	| 'view';
 
 const ENGAGE = 0.65;
 const RELEASE = 0.4;
@@ -35,6 +40,9 @@ const BUTTONS: Record<number, Action> = {
 	3: 'search',
 	4: 'prev',
 	5: 'next',
+	6: 'pagePrev',
+	7: 'pageNext',
+	8: 'view',
 	9: 'menu',
 	12: 'up',
 	13: 'down',
@@ -54,10 +62,12 @@ const KEYS: Record<string, Action> = {
 	x: 'options',
 	y: 'search',
 	m: 'menu',
-	PageUp: 'prev',
-	PageDown: 'next',
+	// Dock : A / E, comme L1 / R1. Catégories : Page précédente / suivante.
 	a: 'prev',
 	e: 'next',
+	Tab: 'view',
+	PageUp: 'pagePrev',
+	PageDown: 'pageNext',
 };
 
 type Listener = (action: Action) => void;
@@ -163,6 +173,24 @@ export function padLayout(): 'xbox' | 'ps5' {
 	if (!pad) return 'xbox';
 	const id = pad.id.toLowerCase();
 	return SONY.some((marker) => id.includes(marker)) ? 'ps5' : 'xbox';
+}
+
+/**
+ * Nom lisible d'une manette, tiré de l'identifiant du navigateur
+ * (« DualSense Wireless Controller (STANDARD GAMEPAD Vendor: 054c …) »).
+ */
+export function padName(id: string): string {
+	const lower = id.toLowerCase();
+	if (lower.includes('dualsense') || lower.includes('0ce6') || lower.includes('0df2')) return 'Manette DualSense';
+	if (lower.includes('dualshock') || (lower.includes('054c') && lower.includes('wireless controller'))) {
+		return 'Manette DualShock 4';
+	}
+	if (lower.includes('xbox') || lower.includes('xinput') || lower.includes('045e')) return 'Manette Xbox';
+	if (lower.includes('pro controller') || lower.includes('057e')) return 'Manette Switch Pro';
+	if (lower.includes('8bitdo')) return 'Manette 8BitDo';
+	// Sinon, le nom avant les détails techniques entre parenthèses.
+	const name = id.replace(/\(.*$/, '').trim();
+	return name || 'Manette';
 }
 
 /** Nombre de manettes branchées, affiché dans la barre du haut. */

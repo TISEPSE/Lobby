@@ -1,0 +1,109 @@
+/**
+ * Compte Epic Games : pseudo et temps de jeu par jeu, demandés aux serveurs
+ * d'Epic par Rust (commande `epic_account`). Epic ne garde pas le temps de
+ * jeu sur le disque, contrairement à Steam : il faut s'être connecté une fois
+ * (`epic_login`, page de connexion officielle d'Epic).
+ */
+
+/** Un jeu de la bibliothèque Epic, installé ou non. */
+export interface EpicGame {
+	app_name: string;
+	title: string;
+	cover: string;
+	hero: string;
+}
+
+interface RawAccount {
+	account_id: string;
+	display_name: string;
+	playtime: { app_name: string; minutes: number }[];
+	library: EpicGame[];
+}
+
+export const epicAccount = $state<{
+	/** Lecture terminée, compte trouvé ou non. */
+	ready: boolean;
+	/** Connexion en cours (fenêtre d'Epic ouverte). */
+	pending: boolean;
+	displayName: string;
+	/** Minutes de jeu, par nom interne de jeu Epic (en minuscules). */
+	playtime: Record<string, number>;
+	/** Dernière erreur (jeton expiré, Epic injoignable…), vide sinon. */
+	error: string;
+	/** Toute la bibliothèque Epic (jeux seulement), installée ou non. */
+	library: EpicGame[];
+}>({ ready: false, pending: false, displayName: '', playtime: {}, error: '', library: [] });
+
+async function tauri() {
+	if (!(window as any).__TAURI_INTERNALS__) return null;
+	return import('@tauri-apps/api/core');
+}
+
+export async function refreshEpicAccount() {
+	const api = await tauri();
+	if (!api) {
+		epicAccount.ready = true;
+		return;
+	}
+	try {
+		const raw = await api.invoke<RawAccount | null>('epic_account');
+		epicAccount.displayName = raw?.display_name ?? '';
+		epicAccount.playtime = Object.fromEntries(
+			(raw?.playtime ?? []).map((play) => [play.app_name, play.minutes])
+		);
+		epicAccount.library = raw?.library ?? [];
+		epicAccount.error = '';
+	} catch (e) {
+		// Session expirée ou Epic injoignable : on garde ce qu'on avait, et on
+		// le dit dans les réglages plutôt que par un bandeau à chaque démarrage.
+		epicAccount.error = String(e);
+	} finally {
+		epicAccount.ready = true;
+	}
+}
+
+/**
+ * Lit le compte au démarrage, et se réabonne au résultat des connexions.
+ * `onLogin` reçoit le bilan à afficher (pseudo, ou erreur).
+ */
+export async function initEpicAccount(onLogin?: (ok: boolean, message: string) => void) {
+	void refreshEpicAccount();
+	if (!(window as any).__TAURI_INTERNALS__) return;
+	const { listen } = await import('@tauri-apps/api/event');
+	await listen<{ ok: boolean; message: string }>('epic-login', async (event) => {
+		epicAccount.pending = false;
+		if (event.payload.ok) await refreshEpicAccount();
+		onLogin?.(event.payload.ok, event.payload.message);
+	});
+}
+
+export async function loginEpic() {
+	const api = await tauri();
+	if (!api) return;
+	epicAccount.pending = true;
+	try {
+		await api.invoke('epic_login');
+	} catch (e) {
+		epicAccount.pending = false;
+		throw e;
+	}
+}
+
+export async function logoutEpic() {
+	const api = await tauri();
+	if (!api) return;
+	await api.invoke('epic_logout');
+	epicAccount.displayName = '';
+	epicAccount.playtime = {};
+	epicAccount.library = [];
+	epicAccount.error = '';
+}
+
+/**
+ * Minutes de jeu Epic d'un jeu (`epic-<appname>`). L'identifiant suffit : un
+ * jeu Epic non installé n'est pas dans la liste des jeux de la bibliothèque.
+ */
+export function epicMinutesOf(id: string): number {
+	if (!id.startsWith('epic-')) return 0;
+	return epicAccount.playtime[id.slice('epic-'.length)] ?? 0;
+}

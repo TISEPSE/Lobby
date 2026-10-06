@@ -4,7 +4,8 @@
 	import TopBar from './lib/TopBar.svelte';
 	import Home from './lib/Home.svelte';
 	import Library from './lib/Library.svelte';
-	import Search from './lib/Search.svelte';
+	import SearchModal from './lib/SearchModal.svelte';
+	import VirtualKeyboard from './lib/VirtualKeyboard.svelte';
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
@@ -14,16 +15,36 @@
 	import { watchDownloads } from './lib/downloads.svelte.js';
 	import { play as playSound, setSoundEnabled as applySound, preloadSounds } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
+	import Stats from './lib/Stats.svelte';
+	import Profile from './lib/Profile.svelte';
+	import { demoLog, formatMinutes, summarize, type Period } from './lib/stats';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
 	import ArtPicker from './lib/ArtPicker.svelte';
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
-	import { updateGame, verifyGame, uninstallGame } from './lib/steamActions';
-	import { artwork, details } from './lib/steam.svelte.js';
+	import { updateGame, verifyGame, uninstallGame, installGame, installEpicGame } from './lib/steamActions';
+	import { artwork, details, heroFor, mediaOf } from './lib/steam.svelte.js';
+	import MediaViewer from './lib/MediaViewer.svelte';
+	import PadToast from './lib/PadToast.svelte';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
-	import { SEARCH_ROWS, keyAt, rowLength, nearestColumn, normalizeForSearch } from './lib/searchKeys';
 	import { listen, padCount, type Action } from './lib/gamepad';
+	import type { GlyphButton } from './lib/glyphs';
+	import {
+		forgetSteamLibrary,
+		initSteamAccount,
+		initSteamLibrary,
+		loginSteamLibrary,
+		steamAccount,
+		steamLibrary,
+	} from './lib/steamAccount.svelte.js';
+	import {
+		epicAccount,
+		initEpicAccount,
+		loginEpic,
+		logoutEpic,
+		refreshEpicAccount,
+	} from './lib/epicAccount.svelte.js';
 	import { play } from './lib/launcher';
 	import {
 		games,
@@ -32,8 +53,18 @@
 		isFavorite,
 		playtimeText,
 		initLibrary,
+		lastPlayedGame,
+		homeView,
+		playtimeOf,
+		HOME_ORDER_LABELS,
 		addGames,
+		syncLibrary,
+		FILTERS,
+		SORTS,
+		uninstalledSteamGames,
+		uninstalledEpicGames,
 		stats,
+		sessions,
 		type Filter,
 		type Sort,
 	} from './lib/library.svelte.js';
@@ -47,14 +78,14 @@
 		setBootVideoEnabled,
 		setSoundEnabled as saveSoundEnabled,
 		setScreensaverMinutes,
+		setHomeOrder,
+		setLibraryView,
 		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
 	} from './lib/settings.svelte.js';
 
-	const SECTIONS: Section[] = ['home', 'library', 'search', 'settings'];
-	const FILTERS: Filter[] = ['all', 'favorites', 'recent'];
-	const SORTS: Sort[] = ['title', 'recent', 'playtime'];
+	const SECTIONS: Section[] = ['home', 'library', 'settings', 'profile'];
 	const COLUMNS = 8;
 
 	/* Outil de développement, comme le `--capture` de la version Godot :
@@ -66,19 +97,60 @@
 
 	/** Section affichée, et si la sélection est montée sur la barre du haut. */
 	let section = $state<Section>(
-		wanted === 'library' || wanted === 'search' || wanted === 'settings' ? wanted : 'home'
+		wanted === 'library' || wanted === 'settings' || wanted === 'profile'
+			? wanted
+			: wanted === 'stats'
+				? 'profile'
+				: 'home'
 	);
-	let onTabs = $state(false);
+	/**
+	 * Statistiques : une sous-page des Réglages (Système), posée par-dessus. Les
+	 * réglages restent montés dessous et gardent leur sélection pour le retour.
+	 */
+	let statsOpen = $state(wanted === 'stats');
+	/** Saisie du pseudo, ouverte depuis le Profil (A sur le pseudo). */
+	let nameKeyboardOpen = $state(false);
+	let nameKeyboard: { handleAction: (action: Action) => void } | null = $state(null);
+	/** Fiche : boutons de la présentation, ou grille des médias en dessous. */
+	let detailZone = $state<'actions' | 'media'>(params.get('media') ? 'media' : 'actions');
+	let mediaIndex = $state(Number(params.get('slide') ?? 0));
+	let viewerOpen = $state(false);
+	let viewerComponent: { togglePause: () => void } | null = $state(null);
+	/** Plein écran sans bordure (mode console) ou fenêtre classique. */
+	let fullscreen = $state(true);
+
+	/** F11 ou Réglages → Système : la porte de sortie vers une fenêtre normale. */
+	async function toggleFullscreen() {
+		const tauri = (window as any).__TAURI_INTERNALS__;
+		if (!tauri) return;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			fullscreen = await invoke<boolean>('toggle_fullscreen');
+			notify(fullscreen ? 'Plein écran.' : 'Fenêtre (F11 pour revenir en plein écran).');
+		} catch (e) {
+			notify(`Impossible de changer d'affichage : ${e}`, false);
+		}
+	}
 	/** Jeu ouvert en fiche détaillée. Null : on est sur la section courante. */
 	let opened = $state<Game | null>(wanted === 'detail' ? (games[wantedIndex] ?? null) : null);
 
-	let homeIndex = $state(wantedIndex);
+	/**
+	 * -1 : la carte « Reprendre », en tête de l'accueil. On démarre dessus : le
+	 * dernier jeu se relance en un appui, dès l'allumage.
+	 */
+	let homeIndex = $state(params.has('index') ? wantedIndex : -1);
+	/** La bibliothèque enregistrée est chargée : on sait s'il y a un jeu à reprendre. */
+	let libraryReady = $state(false);
 	let libraryIndex = $state(wanted === 'library' ? wantedIndex : 0);
-	/** Recherche : texte saisi, zone active (clavier ou résultats), curseurs. */
-	let query = $state('');
-	let searchZone = $state<'keys' | 'results'>('keys');
-	let searchKey = $state({ row: 0, col: 0 });
-	let searchResult = $state(0);
+	/**
+	 * Recherche : une fenêtre (clavier virtuel + jeux), plus une page. Y
+	 * l'ouvre de partout ; `?search=1` l'ouvre directement (capture).
+	 */
+	let searchOpen = $state(params.get('search') === '1' || wanted === 'search');
+	let searchComponent: {
+		handleAction: (action: Action) => void;
+		selectionKey?: () => string | null;
+	} | null = $state(null);
 
 	/**
 	 * Vidéo d'introduction : jouée une fois au lancement, par-dessus l'interface
@@ -103,10 +175,17 @@
 		'/assets/boot/sonic_advance.webm',
 		'/assets/boot/radagon_elden_ring.webm',
 	];
-	const SEARCH_RESULT_COLUMNS = 8;
 
-	let filter = $state<Filter>('all');
-	let sort = $state<Sort>('title');
+	/**
+	 * Filtre et tri de la bibliothèque : ceux de la dernière session (réglages),
+	 * et chaque changement y est enregistré.
+	 */
+	const filter = $derived<Filter>(
+		FILTERS.includes(settings.library_filter as Filter) ? (settings.library_filter as Filter) : 'all'
+	);
+	const sort = $derived<Sort>(
+		SORTS.includes(settings.library_sort as Sort) ? (settings.library_sort as Sort) : 'title'
+	);
 
 	let clock = $state(formatClock());
 	let pads = $state(0);
@@ -124,7 +203,14 @@
 	/** Menu d'options de la tuile sélectionnée, sur l'accueil. */
 	let optionsOpen = $state(params.get('options') === '1');
 	/** Même menu, ouvert depuis une fiche : il n'y a pas de tuile à prolonger. */
-	let detailOptionsOpen = $state(params.get('options') === 'detail');
+	/**
+	 * Menu d'options en fenêtre : sur une fiche, ou dans la bibliothèque (X sur
+	 * une jaquette). `?options=detail` ou `?options=library` l'ouvrent (capture).
+	 */
+	let menuOptionsOpen = $state(params.get('options') === 'detail' || params.get('options') === 'library');
+	/** Bibliothèque : grille, ou boutons de l'en-tête (0 = Trier, 1 = Synchroniser). */
+	let libraryZone = $state<'grid' | 'header'>(params.get('zone') === 'header' ? 'header' : 'grid');
+	let headerIndex = $state(0);
 	let optionsIndex = $state(0);
 
 	/** Modales et scan */
@@ -144,29 +230,61 @@
 		isKeyboardActive?: () => boolean;
 		focusProfile?: () => void;
 		checkSteamGridKey?: (key: string) => Promise<string>;
+		selectionKey?: () => string | null;
+	} | null = $state(null);
+	let profileComponent: {
+		handleAction: (action: Action) => void;
+		selectionKey?: () => string;
+	} | null = $state(null);
+	function useSteamProfile() {
+		if (!steamAccount.persona) return;
+		setProfileName(steamAccount.persona);
+		if (steamAccount.avatar) setAvatar(steamAccount.avatar);
+		notify(`Profil Steam repris : ${steamAccount.persona}.`);
+	}
+
+	let statsComponent: {
+		handleAction: (action: Action) => void;
+		selectionKey?: () => string;
 	} | null = $state(null);
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let artPickerComponent: { handleAction: (action: Action) => void } | null = $state(null);
 
-	const libraryGames = $derived(view(filter, sort));
+	// Outil de capture : `?stats=demo` remplit le journal de parties fictives,
+	// jamais enregistrées, pour juger l'écran dans un navigateur.
+	if (params.get('stats') === 'demo' && sessions.length === 0) sessions.push(...demoLog(games));
 
 	/**
-	 * Résultats de la recherche : comparaison sans accents ni ponctuation, pour
-	 * que « repo » trouve « R.E.P.O. » et « spiderman » « Spider-Man ».
+	 * Bibliothèque complète : les jeux installés, plus les jeux Steam possédés
+	 * mais pas installés (connexion Steam), mélangés dans « Tous ».
 	 */
-	const searchResults = $derived.by(() => {
-		const needle = normalizeForSearch(query);
-		if (!needle) return games;
-		return games.filter((game) => normalizeForSearch(game.title).includes(needle));
+	const allGames = $derived([
+		...games,
+		...uninstalledSteamGames(steamAccount.owned),
+		...uninstalledEpicGames(epicAccount.library),
+	]);
+	const libraryGames = $derived(view(filter, sort, allGames));
+	/** Rangée d'accueil, dans l'ordre choisi (dernière partie d'abord par défaut). */
+	const homeGames = $derived(homeView(settings.home_order));
+
+	/** Dernier jeu lancé. `?resume=demo` en invente un, pour juger la carte dans un navigateur. */
+	const resumeGame = $derived(
+		params.get('resume') === 'demo' ? (games[1] ?? null) : lastPlayedGame()
+	);
+
+	// Sans jeu à reprendre, la carte disparaît : la sélection passe à la première tuile.
+	$effect(() => {
+		if (libraryReady && homeIndex < 0 && !resumeGame) homeIndex = 0;
 	});
+
 	const selected = $derived(
 		opened ??
 			(section === 'library'
 				? libraryGames[libraryIndex]
-				: section === 'search'
-					? searchResults[searchResult]
-					: games[homeIndex])
+				: homeIndex < 0
+						? (resumeGame ?? undefined)
+						: homeGames[homeIndex])
 	);
 
 	/**
@@ -175,9 +293,8 @@
 	 */
 	const backdropSrc = $derived.by(() => {
 		if (!selected) return '';
-		const sheet = selected.appid ? details[selected.appid] : undefined;
 		// Le fichier local d'abord : c'est l'image de fond choisie pour ce jeu.
-		return artwork[selected.id]?.hero || sheet?.hero || selected.hero || '';
+		return heroFor(selected);
 	});
 
 	/** Artworks disponibles pour la veille, sans doublon ni case vide. */
@@ -193,7 +310,7 @@
 
 	const favoriteCount = $derived(games.filter((g) => isFavorite(g.id)).length);
 	const totalPlaytimeMinutes = $derived(
-		Object.values(stats).reduce((acc, curr) => acc + (curr.playtimeMinutes || 0), 0)
+		games.reduce((acc, game) => acc + playtimeOf(game.id), 0)
 	);
 	const totalPlaytimeFormatted = $derived.by(() => {
 		if (totalPlaytimeMinutes <= 0) return '0 min';
@@ -206,7 +323,14 @@
 		return new Date().toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' });
 	}
 
+	/**
+	 * Changements différés par `startViewTransition` : l'état ne bouge qu'après
+	 * coup, le compteur dit tout de suite qu'il va bouger (empreinte du son).
+	 */
+	let navTick = 0;
+
 	function transition(change: () => void) {
+		navTick++;
 		if (!document.startViewTransition) {
 			change();
 			return;
@@ -217,6 +341,9 @@
 	function openDetail(game: Game | undefined) {
 		if (!game) return;
 		detailButton = 0;
+		detailZone = 'actions';
+		mediaIndex = 0;
+		viewerOpen = false;
 		transition(() => (opened = game));
 	}
 
@@ -226,35 +353,36 @@
 
 	function goToSection(next: Section) {
 		if (next === section) return;
-		transition(() => {
-			section = next;
-			libraryIndex = 0;
-		});
+		// Pas de `startViewTransition` ici : il photographiait toute la page,
+		// dock flouté compris, et le fondu saccadait. Le dock reste en place,
+		// seul le contenu entre en fondu (`.screen`).
+		section = next;
+		libraryIndex = 0;
+		libraryZone = 'grid';
+		// On revient toujours sur la section elle-même, pas sur une sous-page.
+		statsOpen = false;
 	}
 
-	/** Entrées de la barre du haut : on change de section en la parcourant. */
-	function handleTabs(action: Action) {
-		const current = SECTIONS.indexOf(section);
-		if (action === 'left') goToSection(SECTIONS[Math.max(0, current - 1)]);
-		else if (action === 'right') goToSection(SECTIONS[Math.min(SECTIONS.length - 1, current + 1)]);
-		else if (action === 'down' || action === 'accept') {
-			onTabs = false;
-			if (section === 'settings') {
-				settingsComponent?.focusProfile?.();
-			}
-		} else if (action === 'cancel') {
-			if (section !== 'home') {
-				goToSection('home');
-			}
-			onTabs = false;
-		}
+	/**
+	 * L1 / R1 : section précédente / suivante du dock. C'est le **seul** moyen
+	 * d'y circuler — la sélection ne monte jamais sur le dock, elle reste dans
+	 * le contenu. Pas de bouclage : au bout, on reste au bout.
+	 */
+	function stepSection(step: number) {
+		const at = SECTIONS.indexOf(section);
+		const next = SECTIONS[Math.min(SECTIONS.length - 1, Math.max(0, at + step))];
+		opened = null;
+		optionsOpen = false;
+		menuOptionsOpen = false;
+		goToSection(next);
 	}
 
 	function handleHome(action: Action) {
-		if (action === 'left') homeIndex = Math.max(0, homeIndex - 1);
-		else if (action === 'right') homeIndex = Math.min(games.length - 1, homeIndex + 1);
-		else if (action === 'up') onTabs = true;
-		else if (action === 'accept') openDetail(games[homeIndex]);
+		if (action === 'left') homeIndex = Math.max(resumeGame ? -1 : 0, homeIndex - 1);
+		else if (action === 'right') homeIndex = Math.min(homeGames.length - 1, homeIndex + 1);
+		// La carte « Reprendre » lance directement : c'est tout son intérêt.
+		else if (action === 'accept' && homeIndex < 0) launch();
+		else if (action === 'accept') openDetail(homeGames[homeIndex]);
 		else if (action === 'options') {
 			optionsOpen = true;
 			optionsIndex = 0;
@@ -262,6 +390,18 @@
 	}
 
 	function handleLibrary(action: Action) {
+		// En-tête : Trier et Synchroniser, de vrais boutons.
+		if (libraryZone === 'header') {
+			if (action === 'left') headerIndex = 0;
+			else if (action === 'right') headerIndex = 1;
+			else if (action === 'down') libraryZone = 'grid';
+			else if (action === 'accept') {
+				if (headerIndex === 0) cycleSort();
+				else runSync();
+			} else if (action === 'cancel') goToSection('home');
+			return;
+		}
+
 		const total = libraryGames.length;
 		const row = Math.floor(libraryIndex / COLUMNS);
 		if (action === 'left') libraryIndex = Math.max(0, libraryIndex - 1);
@@ -272,85 +412,67 @@
 			// diagonale, à l'autre bout de l'écran.
 			const below = libraryIndex + COLUMNS;
 			if (below < total) libraryIndex = below;
-		}
-		else if (action === 'up') {
-			if (row === 0) onTabs = true;
-			else libraryIndex = Math.max(0, libraryIndex - COLUMNS);
+		} else if (action === 'up') {
+			// Au-dessus de la première rangée : les boutons de l'en-tête.
+			if (row > 0) libraryIndex = Math.max(0, libraryIndex - COLUMNS);
+			else libraryZone = 'header';
 		} else if (action === 'accept') openDetail(libraryGames[libraryIndex]);
-		else if (action === 'search') {
-			sort = SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length];
-			libraryIndex = 0;
-		} else if (action === 'cancel') goToSection('home');
+		else if (action === 'options' && libraryGames[libraryIndex]) {
+			// X : les options du jeu, comme sur l'accueil.
+			optionsIndex = 0;
+			menuOptionsOpen = true;
+		} else if (action === 'view') cycleSort();
+		else if (action === 'cancel') goToSection('home');
 	}
 
-	/** Clavier à gauche, résultats à droite : le passage se fait au bord. */
-	function handleSearch(action: Action) {
-		if (searchZone === 'keys') {
-			const { row, col } = searchKey;
-			const lastRow = SEARCH_ROWS.length - 1;
-
-			if (action === 'left') searchKey = { row, col: Math.max(0, col - 1) };
-			else if (action === 'right') {
-				searchKey = { row, col: Math.min(rowLength(row) - 1, col + 1) };
-			} else if (action === 'up') {
-				if (row === 0) onTabs = true;
-				else searchKey = { row: row - 1, col: nearestColumn(row, col, row - 1) };
-			} else if (action === 'down') {
-				// Sous la dernière rangée de touches, on tombe dans les résultats :
-				// le clavier se replie et la grille prend la place.
-				if (row === lastRow) searchZone = 'results';
-				else searchKey = { row: row + 1, col: nearestColumn(row, col, row + 1) };
-			} else if (action === 'accept') {
-				pressKey();
-			} else if (action === 'cancel') {
-				// B efface une lettre ; à vide, il quitte l'écran.
-				if (query) query = query.slice(0, -1);
-				else goToSection('home');
-			} else if (action === 'search') {
-				query += ' ';
-				searchResult = 0;
-			} else if (action === 'options') {
-				// X efface tout, comme la touche large du clavier.
-				query = '';
-				searchResult = 0;
-			}
-			return;
-		}
-
-		const total = searchResults.length;
-		const row = Math.floor(searchResult / SEARCH_RESULT_COLUMNS);
-		if (action === 'left') searchResult = Math.max(0, searchResult - 1);
-		else if (action === 'right') searchResult = Math.min(total - 1, searchResult + 1);
-		else if (action === 'down') {
-			// Comme dans la bibliothèque : pas de saut en diagonale depuis la
-			// dernière rangée.
-			const below = searchResult + SEARCH_RESULT_COLUMNS;
-			if (below < total) searchResult = below;
-		}
-		else if (action === 'up') {
-			// La première rangée ramène au clavier, pas à la barre du haut : on
-			// est encore en train de chercher.
-			if (row === 0) searchZone = 'keys';
-			else searchResult = Math.max(0, searchResult - SEARCH_RESULT_COLUMNS);
-		} else if (action === 'accept') openDetail(searchResults[searchResult]);
-		else if (action === 'cancel') searchZone = 'keys';
+	/** Critère de tri suivant ; la sélection repart du début. */
+	function cycleSort() {
+		setLibraryView(filter, SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length]);
+		libraryIndex = 0;
 	}
 
-	/** Une touche du clavier : elle écrit une lettre, ou fait son action. */
-	function pressKey() {
-		const key = keyAt(searchKey.row, searchKey.col);
-		if (!key) return;
-		if (key.action === 'space') query += ' ';
-		else if (key.action === 'backspace') query = query.slice(0, -1);
-		else if (key.action === 'clear') query = '';
-		else query += key.value;
-		searchResult = 0;
+
+	/** Y : la recherche, de partout. */
+	function openSearch() {
+		searchOpen = true;
+	}
+
+	/** Médias de la fiche ouverte : bandes-annonces puis captures. */
+	const detailMedia = $derived(
+		params.get('media') === 'demo'
+			? Array.from({ length: 6 }, () => ({ kind: 'image' as const, thumb: '', src: '' }))
+			: opened?.appid
+				? mediaOf(details[opened.appid])
+				: []
+	);
+
+	/** Visionneuse : gauche / droite parcourent, A met en pause, B referme. */
+	function handleViewer(action: Action) {
+		if (action === 'cancel') viewerOpen = false;
+		else if (action === 'left') mediaIndex = Math.max(0, mediaIndex - 1);
+		else if (action === 'right') mediaIndex = Math.min(detailMedia.length - 1, mediaIndex + 1);
+		else if (action === 'accept') viewerComponent?.togglePause();
+	}
+
+	/** Slider « Captures et vidéos », sous la présentation du jeu. */
+	function handleMedia(action: Action) {
+		const total = detailMedia.length;
+		if (action === 'left') mediaIndex = Math.max(0, mediaIndex - 1);
+		else if (action === 'right') mediaIndex = Math.min(total - 1, mediaIndex + 1);
+		else if (action === 'up' || action === 'cancel') detailZone = 'actions';
+		else if (action === 'accept' && total > 0) viewerOpen = true;
 	}
 
 	function handleDetail(action: Action) {
 		if (!opened) return;
-		if (detailOptionsOpen) return handleOptions(action);
+		if (menuOptionsOpen) return handleOptions(action);
+		if (viewerOpen) return handleViewer(action);
+		if (detailZone === 'media') return handleMedia(action);
 
+		if (action === 'down' && detailMedia.length > 0) {
+			detailZone = 'media';
+			return;
+		}
 		if (action === 'cancel') closeDetail();
 		else if (action === 'left') detailButton = Math.max(0, detailButton - 1);
 		else if (action === 'right') detailButton = Math.min(2, detailButton + 1);
@@ -363,7 +485,7 @@
 
 	function openDetailOptions() {
 		optionsIndex = 0;
-		detailOptionsOpen = true;
+		menuOptionsOpen = true;
 	}
 
 	function switchFavorite() {
@@ -407,7 +529,55 @@
 		powerPending = null;
 	}
 
+	/** Synchronisation en cours (bouton X de la bibliothèque). */
+	let syncing = $state(false);
+
+	/**
+	 * Resynchronise la bibliothèque avec le disque : nouveaux jeux ajoutés,
+	 * dossiers déplacés suivis, jeux disparus retirés. Sans fenêtre de
+	 * validation — c'est un geste rapide, le bilan s'affiche en bas.
+	 */
+	async function runSync() {
+		if (syncing) return;
+		const tauri = (window as any).__TAURI_INTERNALS__;
+		if (!tauri) return notify('Hors application : rien à synchroniser.');
+		syncing = true;
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			const scanned = await invoke<Game[]>('scan_installed_games', {
+				customFolders: settings.game_folders,
+			});
+			const report = await syncLibrary(scanned, (paths) => invoke<boolean[]>('paths_exist', { paths }));
+			libraryIndex = 0;
+			const parts = [
+				report.added && `${report.added} ajouté${report.added > 1 ? 's' : ''}`,
+				report.updated && `${report.updated} mis à jour`,
+				report.removed && `${report.removed} retiré${report.removed > 1 ? 's' : ''}`,
+			].filter(Boolean);
+			notify(parts.length ? `Bibliothèque synchronisée : ${parts.join(' · ')}.` : 'Bibliothèque déjà à jour.');
+		} catch (e) {
+			notify(`Synchronisation impossible : ${e}`, false);
+		} finally {
+			syncing = false;
+		}
+	}
+
+	/**
+	 * Numéro du scan en cours. Fermer la fenêtre l'incrémente : un résultat
+	 * qui arrive pour un ancien numéro est ignoré. C'est ce qui rend
+	 * l'annulation instantanée — le scan Rust finit dans son coin, sans rien
+	 * afficher.
+	 */
+	let scanTicket = 0;
+
+	function closeScan() {
+		scanTicket++;
+		scanModalOpen = false;
+		isScanning = false;
+	}
+
 	async function runGameScan() {
+		const ticket = ++scanTicket;
 		scanModalOpen = true;
 		isScanning = true;
 		scannedCandidates = [];
@@ -418,11 +588,12 @@
 				const results = await invoke<Game[]>('scan_installed_games', {
 					customFolders: settings.game_folders,
 				});
+				if (ticket !== scanTicket) return;
 				scannedCandidates = results;
 			} catch (e) {
-				notify(`Erreur pendant le scan : ${e}`, false);
+				if (ticket === scanTicket) notify(`Erreur pendant le scan : ${e}`, false);
 			} finally {
-				isScanning = false;
+				if (ticket === scanTicket) isScanning = false;
 			}
 		} else {
 			// Mock pour développement dans navigateur
@@ -473,37 +644,89 @@
 		// Un seul endroit décide du son : les écrans n'ont pas à y penser.
 		if (action === 'accept') playSound('accept');
 		else if (action === 'cancel') playSound('cancel');
-		else if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
-			playSound('move');
+
+		// Une direction ne sonne que si la sélection a vraiment bougé : buter
+		// contre le bord d'une rangée ou descendre depuis une tuile de l'accueil
+		// ne doit rien faire entendre.
+		const move = action === 'up' || action === 'down' || action === 'left' || action === 'right';
+		const before = move ? selectionKey() : null;
+		dispatch(action);
+		if (move) {
+			const after = selectionKey();
+			if (before === null || after === null || before !== after) playSound('move');
 		}
+	}
+
+	/**
+	 * Empreinte de la sélection, comparée avant et après une direction. `null`
+	 * quand une fenêtre ne sait pas la donner : on sonne alors à chaque fois,
+	 * comme avant.
+	 */
+	function selectionKey(): string | null {
+		if (avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
+		if (searchOpen) return searchComponent?.selectionKey?.() ?? null;
+		if (nameKeyboardOpen) return null;
+		const settingsKey = section === 'settings' ? (settingsComponent?.selectionKey?.() ?? null) : '';
+		if (settingsKey === null) return null;
+		return JSON.stringify([
+			navTick,
+			section,
+			homeIndex,
+			libraryIndex,
+			libraryZone,
+			headerIndex,
+			searchOpen,
+			detailButton,
+			detailZone,
+			mediaIndex,
+			viewerOpen,
+			powerIndex,
+			optionsIndex,
+			opened?.id,
+			section === 'profile' ? (profileComponent?.selectionKey?.() ?? null) : '',
+			statsOpen ? (statsComponent?.selectionKey?.() ?? null) : '',
+			settingsKey,
+		]);
+	}
+
+	function dispatch(action: Action) {
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
 		if (artPickerOpen) return artPickerComponent?.handleAction(action);
+		if (searchOpen) return searchComponent?.handleAction(action);
+		if (nameKeyboardOpen) return nameKeyboard?.handleAction(action);
 		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
 			return settingsComponent.handleAction(action);
 		}
 		if (action === 'menu') return openPower();
-		// L1 / R1 ne changent plus de section : on passe d'un onglet à l'autre
-		// par la barre du haut. Ils servent là où il y a des catégories à
-		// parcourir, c'est-à-dire la bibliothèque.
-		if (action === 'prev' || action === 'next') {
+		// Y : la recherche, depuis n'importe quel écran (hors fenêtres).
+		if (action === 'search' && !optionsOpen && !menuOptionsOpen && !viewerOpen) {
+			return openSearch();
+		}
+		// L1 / R1 : le dock, et rien d'autre.
+		if (action === 'prev' || action === 'next') return stepSection(action === 'next' ? 1 : -1);
+		// L2 / R2 : les catégories de l'écran, là où il y en a.
+		if (action === 'pagePrev' || action === 'pageNext') {
+			// Sur les statistiques, les catégories sont les périodes.
+			if (section === 'profile' && statsOpen && !opened) {
+				return statsComponent?.handleAction(action);
+			}
 			if (section !== 'library' || opened || optionsOpen) return;
-			const step = action === 'next' ? 1 : -1;
+			const step = action === 'pageNext' ? 1 : -1;
 			const at = FILTERS.indexOf(filter);
-			filter = FILTERS[(at + step + FILTERS.length) % FILTERS.length];
+			setLibraryView(FILTERS[(at + step + FILTERS.length) % FILTERS.length], sort);
 			libraryIndex = 0;
 			return;
 		}
 		if (optionsOpen) return handleOptions(action);
+		if (menuOptionsOpen && !opened) return handleOptions(action);
 		if (opened) return handleDetail(action);
-		if (onTabs) return handleTabs(action);
+		if (section === 'profile' && statsOpen) return statsComponent?.handleAction(action);
 		if (section === 'library') return handleLibrary(action);
-		if (section === 'search') return handleSearch(action);
 		if (section === 'home') return handleHome(action);
 		if (section === 'settings') return settingsComponent?.handleAction(action);
-		if (action === 'up') onTabs = true;
-		else if (action === 'cancel') goToSection('home');
+		if (section === 'profile') return profileComponent?.handleAction(action);
 	}
 
 	let noticeTimer: ReturnType<typeof setTimeout> | null = null;
@@ -522,9 +745,23 @@
 	}
 
 	async function launch() {
-		playSound('launch');
 		if (!selected) return;
+		// Un jeu possédé mais pas installé : on confie l'installation à son launcher.
+		if (selected.installed === false) {
+			playSound('accept');
+			return notify(await installSelected());
+		}
+		playSound('launch');
 		notify(await play(selected));
+	}
+
+	/** Installation par Steam ou par le launcher Epic, selon la boutique du jeu. */
+	async function installSelected(): Promise<Outcome> {
+		if (selected?.source === 'epic' && selected.id.startsWith('epic-')) {
+			return installEpicGame(selected.id.slice('epic-'.length));
+		}
+		if (selected?.appid) return installGame(selected.appid);
+		return { ok: false, message: 'Installation impossible : boutique inconnue.' };
 	}
 
 	onMount(() => {
@@ -536,13 +773,38 @@
 		// juste, pas retomber sur le bip de secours.
 		if (settings.sound_enabled) preloadSounds();
 		initSettings();
-		initLibrary();
+		initLibrary().then(() => (libraryReady = true));
+		// Le compte local d'abord : la liste complète en complète les temps.
+		initSteamAccount().then(() =>
+			initSteamLibrary((ok, message) => {
+				if (ok) {
+					// Première connexion, profil encore par défaut : on reprend
+					// le pseudo et la photo du compte Steam.
+					if (settings.profile_name === 'Joueur') useSteamProfile();
+					notify(`Bibliothèque Steam synchronisée : ${message} jeux.`);
+				}
+				else if (message === 'connexion annulée') notify('Connexion Steam annulée.');
+				else notify(`Bibliothèque Steam impossible : ${message}`, false);
+			})
+		);
+		initEpicAccount((ok, message) => {
+			if (ok) notify(`Epic Games connecté : ${message}.`);
+			// Fenêtre fermée à la main : ce n'est pas une erreur.
+			else if (message === 'connexion annulée') notify('Connexion Epic annulée.');
+			else notify(`Connexion Epic impossible : ${message}`, false);
+		});
 		const stop = listen(handle);
 		// Filet de sécurité : sans cela, une erreur non rattrapée laissait une
 		// interface figée sans rien dire. On préfère un bandeau explicite.
 		const onError = (event: ErrorEvent) => notify(`Erreur : ${event.message}`, false);
 		const onRejection = (event: PromiseRejectionEvent) =>
 			notify(`Erreur : ${event.reason}`, false);
+		const onF11 = (event: KeyboardEvent) => {
+			if (event.key !== 'F11') return;
+			event.preventDefault();
+			toggleFullscreen();
+		};
+		window.addEventListener('keydown', onF11);
 		window.addEventListener('error', onError);
 		window.addEventListener('unhandledrejection', onRejection);
 		const timer = setInterval(() => {
@@ -563,6 +825,7 @@
 			stop();
 			stopDownloads();
 			clearInterval(timer);
+			window.removeEventListener('keydown', onF11);
 			window.removeEventListener('error', onError);
 			window.removeEventListener('unhandledrejection', onRejection);
 		};
@@ -578,9 +841,14 @@
 					},
 					{ id: 'art', label: 'Changer la jaquette', icon: 'image' },
 					{ id: 'art-bg', label: "Changer l'image de fond", icon: 'video' },
-					{ id: 'update', label: 'Mettre à jour', icon: 'download' },
-					{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
-					{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
+					// Pas installé : rien à mettre à jour ni à désinstaller.
+					...(selected.installed === false
+						? [{ id: 'install', label: 'Installer', icon: 'download' }]
+						: [
+								{ id: 'update', label: 'Mettre à jour', icon: 'download' },
+								{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
+								{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
+							]),
 				]
 			: []
 	);
@@ -590,7 +858,7 @@
 		else if (action === 'down') optionsIndex = Math.min(tileActions.length - 1, optionsIndex + 1);
 		else if (action === 'cancel' || action === 'options') {
 			optionsOpen = false;
-			detailOptionsOpen = false;
+			menuOptionsOpen = false;
 		}
 		else if (action === 'accept') await runTileAction(tileActions[optionsIndex]?.id);
 	}
@@ -611,6 +879,9 @@
 				artPickerTarget = 'background';
 				artPickerOpen = true;
 				break;
+			case 'install':
+				notify(await installSelected());
+				break;
 			case 'update':
 				if (selected.appid) notify(await updateGame(selected.appid));
 				break;
@@ -623,154 +894,164 @@
 		}
 		if (id !== 'favorite') {
 			optionsOpen = false;
-			detailOptionsOpen = false;
+			menuOptionsOpen = false;
 		}
 	}
 
 	const keyboardOpen = $derived(
-		section === 'settings' && (settingsComponent?.isKeyboardActive?.() ?? false)
+		nameKeyboardOpen ||
+			(section === 'settings' && (settingsComponent?.isKeyboardActive?.() ?? false))
 	);
 
-	const help = $derived(
-		keyboardOpen
-			? [
-					{ button: 'a' as const, label: 'Taper' },
-					{ button: 'x' as const, label: 'Effacer' },
-					{ button: 'y' as const, label: 'Espace' },
-					{ button: 'b' as const, label: 'Annuler' },
-				]
-			: powerOpen
-			? [
-					{ button: 'a' as const, label: 'Valider' },
-					{ button: 'b' as const, label: 'Annuler' },
-				]
-			: avatarPickerOpen
-				? [
-						{ button: 'a' as const, label: 'Choisir' },
-						{ button: 'b' as const, label: 'Fermer' },
-					]
-				: artPickerOpen
-					? [
-							{ button: 'a' as const, label: 'Choisir cette image' },
-							{ button: 'b' as const, label: 'Fermer' },
-						]
-					: scanModalOpen
-					? [
-							{ button: 'a' as const, label: 'Cocher / Valider' },
-							{ button: 'x' as const, label: 'Tout cocher' },
-							{ button: 'b' as const, label: 'Fermer' },
-						]
-					: optionsOpen
-						? [
-								{ button: 'a' as const, label: 'Choisir' },
-								{ button: 'b' as const, label: 'Fermer' },
-							]
-						: opened
-							? detailOptionsOpen
-								? [
-										{ button: 'a' as const, label: 'Choisir' },
-										{ button: 'b' as const, label: 'Fermer' },
-									]
-								: [
-										{
-											button: 'a' as const,
-											label:
-												detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Favori' : 'Options',
-										},
-										{ button: 'x' as const, label: 'Options' },
-										{ button: 'b' as const, label: 'Retour' },
-									]
-							: section === 'library'
-								? [
-										{ button: 'a' as const, label: 'Ouvrir' },
-										{ button: 'r1' as const, label: 'Catégorie' },
-										{ button: 'y' as const, label: 'Tri' },
-										{ button: 'b' as const, label: 'Accueil' },
-									]
-								: section === 'search'
-									? searchZone === 'keys'
-										? [
-												{ button: 'a' as const, label: 'Taper' },
-												{ button: 'y' as const, label: 'Espace' },
-												{ button: 'b' as const, label: query ? 'Effacer' : 'Retour' },
-											]
-										: [
-												{ button: 'a' as const, label: 'Ouvrir' },
-												{ button: 'b' as const, label: 'Clavier' },
-											]
-									: section === 'settings'
-										? [
-												{ button: 'a' as const, label: 'Valider' },
-												{ button: 'b' as const, label: 'Retour' },
-											]
-									: [
-											{ button: 'a' as const, label: 'Ouvrir' },
-											{ button: 'x' as const, label: 'Options' },
-											{ button: 'y' as const, label: 'Recherche' },
-										]
-	);
+	/** Aide du bas : ce que font les boutons sur l'écran ou la fenêtre du moment. */
+	const help = $derived.by(() => {
+		type Entry = { button: GlyphButton; label: string };
+		const list = (...entries: [GlyphButton, string][]): Entry[] =>
+			entries.map(([button, label]) => ({ button, label }));
+
+		if (searchOpen) return list(['a', 'Taper / Ouvrir'], ['y', 'Espace'], ['b', 'Fermer']);
+		if (keyboardOpen) return list(['a', 'Taper'], ['x', 'Effacer'], ['y', 'Espace'], ['b', 'Annuler']);
+		if (powerOpen) return list(['a', 'Valider'], ['b', 'Annuler']);
+		if (avatarPickerOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
+		if (artPickerOpen) return list(['a', 'Choisir cette image'], ['b', 'Fermer']);
+		if (scanModalOpen) {
+			return isScanning
+				? list(['b', 'Annuler'])
+				: list(['a', 'Cocher / Valider'], ['x', 'Tout cocher'], ['b', 'Fermer']);
+		}
+		if (optionsOpen || (menuOptionsOpen && !opened)) return list(['a', 'Choisir'], ['b', 'Fermer']);
+		if (opened) {
+			if (viewerOpen) return list(['a', 'Lecture / pause'], ['b', 'Fermer']);
+			if (detailZone === 'media') return list(['a', 'Agrandir'], ['b', 'Retour']);
+			if (menuOptionsOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
+			const action = detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Favori' : 'Options';
+			return list(['a', action], ['x', 'Options'], ['b', 'Retour']);
+		}
+		if (section === 'library') {
+			if (libraryZone === 'header') {
+				return list(['a', headerIndex === 0 ? 'Changer le tri' : 'Synchroniser'], ['b', 'Accueil']);
+			}
+			return list(
+				['a', 'Ouvrir'],
+				['x', 'Options'],
+				['r2', 'Catégorie'],
+				['y', 'Recherche'],
+				['b', 'Accueil']
+			);
+		}
+		if (section === 'profile' && statsOpen) return list(['a', 'Ouvrir'], ['r2', 'Période'], ['b', 'Retour']);
+		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['b', 'Accueil']);
+		if (section === 'settings') return list(['a', 'Valider'], ['b', 'Accueil']);
+		return list(
+			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
+			['x', 'Options'],
+			['y', 'Recherche']
+		);
+	});
 </script>
 
 <Backdrop src={backdropSrc} dimmed={opened !== null || section !== 'home'} />
 
 <TopBar
 	{section}
-	focused={onTabs}
 	{clock}
 	{pads}
 	gamesCount={games.length}
 	profileName={settings.profile_name}
 	avatar={settings.avatar_path}
-	onSelectSection={(sec) => {
-		goToSection(sec);
-		onTabs = false;
-		if (sec === 'settings') {
-			settingsComponent?.focusProfile?.();
-		}
-	}}
+	onSelectSection={goToSection}
+	searching={searchOpen}
+	onOpenSearch={openSearch}
 />
 
 <main>
+	{#key section}
+	<div class="screen">
 	{#if opened}
 		<Detail
 			game={opened}
 			favorite={isFavorite(opened.id)}
 			selected={detailButton}
 			playtime={playtimeText(opened.id)}
+			zone={detailZone}
+			{mediaIndex}
 		/>
 	{:else if section === 'home'}
 		<Home
-			{games}
+			games={homeGames}
 			index={homeIndex}
+			resume={resumeGame}
 			actions={tileActions}
 			{optionsOpen}
 			{optionsIndex}
 		/>
 	{:else if section === 'library'}
-		<Library games={libraryGames} index={libraryIndex} {filter} {sort} columns={COLUMNS} />
+		<Library
+			games={libraryGames}
+			index={libraryIndex}
+			{syncing}
+			zone={libraryZone}
+			{headerIndex}
+			{filter}
+			{sort}
+			columns={COLUMNS}
+		/>
+	{:else if section === 'profile'}
+		<Profile
+			bind:this={profileComponent}
+			games={allGames}
+			focused={!statsOpen}
+			profileName={settings.profile_name}
+			avatar={settings.avatar_path}
+			steamPersona={steamAccount.persona}
+			steamAvatar={steamAccount.avatar}
+			epicName={epicAccount.displayName}
+			epicPending={epicAccount.pending}
+			epicError={epicAccount.error}
+			epicGamesCount={Object.keys(epicAccount.playtime).length}
+			steamLibraryCount={Object.keys(steamAccount.owned).length}
+			steamLibraryDate={steamLibrary.fetchedAt}
+			steamLibraryPending={steamLibrary.pending}
+			onSteamLibraryLogin={() =>
+				loginSteamLibrary().catch((e) => notify(`Connexion Steam impossible : ${e}`, false))}
+			onSteamLibraryForget={async () => {
+				await forgetSteamLibrary();
+				notify('Liste Steam oubliée : seuls les jeux installés restent.');
+			}}
+			onEditName={() => (nameKeyboardOpen = true)}
+			onChangeAvatar={() => (avatarPickerOpen = true)}
+			onEpicLogin={() => loginEpic().catch((e) => notify(`Connexion Epic impossible : ${e}`, false))}
+			onEpicRefresh={async () => {
+				await refreshEpicAccount();
+				notify(epicAccount.error ? `Epic : ${epicAccount.error}` : 'Temps de jeu Epic actualisé.', !epicAccount.error);
+			}}
+			onEpicLogout={async () => {
+				await logoutEpic();
+				notify('Compte Epic Games déconnecté.');
+			}}
+			onOpenStats={() => transition(() => (statsOpen = true))}
+			onBack={() => goToSection('home')}
+		/>
+		{#if statsOpen}
+			<div class="subpage">
+				<Stats
+					bind:this={statsComponent}
+					games={allGames}
+					profileName={settings.profile_name}
+					initialPeriod={(params.get('period') as Period) ?? 'month'}
+					onOpenGame={openDetail}
+					onBack={() => transition(() => (statsOpen = false))}
+				/>
+			</div>
+		{/if}
 	{:else if section === 'settings'}
 		<Settings
 			bind:this={settingsComponent}
-			focused={!onTabs}
-			profileName={settings.profile_name}
-			avatar={settings.avatar_path}
-			gamesCount={games.length}
-			favoriteCount={favoriteCount}
-			totalPlaytime={totalPlaytimeFormatted}
 			gameFolders={settings.game_folders}
 			buttonLayout={settings.button_layout}
-			onBack={() => {
-				onTabs = true;
-			}}
-			onReturnToHub={() => {
-				onTabs = true;
-			}}
-			onOpenAvatarPicker={() => (avatarPickerOpen = true)}
+			onBack={() => goToSection('home')}
+			onReturnToHub={() => goToSection('home')}
 			onOpenScan={runGameScan}
-			onChangeName={(name) => {
-				setProfileName(name);
-				notify(`Pseudo mis à jour : ${name}`);
-			}}
 			onAddFolder={addGameFolder}
 			onRemoveFolder={removeGameFolder}
 			onChangeLayout={setButtonLayout}
@@ -783,9 +1064,18 @@
 				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
 			}}
 			soundEnabled={settings.sound_enabled}
+			homeOrderLabel={HOME_ORDER_LABELS[settings.home_order]}
+			onCycleHomeOrder={() => {
+				const next = settings.home_order === 'recent' ? 'title' : 'recent';
+				setHomeOrder(next);
+				homeIndex = resumeGame ? -1 : 0;
+				notify(`Accueil trié par ${HOME_ORDER_LABELS[next].toLowerCase()}.`);
+			}}
 			screensaverMinutes={settings.screensaver_minutes}
 			steamGridKey={settings.steamgriddb_key}
-			initialCategory={params.get('cat') ?? 'profile'}
+			initialCategory={params.get('cat') ?? 'games'}
+			{fullscreen}
+			onToggleFullscreen={toggleFullscreen}
 			initialKeyboard={params.get('modal') === 'keyboard'}
 			onChangeSteamGridKey={async (key) => {
 				setSteamGridKey(key);
@@ -821,17 +1111,9 @@
 				notify(settings.boot_video_enabled ? 'Vidéo activée.' : 'Vidéo désactivée.');
 			}}
 		/>
-	{:else}
-		<Search
-			games={searchResults}
-			{query}
-			zone={searchZone}
-			keyRow={searchKey.row}
-			keyCol={searchKey.col}
-			resultIndex={searchResult}
-			columns={SEARCH_RESULT_COLUMNS}
-		/>
 	{/if}
+	</div>
+	{/key}
 </main>
 
 {#if bootPlaying && settings.boot_video_enabled && settings.boot_video}
@@ -840,6 +1122,41 @@
 
 {#if saverOn}
 	<ScreenSaver images={saverImages} />
+{/if}
+
+<SearchModal
+	bind:this={searchComponent}
+	open={searchOpen}
+	games={allGames}
+	onOpenGame={(game) => {
+		searchOpen = false;
+		openDetail(game);
+	}}
+	onClose={() => (searchOpen = false)}
+/>
+
+<VirtualKeyboard
+	bind:this={nameKeyboard}
+	open={nameKeyboardOpen}
+	title="Modifier le pseudo"
+	subtitle="Saisis ton nom avec la manette ou le clavier"
+	initialValue={settings.profile_name}
+	maxLength={24}
+	onConfirm={(name) => {
+		setProfileName(name);
+		nameKeyboardOpen = false;
+		notify(`Pseudo mis à jour : ${name}`);
+	}}
+	onClose={() => (nameKeyboardOpen = false)}
+/>
+
+{#if opened && viewerOpen && detailMedia.length > 0}
+	<MediaViewer
+		bind:this={viewerComponent}
+		items={detailMedia}
+		index={mediaIndex}
+		title={opened.title}
+	/>
 {/if}
 
 {#if powerOpen}
@@ -855,7 +1172,12 @@
 	onClose={() => (avatarPickerOpen = false)}
 />
 
-<OptionsMenu actions={tileActions} index={optionsIndex} open={detailOptionsOpen} />
+<OptionsMenu
+	actions={tileActions}
+	index={optionsIndex}
+	open={menuOptionsOpen}
+	title={opened ? '' : (selected?.title ?? '')}
+/>
 
 <ArtPicker
 	bind:this={artPickerComponent}
@@ -873,7 +1195,7 @@
 	alreadyKnownIds={alreadyKnownGameIds}
 	scanning={isScanning}
 	onConfirm={handleScanConfirm}
-	onClose={() => (scanModalOpen = false)}
+	onClose={closeScan}
 />
 
 {#if notice}
@@ -885,13 +1207,41 @@
 
 <DownloadBar />
 
+<PadToast />
+
 <HelpBar entries={help} />
 
 <style>
+	/* Entrée d'un écran : fondu court et léger glissement, sans rien
+	   photographier. Le dock au-dessus ne bouge pas. */
+	.screen {
+		position: relative;
+		height: 100%;
+		/* `backwards` seulement : un `transform` laissé en place après coup
+		   ferait de l'écran le repère des éléments en `position: fixed`. */
+		animation: screen-in var(--normal) var(--ease) backwards;
+	}
+
+	@keyframes screen-in {
+		from {
+			opacity: 0;
+			transform: translateY(12px);
+		}
+	}
+
 	main {
 		position: relative;
 		z-index: 1;
-		height: calc(100% - 110px);
+		height: calc(100% - var(--topbar-height));
+	}
+
+	/* Sous-page des réglages : elle couvre tout le contenu, fond plein, sous la
+	   barre du haut qui reste visible. */
+	.subpage {
+		position: absolute;
+		inset: 0;
+		z-index: 2;
+		background: linear-gradient(180deg, var(--bg-top) 0%, var(--bg) 40%);
 	}
 
 	.todo {

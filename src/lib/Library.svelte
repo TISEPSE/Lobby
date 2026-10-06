@@ -1,7 +1,7 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import Cover from './Cover.svelte';
-	import { FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
+	import { FILTERS, FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
 
 	/**
 	 * Bibliothèque : titre de page, onglets de filtre, ligne de comptage et
@@ -14,15 +14,27 @@
 		filter,
 		sort,
 		columns,
+		focused = true,
+		syncing = false,
+		zone = 'grid',
+		headerIndex = 0,
 	}: {
 		games: Game[];
 		index: number;
 		filter: Filter;
 		sort: Sort;
 		columns: number;
+		/** Sélection dans la grille ; sinon elle est sur la barre du haut. */
+		focused?: boolean;
+		/** Synchronisation avec le disque en cours (touche X). */
+		syncing?: boolean;
+		/** Grille de jaquettes, ou boutons de l'en-tête (Trier, Synchroniser). */
+		zone?: 'grid' | 'header';
+		/** Bouton sélectionné dans l'en-tête : 0 = Trier, 1 = Synchroniser. */
+		headerIndex?: number;
 	} = $props();
 
-	const filters: Filter[] = ['all', 'favorites', 'recent'];
+	const filters = FILTERS;
 
 	const currentRow = $derived(Math.floor(index / columns));
 	let scrollRow = $state(0);
@@ -53,17 +65,38 @@
 				<span class="tab" class:active={entry === filter}>{FILTER_LABELS[entry]}</span>
 			{/each}
 		</div>
-		<p class="count">
-			{games.length} jeux
-			<span class="sort">· Trier par : {SORT_LABELS[sort]}</span>
-		</p>
+		<p class="count">{games.length} jeux</p>
+		<!-- De vrais boutons, atteints en montant depuis la première rangée :
+		     X reste aux options du jeu sélectionné, comme sur l'accueil. -->
+		<div class="actions">
+			<span class="button" class:selected={focused && zone === 'header' && headerIndex === 0}>
+				<img src="/assets/icons/library.svg" alt="" />
+				Trier : {SORT_LABELS[sort]}
+			</span>
+			<span
+				class="button"
+				class:busy={syncing}
+				class:selected={focused && zone === 'header' && headerIndex === 1}
+			>
+				<img src="/assets/icons/restart.svg" alt="" />
+				{syncing ? 'Synchronisation…' : 'Synchroniser'}
+			</span>
+		</div>
 	</header>
 
 	<div class="viewport">
 		<div class="grid" style="--columns: {columns}; --row: {scrollRow}">
 			{#each games as game, i (game.id)}
-				<button class="tile" class:selected={i === index}>
+				<button
+					class="tile"
+					class:selected={focused && zone === 'grid' && i === index}
+					class:absent={game.installed === false}
+				>
 					<Cover {game} />
+					{#if game.installed === false}
+						<!-- Possédé mais pas installé : grisé, et dit tel quel. -->
+						<span class="missing"><img src="/assets/icons/download.svg" alt="" />Non installé</span>
+					{/if}
 					{#if isFavorite(game.id)}
 						<img class="badge" src="/assets/icons/star.svg" alt="Favori" />
 					{/if}
@@ -125,8 +158,48 @@
 		color: var(--text-dim);
 	}
 
-	.sort {
-		opacity: 0.8;
+	.actions {
+		display: flex;
+		gap: 10px;
+		align-self: center;
+	}
+
+	/* Boutons-pilules de verre, comme le dock ; sélectionnés, ils prennent le
+	   contour d'accent de toute sélection. */
+	.button {
+		display: inline-flex;
+		align-items: center;
+		gap: 10px;
+		padding: 9px 18px;
+		border-radius: 999px;
+		background: var(--dock-bg);
+		border: 1px solid var(--dock-border);
+		font-size: 17px;
+		outline: 3px solid transparent;
+		transition:
+			outline-color var(--fast) var(--ease),
+			background var(--fast) var(--ease);
+	}
+
+	.button.selected {
+		background: var(--surface-strong);
+		outline-color: var(--accent);
+		box-shadow: 0 0 26px 2px var(--accent-soft);
+	}
+
+	.button img {
+		width: 18px;
+		height: 18px;
+	}
+
+	.button.busy img {
+		animation: spin 900ms linear infinite;
+	}
+
+	@keyframes spin {
+		to {
+			transform: rotate(360deg);
+		}
 	}
 
 	/* La fenêtre rogne ce qui dépasse ; la grille se décale ligne par ligne.
@@ -175,6 +248,35 @@
 		box-shadow:
 			0 0 30px 6px var(--accent-soft),
 			0 22px 50px rgba(0, 0, 0, 0.6);
+	}
+
+	/* Jeu possédé mais pas installé : l'affiche s'éteint, sans disparaître. */
+	.tile.absent :global(img) {
+		filter: grayscale(0.85) brightness(0.6);
+	}
+
+	.tile.absent.selected :global(img) {
+		filter: grayscale(0.4) brightness(0.85);
+	}
+
+	.missing {
+		position: absolute;
+		top: 10px;
+		left: 10px;
+		display: inline-flex;
+		align-items: center;
+		gap: 6px;
+		padding: 4px 10px;
+		border-radius: 999px;
+		background: var(--dock-bg);
+		font-size: 15px;
+		font-weight: 600;
+	}
+
+	.missing img {
+		width: 14px;
+		height: 14px;
+		filter: none !important;
 	}
 
 	.badge {

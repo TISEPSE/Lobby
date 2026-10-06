@@ -40,20 +40,9 @@ const AZERTY = ['AZERTYUIOP', 'QSDFGHJKLM', 'WXCVBN-\':!'];
 
 export const SEARCH_COLUMNS = 10;
 
-/** Clavier de l'écran de recherche : on tape un titre, rien d'autre. */
-export const SEARCH_ROWS: SearchKey[][] = [
-	...AZERTY.map(keys),
-	keys('1234567890'),
-	[
-		{ value: '', action: 'space', icon: 'space', label: 'Espace', span: 5, button: 'y' },
-		{ value: '', action: 'backspace', icon: 'backspace', label: 'Effacer', span: 3, button: 'b' },
-		{ value: '', action: 'clear', icon: 'trash', label: 'Tout', span: 2, button: 'x' },
-	],
-];
-
 /**
- * Clavier de saisie des réglages (pseudo, clé SteamGridDB) : mêmes lettres,
- * plus la casse et les deux issues — annuler ou valider.
+ * Le clavier à l'écran (pseudo, clé SteamGridDB, recherche) : chiffres en
+ * tête, lettres AZERTY, la casse et les deux issues — annuler ou valider.
  */
 export function textKeyboardRows(caps: boolean): SearchKey[][] {
 	const letter = (row: string) =>
@@ -73,7 +62,7 @@ export function textKeyboardRows(caps: boolean): SearchKey[][] {
 }
 
 /** Nombre de touches d'une rangée ; les rangées n'ont pas toutes la même. */
-export function rowLength(row: number, rows: SearchKey[][] = SEARCH_ROWS): number {
+export function rowLength(row: number, rows: SearchKey[][]): number {
 	return rows[row]?.length ?? 0;
 }
 
@@ -81,7 +70,7 @@ export function rowLength(row: number, rows: SearchKey[][] = SEARCH_ROWS): numbe
 export function keyAt(
 	row: number,
 	col: number,
-	rows: SearchKey[][] = SEARCH_ROWS
+	rows: SearchKey[][]
 ): SearchKey | undefined {
 	return rows[row]?.[col];
 }
@@ -95,7 +84,7 @@ export function nearestColumn(
 	fromRow: number,
 	fromCol: number,
 	toRow: number,
-	rows: SearchKey[][] = SEARCH_ROWS
+	rows: SearchKey[][]
 ): number {
 	const from = rows[fromRow];
 	const to = rows[toRow];

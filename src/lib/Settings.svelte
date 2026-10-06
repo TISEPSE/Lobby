@@ -5,11 +5,6 @@
 
 	let {
 		focused = true,
-		profileName = 'Joueur',
-		avatar = '',
-		gamesCount = 0,
-		favoriteCount = 0,
-		totalPlaytime = '0 min',
 		gameFolders = [],
 		buttonLayout = 'ps5',
 		bootVideo = '',
@@ -17,13 +12,15 @@
 		soundEnabled = true,
 		screensaverMinutes = 5,
 		steamGridKey = '',
-		initialCategory = 'profile',
+		initialCategory = 'games',
 		initialKeyboard = false,
+		fullscreen = true,
+		onToggleFullscreen,
+		homeOrderLabel = '',
+		onCycleHomeOrder,
 		onBack,
 		onReturnToHub = onBack,
-		onOpenAvatarPicker,
 		onOpenScan,
-		onChangeName,
 		onAddFolder,
 		onRemoveFolder,
 		onChangeLayout,
@@ -34,11 +31,6 @@
 		onChangeSteamGridKey,
 	}: {
 		focused?: boolean;
-		profileName: string;
-		avatar: string;
-		gamesCount: number;
-		favoriteCount: number;
-		totalPlaytime: string;
 		gameFolders: string[];
 		buttonLayout: string;
 		bootVideo?: string;
@@ -50,11 +42,15 @@
 		initialCategory?: string;
 		/** Ouvre le clavier au premier affichage (outil de capture). */
 		initialKeyboard?: boolean;
+		/** Plein écran sans bordure, ou fenêtre classique. */
+		fullscreen?: boolean;
+		onToggleFullscreen?: () => void;
+		/** Ordre de la rangée d'accueil, tel qu'affiché. */
+		homeOrderLabel?: string;
+		onCycleHomeOrder?: () => void;
 		onBack: () => void;
 		onReturnToHub?: () => void;
-		onOpenAvatarPicker: () => void;
 		onOpenScan: () => void;
-		onChangeName: (name: string) => void;
 		onAddFolder: (path: string) => void;
 		onRemoveFolder: (path: string) => void;
 		onChangeLayout: (layout: string) => void;
@@ -65,7 +61,7 @@
 		onChangeSteamGridKey?: (key: string) => void;
 	} = $props();
 
-	type CategoryId = 'profile' | 'games' | 'appearance' | 'system';
+	type CategoryId = 'games' | 'appearance' | 'system';
 
 	interface Category {
 		id: CategoryId;
@@ -75,12 +71,6 @@
 	}
 
 	const CATEGORIES: Category[] = [
-		{
-			id: 'profile',
-			label: 'Profil',
-			icon: 'user',
-			hint: 'Ton pseudo et ta photo, affichés en haut de l’interface.',
-		},
 		{
 			id: 'games',
 			label: 'Jeux',
@@ -97,7 +87,7 @@
 			id: 'system',
 			label: 'Système',
 			icon: 'settings',
-			hint: 'État et télémétrie de la console.',
+			hint: 'Affichage et état de la console.',
 		},
 	];
 
@@ -107,14 +97,14 @@
 
 	let isKeyboardOpen = $state(initialKeyboard);
 	/** Ce que le clavier est en train de saisir : le pseudo ou la clé d'API. */
-	let keyboardTarget = $state<'name' | 'steamgrid'>('name');
+	/** La seule saisie des réglages : la clé SteamGridDB (le pseudo est dans le Profil). */
+	let keyboardTarget = $state<'steamgrid'>('steamgrid');
 	let keyboardComponent = $state<any>(null);
 
 	let isAddingFolder = $state(false);
 	let newFolderInput = $state('');
 
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
-
 	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
 	const screensaverLabel = $derived(
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
@@ -180,19 +170,23 @@
 	// Nombre d'éléments interactifs dans le panneau de droite selon la catégorie
 	const contentRowsCount = $derived.by(() => {
 		switch (currentCategory.id) {
-			case 'profile':
-				return 2; // [0: modifier pseudo, 1: changer photo]
 			case 'games':
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 5; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons, 4: veille]
+				return 6; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: sons, 4: veille, 5: ordre de l'accueil]
 			case 'system':
-				return 0;
+				return 1; // [0: plein écran]
 			default:
 				return 0;
 		}
 	});
+
+	/** Empreinte de la sélection, pour ne sonner que si elle bouge. Inconnue sous le clavier. */
+	export function selectionKey(): string | null {
+		if (isKeyboardOpen || isAddingFolder) return null;
+		return `${focusCol}|${activeCatIndex}|${focusRow}`;
+	}
 
 	export function isKeyboardActive(): boolean {
 		return isKeyboardOpen;
@@ -221,10 +215,10 @@
 
 		if (focusCol === 'categories') {
 			if (action === 'up') {
-				if (activeCatIndex === 0) {
-					onReturnToHub?.();
-				} else {
-					activeCatIndex = Math.max(0, activeCatIndex - 1);
+				// Rien au-dessus de la première catégorie : le dock se parcourt
+				// avec L1 / R1.
+				if (activeCatIndex > 0) {
+					activeCatIndex -= 1;
 					focusRow = 0;
 				}
 			} else if (action === 'down') {
@@ -260,14 +254,7 @@
 
 	function executeContentAction() {
 		const cat = currentCategory.id;
-		if (cat === 'profile') {
-			if (focusRow === 0) {
-				keyboardTarget = 'name';
-				isKeyboardOpen = true;
-			} else if (focusRow === 1) {
-				onOpenAvatarPicker();
-			}
-		} else if (cat === 'games') {
+		if (cat === 'games') {
 			if (focusRow === 0) {
 				onOpenScan();
 			} else if (focusRow === 1) {
@@ -284,6 +271,8 @@
 					focusRow = Math.max(1, focusRow - 1);
 				}
 			}
+		} else if (cat === 'system') {
+			if (focusRow === 0) onToggleFullscreen?.();
 		} else if (cat === 'appearance') {
 			if (focusRow === 0) {
 				const next = buttonLayout === 'ps5' ? 'xbox' : buttonLayout === 'xbox' ? 'auto' : 'ps5';
@@ -296,6 +285,8 @@
 				onToggleSound?.();
 			} else if (focusRow === 4) {
 				onCycleScreensaver?.();
+			} else if (focusRow === 5) {
+				onCycleHomeOrder?.();
 			}
 		}
 	}
@@ -343,77 +334,7 @@
 		</header>
 
 		<div class="panel-body">
-			{#if currentCategory.id === 'profile'}
-				<!-- Carte de Profil Joueur -->
-				<div class="profile-card">
-					<button
-						type="button"
-						class="profile-avatar-btn"
-						onclick={onOpenAvatarPicker}
-						title="Changer de photo de profil"
-					>
-						<div class="big-avatar">
-							{#if avatar}
-								<img src={avatar} alt="" class="avatar-img" />
-							{:else}
-								<span class="initial">{profileName.charAt(0).toUpperCase() || 'J'}</span>
-							{/if}
-						</div>
-					</button>
-
-					<div class="profile-info">
-						<div class="profile-name">{profileName}</div>
-
-						<div class="stats-row">
-							<div class="stat-pill">
-								<strong>{gamesCount}</strong> jeux
-							</div>
-							<div class="stat-pill">
-								<strong>{favoriteCount}</strong> favoris
-							</div>
-							<div class="stat-pill">
-								<strong>{totalPlaytime}</strong> joués
-							</div>
-						</div>
-					</div>
-				</div>
-
-				<!-- Actions profil -->
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 0}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 0;
-							isKeyboardOpen = true;
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Modifier le pseudo</span>
-							<span class="desc">Personnaliser le nom affiché sur la console</span>
-						</div>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 1}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 1;
-							onOpenAvatarPicker();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Changer de photo de profil</span>
-							<span class="desc">Sélectionner un avatar parmi les choix disponibles</span>
-						</div>
-					</button>
-				</div>
-
-			{:else if currentCategory.id === 'games'}
+			{#if currentCategory.id === 'games'}
 				<!-- Gestion des jeux et du scan -->
 				<div class="hero-action-card">
 					<div class="hero-info">
@@ -619,9 +540,45 @@
 						</div>
 						<span class="badge-layout">{screensaverLabel} ▸</span>
 					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 5}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 5;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Ordre de l'accueil</span>
+							<span class="desc">Les jeux auxquels tu as joué en dernier d'abord, ou par titre</span>
+						</div>
+						<span class="badge-layout">{homeOrderLabel} ▸</span>
+					</button>
 				</div>
 
 			{:else if currentCategory.id === 'system'}
+				<div class="rows-list">
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 0}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 0;
+							onToggleFullscreen?.();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Affichage</span>
+							<span class="desc">Plein écran sans bordure, ou fenêtre avec sa barre de titre (F11)</span>
+						</div>
+						<span class="badge-layout">{fullscreen ? 'Plein écran ▸' : 'Fenêtre ▸'}</span>
+					</button>
+				</div>
+
 				<!-- Télémétrie Système -->
 				<div class="system-grid">
 					<div class="sys-card">
@@ -648,15 +605,12 @@
 	<!-- Clavier virtuel console pour modification du pseudo -->
 	<VirtualKeyboard
 		open={isKeyboardOpen}
-		title={keyboardTarget === 'steamgrid' ? 'Clé SteamGridDB' : 'Modifier le pseudo'}
-		subtitle={keyboardTarget === 'steamgrid'
-			? 'Colle ta clé (steamgriddb.com > Preferences > API). Elle reste sur cette machine.'
-			: 'Saisis ton nom avec la manette ou le clavier'}
-		initialValue={keyboardTarget === 'steamgrid' ? steamGridKey : profileName}
-		maxLength={keyboardTarget === 'steamgrid' ? 64 : 24}
+		title="Clé SteamGridDB"
+		subtitle="Colle ta clé (steamgriddb.com > Preferences > API). Elle reste sur cette machine."
+		initialValue={steamGridKey}
+		maxLength={64}
 		onConfirm={(value) => {
-			if (keyboardTarget === 'steamgrid') onChangeSteamGridKey?.(value.trim());
-			else if (value.trim()) onChangeName(value.trim());
+			onChangeSteamGridKey?.(value.trim());
 			isKeyboardOpen = false;
 		}}
 		onClose={() => {
@@ -786,87 +740,6 @@
 		display: flex;
 		flex-direction: column;
 		gap: 20px;
-	}
-
-	/* Carte profil */
-	.profile-card {
-		display: flex;
-		align-items: center;
-		gap: 28px;
-		padding: 24px 30px;
-		border-radius: var(--radius);
-		background: var(--surface-strong);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.profile-avatar-btn {
-		background: none;
-		border: none;
-		padding: 0;
-		cursor: pointer;
-		outline: none;
-		border-radius: 50%;
-	}
-
-	.profile-avatar-btn:hover .big-avatar,
-	.profile-avatar-btn:focus-visible .big-avatar {
-		border-color: var(--accent);
-		transform: scale(1.05);
-		box-shadow: 0 0 24px 4px var(--accent-soft);
-	}
-
-	.big-avatar {
-		display: grid;
-		place-items: center;
-		width: 96px;
-		height: 96px;
-		border-radius: 50%;
-		background: var(--surface);
-		border: 2px solid rgba(255, 255, 255, 0.2);
-		overflow: hidden;
-		transition: transform var(--fast) var(--ease), border-color var(--fast) var(--ease), box-shadow var(--fast) var(--ease);
-	}
-
-	.avatar-img {
-		width: 68px;
-		height: 68px;
-		object-fit: contain;
-	}
-
-	.big-avatar .initial {
-		font-size: 44px;
-		font-weight: 800;
-		color: #ffffff;
-	}
-
-	.profile-info {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
-	.profile-name {
-		font-size: 32px;
-		font-weight: 800;
-		color: var(--text);
-		letter-spacing: -0.5px;
-	}
-
-	.stats-row {
-		display: flex;
-		gap: 12px;
-	}
-
-	.stat-pill {
-		padding: 6px 14px;
-		border-radius: 999px;
-		background: var(--surface);
-		font-size: 14px;
-		color: var(--text-dim);
-	}
-
-	.stat-pill strong {
-		color: var(--text);
 	}
 
 	/* Lignes de réglages */

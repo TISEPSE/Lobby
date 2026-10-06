@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails } from './steam.svelte.js';
+	import { details, ensureDetails, mediaOf } from './steam.svelte.js';
 	import Cover from './Cover.svelte';
 	import { downloadFor, phaseLabel, sizeText } from './downloads.svelte.js';
 
@@ -8,13 +8,27 @@
 	 * Fiche d'un jeu. La jaquette arrive depuis sa place sur l'accueil : le
 	 * navigateur anime lui-même le changement de position via `view-transition`,
 	 * on n'a pas à mesurer le rectangle de départ comme en Godot.
+	 *
+	 * Deux pages l'une sous l'autre : la présentation, puis « Captures et
+	 * vidéos » (grille de médias + panneau « Plus sur… »). Descendre depuis
+	 * les boutons fait glisser la seconde à la place de la première.
 	 */
 	let {
 		game,
 		favorite = false,
 		selected = 0,
 		playtime = 'Jamais joué',
-	}: { game: Game; favorite?: boolean; selected?: number; playtime?: string } = $props();
+		zone = 'actions',
+		mediaIndex = 0,
+	}: {
+		game: Game;
+		favorite?: boolean;
+		selected?: number;
+		playtime?: string;
+		/** Boutons de la présentation, ou grille des médias. */
+		zone?: 'actions' | 'media';
+		mediaIndex?: number;
+	} = $props();
 
 	// La fiche se demande à l'ouverture ; elle arrive de Rust, puis s'affiche.
 	$effect(() => {
@@ -32,13 +46,57 @@
 			playtime,
 		].filter((fact) => fact.trim() !== '')
 	);
+	/** `?media=demo` : des images du CDN de Steam, pour juger le slider dans un navigateur. */
+	const DEMO = ['1145360', '588650', '252950', '753640', '1794680', '413150'].map((id) => ({
+		kind: 'image' as const,
+		thumb: `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`,
+		src: `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`,
+	}));
+	const media = $derived(
+		new URLSearchParams(location.search).get('media') === 'demo' ? DEMO : mediaOf(sheet)
+	);
+
+	/**
+	 * Images déjà décodées. Toutes sont préchargées en pleine taille dès
+	 * l'ouverture de la fiche : en faisant défiler le slider, aucune ne se
+	 * charge sous les yeux, et la visionneuse s'ouvre aussitôt.
+	 */
+	let ready = $state<Record<string, boolean>>({});
+
+	/** Image affichée pour un média : la capture pleine, ou l'affiche d'une vidéo. */
+	const pictureOf = (item: (typeof media)[number]) => (item.kind === 'image' ? item.src : item.thumb);
+
+	$effect(() => {
+		for (const item of media) {
+			const src = pictureOf(item);
+			if (ready[src]) continue;
+			const image = new Image();
+			image.src = src;
+			image
+				.decode()
+				.then(() => (ready[src] = true))
+				.catch(() => (ready[src] = true));
+		}
+	});
+	/** Lignes du panneau « Plus sur… » ; seules celles qui ont une valeur. */
+	const credits = $derived(
+		[
+			['Genres', sheet?.genres?.join(', ') ?? ''],
+			['Sortie', sheet?.release_date ?? ''],
+			['Développeur', sheet?.developers?.join(', ') ?? ''],
+			['Éditeur', sheet?.publishers?.join(', ') ?? ''],
+			['Temps de jeu', playtime],
+		].filter(([, value]) => value.trim() !== '')
+	);
 	const summary = $derived(
 		sheet?.summary ||
 			(sheet ? 'Pas de résumé pour ce jeu.' : 'Récupération de la fiche auprès de Steam…')
 	);
 </script>
 
-<div class="detail">
+<div class="detail" class:down={zone === 'media'}>
+<div class="pages">
+<section class="hero">
 	<!-- La fiche montre la **même** affiche que la tuile : elle lisait la
 	     jaquette de la fiche Steam, donc le choix de l'utilisateur n'y
 	     apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait
@@ -77,7 +135,9 @@
 		{/if}
 
 		<div class="actions">
-			<button class="action" class:focus-ring={selected === 0}>Jouer</button>
+			<button class="action" class:focus-ring={selected === 0}>
+				{game.installed === false ? 'Installer' : 'Jouer'}
+			</button>
 			<button class="action ghost" class:focus-ring={selected === 1}>
 				{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
 			</button>
@@ -89,12 +149,93 @@
 			</button>
 		</div>
 	</div>
+
+	{#if media.length > 0}
+		<!-- Ce qui attend plus bas : on le dit, sinon personne ne descend. -->
+		<p class="more">Captures et vidéos <span>▾</span></p>
+	{/if}
+</section>
+
+{#if media.length > 0 || sheet}
+	<section class="media">
+		<header class="media-head">
+			<span class="caption">Captures et vidéos</span>
+			{#if media.length > 0}
+				<span class="count">{mediaIndex + 1} / {media.length}</span>
+			{/if}
+		</header>
+
+		{#if media.length === 0}
+			<p class="none">Aucune capture pour ce jeu.</p>
+		{:else}
+			<!-- Ruban centré sur la sélection : il glisse d'un bloc, la sélection
+			     grandit au centre, ses voisines s'estompent sur les côtés. -->
+			<div class="slider">
+				<div class="reel" style="--i: {mediaIndex}">
+					{#each media as item, i}
+						{@const src = pictureOf(item)}
+						<div
+							class="slide"
+							class:selected={i === mediaIndex}
+							class:focused={zone === 'media' && i === mediaIndex}
+						>
+							<img {src} alt="" class:ready={ready[src]} />
+							{#if item.kind === 'video'}
+								<span class="play"><img src="/assets/icons/play.svg" alt="" /></span>
+							{/if}
+						</div>
+					{/each}
+				</div>
+			</div>
+			<div class="dots">
+				{#each media as item, i}
+					<span class="dot" class:on={i === mediaIndex} class:video={item.kind === 'video'}></span>
+				{/each}
+			</div>
+		{/if}
+
+		<aside class="about">
+			<span class="caption">Plus sur</span>
+			<h2>{game.title}</h2>
+			{#if sheet?.about || sheet?.summary}
+				<span class="caption">Description</span>
+				<p class="text">{sheet?.about || sheet?.summary}</p>
+			{/if}
+			<dl>
+				{#each credits as [label, value]}
+					<div>
+						<dt class="caption">{label}</dt>
+						<dd>{value}</dd>
+					</div>
+				{/each}
+			</dl>
+		</aside>
+	</section>
+{/if}
+</div>
 </div>
 
 <style>
 	.detail {
 		position: relative;
 		z-index: 1;
+		height: 100%;
+		overflow: hidden;
+	}
+
+	/* Les deux pages glissent ensemble : la seconde prend la place de la
+	   première, comme un défilement d'une page entière. */
+	.pages {
+		height: 100%;
+		transition: transform var(--normal) var(--ease);
+	}
+
+	.detail.down .pages {
+		transform: translateY(-100%);
+	}
+
+	.hero {
+		position: relative;
 		display: grid;
 		grid-template-columns: clamp(220px, 19vw, 330px) 1fr;
 		gap: clamp(32px, 4vw, 72px);
@@ -241,6 +382,232 @@
 		width: 22px;
 		height: 22px;
 		opacity: 0.85;
+	}
+
+	.more {
+		position: absolute;
+		left: 50%;
+		bottom: calc(var(--safe-y) + 34px);
+		margin: 0;
+		transform: translateX(-50%);
+		font-size: 18px;
+		color: var(--text-dim);
+	}
+
+	.more span {
+		display: inline-block;
+		margin-left: 6px;
+		color: var(--accent);
+	}
+
+	.media {
+		display: flex;
+		flex-direction: column;
+		gap: 16px;
+		height: 100%;
+		padding: var(--safe-y) 0 calc(var(--safe-y) + 40px);
+		overflow: hidden;
+	}
+
+	.media-head {
+		display: flex;
+		align-items: baseline;
+		justify-content: space-between;
+		padding: 0 var(--safe-x);
+	}
+
+	.count {
+		font-size: 18px;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Toute la largeur de l'écran : les voisines débordent sur les bords, on
+	   comprend qu'il y a une suite. */
+	.slider {
+		flex: none;
+		width: 100vw;
+		overflow: hidden;
+		padding: 18px 0;
+	}
+
+	/* Le ruban se décale pour que la diapositive `--i` tombe pile au centre :
+	   centre de la diapositive = i × (largeur + écart) + largeur / 2. (Pas
+	   `.track` : c'est déjà la barre de progression d'un téléchargement, et
+	   ses 8 px de haut écrasaient le ruban.) */
+	.reel {
+		display: flex;
+		gap: var(--slide-gap);
+		transform: translateX(
+			calc(50vw - var(--i) * (var(--slide-width) + var(--slide-gap)) - var(--slide-width) / 2)
+		);
+		transition: transform var(--slide-duration) var(--ease);
+		will-change: transform;
+	}
+
+	.slide {
+		position: relative;
+		/* Taille explicite : en flex, `aspect-ratio` ne suit pas `flex-basis`
+		   et la diapositive retombait à une hauteur nulle. */
+		flex: none;
+		width: var(--slide-width);
+		height: calc(var(--slide-width) * 9 / 16);
+		border-radius: var(--radius-lg);
+		overflow: hidden;
+		background: var(--surface);
+		transform: scale(0.84);
+		opacity: 0.45;
+		filter: brightness(0.7);
+		box-shadow: 0 20px 50px rgba(0, 0, 0, 0.5);
+		transition:
+			transform var(--slide-duration) var(--ease),
+			opacity var(--slide-duration) var(--ease),
+			filter var(--slide-duration) var(--ease),
+			box-shadow var(--fast) var(--ease);
+	}
+
+	.slide.selected {
+		transform: scale(1);
+		opacity: 1;
+		filter: none;
+	}
+
+	/* Contour d'accent seulement quand la sélection est dans le slider. */
+	.slide.focused {
+		outline: 4px solid var(--accent);
+		box-shadow:
+			0 0 40px 8px var(--accent-soft),
+			0 30px 70px rgba(0, 0, 0, 0.6);
+	}
+
+	/* L'image apparaît en fondu une fois décodée : jamais de chargement à vue. */
+	.slide > img {
+		width: 100%;
+		height: 100%;
+		object-fit: cover;
+		opacity: 0;
+		transition: opacity var(--normal) var(--ease);
+	}
+
+	.slide > img.ready {
+		opacity: 1;
+	}
+
+	.dots {
+		display: flex;
+		justify-content: center;
+		gap: 8px;
+	}
+
+	.dot {
+		width: 8px;
+		height: 8px;
+		border-radius: 50%;
+		background: var(--grid-line);
+		transition:
+			background var(--fast) var(--ease),
+			width var(--fast) var(--ease);
+	}
+
+	.dot.video {
+		background: var(--surface-strong);
+	}
+
+	.dot.on {
+		width: 24px;
+		border-radius: 4px;
+		background: var(--accent);
+	}
+
+	/* Une vidéo se reconnaît à son bouton de lecture, au centre. */
+	.play {
+		position: absolute;
+		inset: 0;
+		display: grid;
+		place-items: center;
+	}
+
+	.play img {
+		width: 72px;
+		height: 72px;
+		padding: 22px;
+		border-radius: 50%;
+		background: var(--dock-bg);
+		backdrop-filter: blur(10px);
+	}
+
+	/* Panneau « Plus sur… » : verre dépoli, comme le dock, sous le slider —
+	   description à gauche, fiche technique à droite. */
+	.about {
+		flex: 1;
+		display: grid;
+		grid-template-columns: 1.4fr 1fr;
+		grid-template-rows: auto auto 1fr;
+		column-gap: 36px;
+		row-gap: 6px;
+		min-height: 0;
+		margin: 0 var(--safe-x);
+		padding: 26px 28px;
+		border-radius: var(--radius-lg);
+		background: var(--dock-bg);
+		border: 1px solid var(--dock-border);
+		backdrop-filter: blur(18px);
+		overflow: hidden;
+	}
+
+	.caption {
+		font-size: 17px;
+		font-weight: 600;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-dim);
+	}
+
+	.about h2 {
+		margin: 0 0 6px;
+		font-size: 30px;
+		font-weight: 700;
+	}
+
+	.about > .caption,
+	.about h2,
+	.text {
+		grid-column: 1;
+	}
+
+	.text {
+		display: -webkit-box;
+		-webkit-line-clamp: 4;
+		line-clamp: 4;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		margin: 0 0 16px;
+		font-size: 18px;
+		line-height: 1.5;
+		color: rgba(255, 255, 255, 0.86);
+	}
+
+	dl {
+		grid-column: 2;
+		grid-row: 1 / -1;
+		align-self: start;
+		display: grid;
+		grid-template-columns: 1fr 1fr;
+		gap: 16px 20px;
+		margin: 0;
+		padding-left: 28px;
+		border-left: 1px solid var(--dock-border);
+	}
+
+	dd {
+		margin: 4px 0 0;
+		font-size: 18px;
+	}
+
+	.none {
+		grid-column: 1 / -1;
+		font-size: 18px;
+		color: var(--text-dim);
 	}
 
 	/* Le halo suit la sélection : un seul bouton actif à la fois. */

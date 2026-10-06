@@ -17,6 +17,19 @@ async function openSteam(url: string, done: string): Promise<Outcome> {
 	}
 }
 
+/** Installe un jeu possédé mais pas installé : Steam ouvre sa fenêtre d'installation. */
+export function installGame(appid: string) {
+	return openSteam(`steam://install/${appid}`, 'Steam prend le relais pour l\'installation.');
+}
+
+/** Installe un jeu Epic possédé : le launcher Epic ouvre sa fenêtre d'installation. */
+export function installEpicGame(appName: string) {
+	return openSteam(
+		`com.epicgames.launcher://apps/${appName}?action=install`,
+		'Le launcher Epic prend le relais pour l\'installation.'
+	);
+}
+
 /** Lance l'installation ou la mise à jour du jeu. */
 export function updateGame(appid: string) {
 	return openSteam(`steam://install/${appid}`, 'Steam prend le relais pour la mise à jour.');

@@ -7,6 +7,10 @@
 :root {
 	--accent: #22d366;
 	--accent-soft: rgba(34, 211, 102, 0.22);
+	/* Texte posé sur un aplat d'accent. */
+	--on-accent: #06210f;
+	/* Barres d'un graphique hors sélection : l'accent, en retrait. */
+	--accent-dim: rgba(34, 211, 102, 0.5);
 	--bg: #07080b;
 	/* Haut des écrans pleins (recherche, bibliothèque) : à peine plus clair,
 	   pour que la barre du haut ne flotte pas sur du noir plat. */
@@ -17,8 +21,64 @@
 	--danger: #ff5f56;
 	--text: #ffffff;
 	--text-dim: rgba(255, 255, 255, 0.62);
+	/* Repères des graphiques : visibles, jamais au niveau des données. */
+	--grid-line: rgba(255, 255, 255, 0.1);
 	--radius: 16px;
 	--radius-lg: 26px;
+
+	/* Texte posé sur un fond blanc (bouton sélectionné du dock). */
+	--on-light: #0b0d10;
+
+	/* Dock du haut : pilule translucide, boutons ronds, champ de recherche. */
+	--dock-bg: rgba(20, 23, 29, 0.72);
+	--dock-border: rgba(255, 255, 255, 0.08);
+	--dock-border-strong: rgba(255, 255, 255, 0.16);
+	/* Le dock se centre à la largeur de son contenu : il dit où l'on est, il
+	   n'a pas à barrer tout l'écran. */
+	--topbar-height: 76px;
+	--dock-pad: 5px;
+	--dock-button: 40px;
+	--dock-icon: 18px;
+	--dock-glyph: 38px;
+	/* Largeur du nom de la section courante, identique pour toutes. */
+	--dock-label: 118px;
+	--dock-active: rgba(255, 255, 255, 0.16);
+	/* Survol d'un bouton du dock : un cran sous la section courante. */
+	--dock-hover: rgba(255, 255, 255, 0.1);
+	--dock-search: clamp(240px, 16vw, 320px);
+	/* Slider des captures de la fiche : largeur d'une diapositive, écart, et
+	   durée du glissement (un peu plus long qu'un déplacement de sélection :
+	   tout le ruban bouge). */
+	/* Notification « manette connectée » (façon Xbox) : la pastille surgit,
+	   la pilule s'ouvre (`--toast-open`), puis se referme après `--toast-stay`. */
+	--toast-height: 66px;
+	--toast-width: 560px;
+	--toast-inset: 8px;
+	--toast-pad: 0;
+	--toast-bottom: 14px;
+	--toast-bg: rgba(20, 22, 26, 0.88);
+	--toast-open: 360ms;
+	--toast-stay: 3300ms;
+
+	--slide-width: 52vw;
+	--slide-gap: 28px;
+	--slide-duration: 380ms;
+	/* Panneau « Plus sur… » de la fiche, et fond de la visionneuse. */
+	--about-width: clamp(420px, 30vw, 560px);
+	--viewer-bg: rgba(4, 5, 8, 0.96);
+	/* Statistiques : colonne de droite, et calendrier d'activité du plus
+	   calme (rien) au plus chargé (quatre heures et plus). */
+	--stats-side: clamp(380px, 24vw, 460px);
+	--heat-gap: 4px;
+	--heat-0: rgba(255, 255, 255, 0.06);
+	--heat-1: rgba(34, 211, 102, 0.28);
+	--heat-2: rgba(34, 211, 102, 0.5);
+	--heat-3: rgba(34, 211, 102, 0.75);
+	--heat-4: #22d366;
+	/* Colonne d'identité de la page Profil. */
+	--profile-card: clamp(440px, 30vw, 560px);
+	/* Grande photo de la page Profil. */
+	--profile-avatar: clamp(150px, 10vw, 200px);
 
 	/* Marge de sécurité TV : 5 % de chaque côté. */
 	--safe-x: 5vw;
@@ -32,9 +92,16 @@
 	--hover-room: 18px;
 	/* Espacement entre deux jaquettes de l'accueil. */
 	--tile-gap: 12px;
+	/* Écran Statistiques : espace entre deux cartes, entre deux barres, et
+	   hauteur réservée aux étiquettes sous le graphique. */
+	--card-gap: 20px;
+	--bar-gap: 6px;
+	--tick-room: 36px;
 	/* Décalage de la sélection par rapport au centre, sur l'accueil : une tuile
 	   vers la gauche, pour que le regard parte du titre et aille vers la suite. */
 	--selection-shift: calc(-1 * (var(--tile) + var(--tile-gap)));
+	/* Carte « Reprendre » : même hauteur qu'une tuile, au format 16/9. */
+	--resume-width: calc(var(--tile) * 1.5 * 16 / 9);
 
 	--ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 	--fast: 180ms;
@@ -60,6 +127,14 @@ body,
 	color: var(--text);
 	user-select: none;
 	cursor: none;
+}
+
+/* Aucun élément ne réaffiche le pointeur : des boutons déclaraient
+   `cursor: pointer` et faisaient réapparaître une main sur l'écran. */
+*,
+*::before,
+*::after {
+	cursor: none !important;
 }
 
 button {

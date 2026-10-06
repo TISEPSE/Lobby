@@ -1,12 +1,14 @@
 <script lang="ts">
 	/**
-	 * Saisie de texte dans les réglages (pseudo, clé SteamGridDB).
+	 * Saisie de texte : pseudo, clé SteamGridDB, et la **recherche** — qui y
+	 * ajoute un suivi de la frappe (`onInput`), une sortie par le bas vers ses
+	 * résultats (`onLeaveBottom`) et les résultats eux-mêmes (`children`).
 	 *
 	 * Les touches sont rendues par `Keyboard.svelte`, le même composant que
 	 * l'écran de recherche : une touche a la même allure partout dans
 	 * l'interface, et son style ne se règle qu'à un endroit.
 	 */
-	import { onMount } from 'svelte';
+	import { onMount, type Snippet } from 'svelte';
 	import type { Action } from './gamepad';
 	import Keyboard from './Keyboard.svelte';
 	import { textKeyboardRows, nearestColumn } from './searchKeys';
@@ -19,6 +21,12 @@
 		maxLength = 24,
 		onConfirm,
 		onClose,
+		onInput,
+		onLeaveBottom,
+		active = true,
+		wide = false,
+		placeholder = 'Saisis ton texte…',
+		children,
 	}: {
 		open: boolean;
 		title?: string;
@@ -27,6 +35,17 @@
 		maxLength?: number;
 		onConfirm: (val: string) => void;
 		onClose: () => void;
+		/** Appelé à chaque frappe : la recherche filtre en direct. */
+		onInput?: (value: string) => void;
+		/** « Bas » sous la dernière rangée : la sélection quitte le clavier. */
+		onLeaveBottom?: () => void;
+		/** Le clavier a la main ; sinon la sélection est dans `children`. */
+		active?: boolean;
+		/** Fenêtre plus large, pour loger des résultats sous le clavier. */
+		wide?: boolean;
+		placeholder?: string;
+		/** Contenu affiché sous le clavier (résultats de la recherche). */
+		children?: Snippet;
 	} = $props();
 
 	let text = $state('');
@@ -48,9 +67,17 @@
 		}, 60);
 	});
 
+	$effect(() => {
+		onInput?.(text);
+	});
+
 	export function handleAction(action: Action) {
 		if (!open) return;
 
+		if (action === 'down' && row === rows.length - 1 && onLeaveBottom) {
+			onLeaveBottom();
+			return;
+		}
 		if (action === 'up') {
 			const next = Math.max(0, row - 1);
 			col = nearestColumn(row, col, next, rows);
@@ -149,7 +176,7 @@
 
 {#if open}
 	<div class="backdrop" role="dialog" aria-modal="true">
-		<div class="modal">
+		<div class="modal" class:wide>
 			<header>
 				<h2>{title}</h2>
 				<p class="subtitle">{subtitle}</p>
@@ -161,7 +188,7 @@
 					bind:this={inputRef}
 					bind:value={text}
 					maxlength={maxLength}
-					placeholder="Saisis ton texte…"
+					{placeholder}
 					autocomplete="off"
 					spellcheck="false"
 				/>
@@ -169,13 +196,17 @@
 			</div>
 
 			<div class="pad">
-				<Keyboard {rows} {row} {col} onPress={press} />
+				<Keyboard {rows} {row} {col} {active} onPress={press} />
 			</div>
+
+			{@render children?.()}
 
 			<!-- L'aide des touches est celle de l'application, en bas de l'écran :
 			     deux barres superposées se chevauchaient. Ici, seuls les raccourcis
 			     propres au clavier. -->
-			<p class="hint">LB / RB : Maj · Menu : Valider</p>
+			{#if !children}
+				<p class="hint">LB / RB : Maj · Menu : Valider</p>
+			{/if}
 		</div>
 	</div>
 {/if}
@@ -190,6 +221,17 @@
 		background: rgba(3, 6, 12, 0.86);
 		backdrop-filter: blur(24px);
 		animation: fade-in var(--fast) var(--ease);
+	}
+
+	.modal.wide {
+		width: min(1500px, 94vw);
+	}
+
+	/* Le clavier garde sa largeur habituelle, centré : seuls le champ et les
+	   résultats profitent de la fenêtre élargie. */
+	.wide .pad {
+		width: min(880px, 100%);
+		margin: 0 auto;
 	}
 
 	.modal {
