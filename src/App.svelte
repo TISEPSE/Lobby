@@ -982,7 +982,6 @@
 			return list(
 				['a', 'Ouvrir'],
 				['x', 'Options'],
-				['r2', 'Catégorie'],
 				['y', 'Recherche'],
 				['b', 'Accueil']
 			);
