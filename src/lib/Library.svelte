@@ -1,6 +1,7 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import Cover from './Cover.svelte';
+	import Glyph from './Glyph.svelte';
 	import { FILTERS, FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
 
 	/**
@@ -117,10 +118,13 @@
 	<!-- Tout l'en-tête tient sur une ligne : la place gagnée va à la mosaïque. -->
 	<header class="head">
 		<h1>Bibliothèque</h1>
+		<!-- Les gâchettes qui changent de catégorie encadrent les onglets. -->
 		<div class="tabs">
+			<span class="trigger"><Glyph button="l2" size="32px" /></span>
 			{#each filters as entry}
 				<span class="tab" class:active={entry === filter}>{FILTER_LABELS[entry]}</span>
 			{/each}
+			<span class="trigger"><Glyph button="r2" size="32px" /></span>
 		</div>
 		<p class="count">{games.length} jeux</p>
 		<!-- De vrais boutons, atteints en montant depuis la première rangée :
@@ -201,7 +205,14 @@
 
 	.tabs {
 		display: flex;
+		align-items: center;
 		gap: 24px;
+	}
+
+	/* Le glyphe se cale sur le texte des onglets, pas sur leur soulignement. */
+	.trigger {
+		display: flex;
+		margin-bottom: 6px;
 	}
 
 	.tab {
