@@ -4,6 +4,10 @@
 	import TileOptions from './TileOptions.svelte';
 	import { heroFor } from './steam.svelte.js';
 	import { lastPlayedText, playtimeOf, playtimeText } from './library.svelte.js';
+	import { platformOf } from './stats';
+	import HomePanels from './HomePanels.svelte';
+	import type { DownloadStatus } from './downloads.svelte.js';
+	import type { SessionRecord } from './types';
 
 	/**
 	 * Accueil : artwork plein écran, rangée horizontale de jaquettes. La tuile
@@ -21,6 +25,11 @@
 		optionsIndex = 0,
 		resume = null,
 		focused = true,
+		installed = [],
+		sessions = [],
+		downloads = [],
+		focusedPanel = -1,
+		steamSyncedAt = 0,
 	}: {
 		games: Game[];
 		index: number;
@@ -34,16 +43,27 @@
 		 * porte le contour : un seul élément sélectionné à l'écran.
 		 */
 		focused?: boolean;
+		/** Pour les panneaux du bas : jeux installés, journal, mises à jour. */
+		installed?: Game[];
+		sessions?: SessionRecord[];
+		downloads?: DownloadStatus[];
+		/** Panneau sélectionné (0 à 2), ou -1 quand la sélection est dans la rangée. */
+		focusedPanel?: number;
+		steamSyncedAt?: number;
 	} = $props();
 
 	const onResume = $derived(index < 0 && resume !== null);
 	const selected = $derived(onResume ? resume : games[index]);
 
-	/** « Dernière partie hier · 12 h 30 de jeu » : ce qu'on a besoin de savoir pour reprendre. */
-	function resumeFacts(game: Game): string {
+	/**
+	 * « Dernière partie il y a 8 minutes · 1 h 21 de jeu · Steam » : ce qu'on a
+	 * besoin de savoir d'un coup d'œil, sur la carte comme sur une tuile.
+	 */
+	function facts(game: Game): string {
 		const when = lastPlayedText(game.id);
-		const parts = [when ? `Dernière partie ${when}` : 'Prêt à reprendre'];
+		const parts = [when ? `Dernière partie ${when}` : onResume ? 'Prêt à reprendre' : 'Jamais joué'];
 		if (playtimeOf(game.id) > 0) parts.push(`${playtimeText(game.id)} de jeu`);
+		parts.push(platformOf(game));
 		return parts.join(' · ');
 	}
 
@@ -53,7 +73,7 @@
 	{#if selected}
 		<div class="headline">
 			<h1>{selected.title}</h1>
-			<p class="facts">{onResume ? resumeFacts(selected) : 'Installé · Prêt à jouer'}</p>
+			<p class="facts">{facts(selected)}</p>
 		</div>
 	{/if}
 
@@ -89,6 +109,8 @@
 			{/if}
 		{/each}
 	</div>
+
+	<HomePanels games={installed} {sessions} {downloads} {focusedPanel} {steamSyncedAt} />
 </section>
 
 <style>
@@ -99,13 +121,13 @@
 		flex-direction: column;
 		justify-content: flex-end;
 		height: 100%;
-		/* On dégage la barre d'aide : la rangée ne doit jamais venir dessous. */
+		gap: var(--home-gap);
+		/* On dégage la barre d'aide : les panneaux ne doivent jamais venir dessous. */
 		padding: 0 0 calc(var(--safe-y) + 46px);
 	}
 
 	.headline {
 		padding: 0 var(--safe-x);
-		margin-bottom: 4vh;
 	}
 
 	h1 {

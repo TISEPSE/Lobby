@@ -326,3 +326,34 @@ export function demoLog(games: Game[], now = Date.now()): SessionRecord[] {
 	}
 	return log;
 }
+
+/** Un jour de la semaine en cours, pour le panneau « Cette semaine » de l'accueil. */
+export interface WeekDay {
+	/** « L », « M »… */
+	label: string;
+	minutes: number;
+	today: boolean;
+	/** Jour pas encore arrivé : rien à montrer. */
+	future: boolean;
+}
+
+/**
+ * Temps de jeu de chaque jour de la semaine en cours, du lundi au dimanche.
+ * Les jours se calculent par le calendrier (changement d'heure compris).
+ */
+export function weekDays(log: SessionRecord[], now = Date.now()): WeekDay[] {
+	const today = new Date(now);
+	today.setHours(0, 0, 0, 0);
+	const monday = new Date(today);
+	monday.setDate(today.getDate() - ((today.getDay() + 6) % 7));
+	return ['L', 'M', 'M', 'J', 'V', 'S', 'D'].map((label, i) => {
+		const start = new Date(monday);
+		start.setDate(monday.getDate() + i);
+		const end = new Date(start);
+		end.setDate(start.getDate() + 1);
+		const minutes = log
+			.filter((entry) => entry.start >= start.getTime() && entry.start < end.getTime())
+			.reduce((sum, entry) => sum + entry.minutes, 0);
+		return { label, minutes, today: start.getTime() === today.getTime(), future: start > today };
+	});
+}

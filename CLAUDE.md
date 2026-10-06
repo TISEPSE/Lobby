@@ -158,6 +158,14 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Les jeux possédés mais pas installés (`uninstalledSteamGames`, `installed: false`) **ne sont jamais enregistrés** dans la bibliothèque : ils se recalculent de la liste Steam et disparaissent une fois installés et détectés. Ils sont **mélangés dans « Tous »** (`allGames`, et dans la recherche), grisés avec un badge « Non installé » ; leur fiche propose **« Installer »** (`steam://install/<appid>`), leurs options n'offrent pas mise à jour ni désinstallation. L'accueil, lui, ne montre que les jeux installés.
 - Les requêtes vers Steam (fiches, affiches) passent par une **file de quatre** (`queued` dans `steam.svelte.ts`) : la grille peut montrer des centaines de jeux d'un coup.
 
+## Panneaux de l'accueil (`HomePanels.svelte`)
+
+- Sous la rangée, trois panneaux pour une page vivante (maquette de l'utilisateur) : **Vos lanceurs** (jeux installés par boutique, `platformOf`, cinq tuiles au plus dont « Autres » ; en pied, la dernière lecture de la bibliothèque Steam), **Cette semaine** (temps de jeu du lundi au dimanche d'après le journal, `weekDays()` dans `stats.ts`, aujourd'hui en accent, total en tête), **Mises à jour** (téléchargements Steam en cours, `downloads`, « Prête » / pourcentage / « En attente »). Variables `--home-gap`, `--panel-*`.
+- **Bas** depuis la rangée descend dans les panneaux (`homeZone: 'panels'`), gauche / droite entre eux, haut remonte. A : Bibliothèque, Statistiques, ou la fiche du jeu en cours de mise à jour. La rangée n'a alors plus de contour : une seule sélection à l'écran.
+- La ligne sous le titre dit, pour la carte comme pour une tuile : dernière partie (ou « Jamais joué »), temps de jeu, boutique.
+- Sur l'accueil, la barre de téléchargement globale (`DownloadBar`) est masquée : le panneau « Mises à jour » la remplace, et elle le chevauchait.
+- Capture : `?resume=demo&demo-download=1&stats=demo` (journal fictif), `&zone=panels&panel=N`.
+
 ## Ordre de l'accueil
 
 - La rangée suit `home_order` (Réglages → Apparence) : **dernière partie d'abord** par défaut (les jamais joués ensuite, par titre), ou par titre. Persisté côté Rust (`home_order`, `default_home_order`).
@@ -189,6 +197,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - L'en-tête porte deux **vrais boutons** : « Trier : <critère> » et « Synchroniser ». On les atteint en montant depuis la première rangée (`libraryZone: 'header'`), gauche / droite entre eux, bas pour revenir. Pendant ce temps, aucune jaquette n'a de contour.
 - **X sur une jaquette ouvre les options du jeu**, comme sur l'accueil, dans la fenêtre `OptionsMenu.svelte` (avec le nom du jeu) — une grille ne peut pas « pousser » ses voisines comme le tiroir de la rangée d'accueil. État partagé avec la fiche : `menuOptionsOpen`.
 - Filtres (LT / RT) : **Tous · Installés · Favoris**. Pas de filtre « Récemment joué » : le tri « Dernière partie » le fait déjà sur « Tous ». Le filtre et le tri sont **mémorisés d'une session à l'autre** (`library_filter`, `library_sort` dans les réglages, `setLibraryView`).
+- Le tri « dernière partie » s'affiche **« Récemment joué »**, plus clair.
 - View / Create reste un raccourci du tri. Capture : `?screen=library&zone=header`, `?screen=library&options=library`.
 
 ## Synchronisation de la bibliothèque
@@ -222,7 +231,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Sons
 
 - Les signaux viennent de `public/assets/sounds/` (design PlayStation fourni) : `ps5-scroll` pour le déplacement, `ps5-selection-button` pour la validation, `ps5-back-button` pour le retour, `ps5-popup-2` pour le lancement d'un jeu.
-- Une direction ne sonne **que si la sélection a bougé** : `handle()` compare une empreinte de la sélection (`selectionKey()`) avant et après. Buter contre un bord, ou descendre depuis une tuile de l'accueil, reste silencieux. Un écran délégué (Réglages, Statistiques) fournit sa propre empreinte ; une fenêtre qui n'en a pas sonne à chaque fois. Les changements passés par `startViewTransition` sont différés : `navTick` les compte tout de suite.
+- Une direction ne sonne **que si la sélection a bougé** : `handle()` compare une empreinte de la sélection (`selectionKey()`) avant et après. Buter contre un bord reste silencieux. Un écran délégué (Réglages, Statistiques) fournit sa propre empreinte ; une fenêtre qui n'en a pas sonne à chaque fois. Les changements passés par `startViewTransition` sont différés : `navTick` les compte tout de suite.
 - Les fichiers sont **décodés une fois** au démarrage (`preloadSounds()`) puis rejoués depuis la mémoire : un déplacement dans le carrousel ne doit pas attendre un chargement.
 - L'**erreur** n'a pas de fichier : elle garde le signal grave de synthèse, qui ne ressemble à aucun autre son de l'interface. Cette synthèse sert aussi de secours si un fichier manque — mieux vaut un bip qu'une interface muette.
 - Couper puis rallumer les sons ferme et rouvre le contexte audio : il faut alors redécoder (`preloadSounds()` à nouveau).

@@ -80,6 +80,10 @@
 	--player-knob: 16px;
 	--player-volume: 90px;
 	--player-flash: 110px;
+	/* Accueil : espace entre titre, rangée et panneaux ; panneaux du bas. */
+	--home-gap: 3vh;
+	--panel-gap: 24px;
+	--panel-height: 220px;
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;

@@ -339,7 +339,11 @@ export function lastPlayedGame(): Game | null {
 /** « il y a 5 minutes », « hier », « il y a 3 jours »… */
 export function lastPlayedText(id: string): string {
 	const at = lastPlayedAt(id);
-	if (!at) return '';
+	return at ? relativeTime(at) : '';
+}
+
+/** « il y a 8 minutes », « hier », « il y a 3 jours ». */
+export function relativeTime(at: number): string {
 	const format = new Intl.RelativeTimeFormat('fr', { numeric: 'auto' });
 	const minutes = Math.round((at - Date.now()) / 60_000);
 	if (minutes > -60) return format.format(Math.min(-1, minutes), 'minute');
@@ -389,7 +393,7 @@ export const FILTER_LABELS: Record<Filter, string> = {
 
 export const SORT_LABELS: Record<Sort, string> = {
 	title: 'Titre',
-	recent: 'Dernière partie',
+	recent: 'Récemment joué',
 	playtime: 'Temps de jeu',
 };
 

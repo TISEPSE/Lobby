@@ -11,7 +11,7 @@
 	import PowerMenu from './lib/PowerMenu.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
-	import { watchDownloads } from './lib/downloads.svelte.js';
+	import { watchDownloads, downloads } from './lib/downloads.svelte.js';
 	import { play as playSound, setSoundEnabled as applySound, preloadSounds, setVolumes } from './lib/sound';
 	import Settings from './lib/Settings.svelte';
 	import Stats from './lib/Stats.svelte';
@@ -137,6 +137,9 @@
 	 * -1 : la carte « Reprendre », en tête de l'accueil. On démarre dessus : le
 	 * dernier jeu se relance en un appui, dès l'allumage.
 	 */
+	/** Accueil : la rangée de jeux, ou les panneaux du bas (`?zone=panels`). */
+	let homeZone = $state<'row' | 'panels'>(params.get('zone') === 'panels' ? 'panels' : 'row');
+	let panelIndex = $state(Number(params.get('panel') ?? 0));
 	let homeIndex = $state(params.has('index') ? wantedIndex : -1);
 	/** La bibliothèque enregistrée est chargée : on sait s'il y a un jeu à reprendre. */
 	let libraryReady = $state(false);
@@ -353,6 +356,7 @@
 
 	function goToSection(next: Section) {
 		if (next === section) return;
+		homeZone = 'row';
 		// Pas de `startViewTransition` ici : il photographiait toute la page,
 		// dock flouté compris, et le fondu saccadait. Le dock reste en place,
 		// seul le contenu entre en fondu (`.screen`).
@@ -379,7 +383,35 @@
 		goToSection(next);
 	}
 
+	/**
+	 * Accueil, panneaux du bas : gauche / droite entre eux, haut remonte à la
+	 * rangée. A ouvre la bibliothèque, les statistiques, ou la fiche du jeu en
+	 * cours de mise à jour.
+	 */
+	function handlePanels(action: Action) {
+		if (action === 'up') homeZone = 'row';
+		else if (action === 'left') panelIndex = Math.max(0, panelIndex - 1);
+		else if (action === 'right') panelIndex = Math.min(2, panelIndex + 1);
+		else if (action === 'accept') {
+			if (panelIndex === 0) goToSection('library');
+			else if (panelIndex === 1) {
+				goToSection('profile');
+				statsOpen = true;
+			} else {
+				const appid = downloads.list[0]?.appid;
+				const game = appid ? games.find((g) => g.appid === appid) : undefined;
+				if (game) openDetail(game);
+			}
+		}
+	}
+
 	function handleHome(action: Action) {
+		if (homeZone === 'panels') return handlePanels(action);
+		// Bas : les panneaux (lanceurs, semaine, mises à jour).
+		if (action === 'down') {
+			homeZone = 'panels';
+			return;
+		}
 		if (action === 'left') homeIndex = Math.max(resumeGame ? -1 : 0, homeIndex - 1);
 		else if (action === 'right') homeIndex = Math.min(homeGames.length - 1, homeIndex + 1);
 		// La carte « Reprendre » lance directement : c'est tout son intérêt.
@@ -679,6 +711,8 @@
 			navTick,
 			section,
 			homeIndex,
+			homeZone,
+			panelIndex,
 			libraryIndex,
 			libraryZone,
 			headerIndex,
@@ -955,10 +989,15 @@
 		if (section === 'profile' && statsOpen) return list(['a', 'Ouvrir'], ['r2', 'Période'], ['b', 'Retour']);
 		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['b', 'Accueil']);
 		if (section === 'settings') return list(['a', 'Valider'], ['b', 'Accueil']);
+		if (homeZone === 'panels') {
+			const what = panelIndex === 0 ? 'Bibliothèque' : panelIndex === 1 ? 'Statistiques' : 'Voir le jeu';
+			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche']);
+		}
 		return list(
 			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
 			['x', 'Options'],
-			['y', 'Recherche']
+			['y', 'Recherche'],
+			['dpad', 'Lanceurs et activité']
 		);
 	});
 </script>
@@ -994,6 +1033,12 @@
 			games={homeGames}
 			index={homeIndex}
 			resume={resumeGame}
+			focused={homeZone === 'row'}
+			installed={games}
+			{sessions}
+			downloads={downloads.list}
+			focusedPanel={homeZone === 'panels' ? panelIndex : -1}
+			steamSyncedAt={steamLibrary.fetchedAt}
 			actions={tileActions}
 			{optionsOpen}
 			{optionsIndex}
@@ -1216,7 +1261,10 @@
 	</div>
 {/if}
 
-<DownloadBar />
+<!-- Sur l'accueil, le panneau « Mises à jour » montre déjà les téléchargements. -->
+{#if section !== 'home' || opened}
+	<DownloadBar />
+{/if}
 
 <PadToast />
 
