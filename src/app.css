@@ -50,7 +50,7 @@
 	   durée du glissement (un peu plus long qu'un déplacement de sélection :
 	   tout le ruban bouge). */
 	/* Notification « manette connectée » (façon Xbox) : la pastille surgit,
-	   la pilule s'ouvre (`--toast-open`), puis se referme après `--toast-stay`. */
+	   la pilule s'ouvre (`--toast-open`), puis se referme (à l'envers) à partir de `--toast-stay`. */
 	--toast-height: 66px;
 	--toast-width: 560px;
 	--toast-inset: 8px;
@@ -58,7 +58,9 @@
 	--toast-bottom: 14px;
 	--toast-bg: rgba(20, 22, 26, 0.88);
 	--toast-open: 360ms;
-	--toast-stay: 3300ms;
+	/* Début de la sortie ; elle dure ~800 ms et finit avant que le composant
+	   ne retire la notification (3,6 s, `STAY`). */
+	--toast-stay: 2700ms;
 
 	--slide-width: 52vw;
 	--slide-gap: 28px;

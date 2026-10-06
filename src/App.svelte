@@ -265,12 +265,17 @@
 		...uninstalledEpicGames(epicAccount.library),
 	]);
 	const libraryGames = $derived(view(filter, sort, allGames));
-	/** Rangée d'accueil, dans l'ordre choisi (dernière partie d'abord par défaut). */
-	const homeGames = $derived(homeView(settings.home_order));
-
 	/** Dernier jeu lancé. `?resume=demo` en invente un, pour juger la carte dans un navigateur. */
 	const resumeGame = $derived(
 		params.get('resume') === 'demo' ? (games[1] ?? null) : lastPlayedGame()
+	);
+
+	/**
+	 * Rangée d'accueil, dans l'ordre choisi (dernière partie d'abord par défaut).
+	 * Le jeu de la carte « Reprendre » n'y figure pas une seconde fois.
+	 */
+	const homeGames = $derived(
+		homeView(settings.home_order).filter((game) => game.id !== resumeGame?.id)
 	);
 
 	// Sans jeu à reprendre, la carte disparaît : la sélection passe à la première tuile.

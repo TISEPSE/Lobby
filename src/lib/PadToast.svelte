@@ -115,11 +115,15 @@
 		box-shadow: 0 16px 40px rgba(0, 0, 0, 0.45);
 		overflow: hidden;
 		transform: translateX(-50%);
-		/* Le rond surgit, puis la pilule s'ouvre et le texte apparaît. */
+		/* Le rond surgit, puis la pilule s'ouvre et le texte apparaît. La
+		   sortie est la même chose à l'envers : le texte s'efface, la pilule se
+		   referme sur le rond, puis le rond disparaît. */
 		animation:
 			toast-pop var(--normal) var(--ease) both,
 			toast-open var(--toast-open) var(--ease) var(--normal) both,
-			toast-close var(--normal) var(--ease) var(--toast-stay) forwards;
+			toast-shrink var(--toast-open) var(--ease) calc(var(--toast-stay) + var(--fast)) forwards,
+			toast-unpop var(--normal) var(--ease)
+				calc(var(--toast-stay) + var(--fast) + var(--toast-open)) forwards;
 	}
 
 	@keyframes toast-pop {
@@ -136,10 +140,16 @@
 		}
 	}
 
-	@keyframes toast-close {
+	@keyframes toast-shrink {
+		to {
+			max-width: var(--toast-height);
+		}
+	}
+
+	@keyframes toast-unpop {
 		to {
 			opacity: 0;
-			transform: translateX(-50%) translateY(16px) scale(0.92);
+			transform: translateX(-50%) translateY(24px) scale(0.6);
 		}
 	}
 
@@ -179,7 +189,16 @@
 		gap: 2px;
 		padding: 0 30px 0 18px;
 		white-space: nowrap;
-		animation: toast-text var(--normal) var(--ease) var(--toast-open) both;
+		animation:
+			toast-text var(--normal) var(--ease) var(--toast-open) both,
+			toast-text-out var(--fast) var(--ease) var(--toast-stay) forwards;
+	}
+
+	@keyframes toast-text-out {
+		to {
+			opacity: 0;
+			transform: translateX(-10px);
+		}
 	}
 
 	@keyframes toast-text {
