@@ -65,7 +65,7 @@
 			<h2>Vos lanceurs</h2>
 			<span class="aside">{games.length} jeux</span>
 		</header>
-		<div class="launchers">
+		<div class="launchers" style="--launchers: {Math.max(3, launchers.length)}">
 			{#each launchers as [name, count] (name)}
 				<div class="launcher">
 					<span class="count">{count}</span>
@@ -177,7 +177,9 @@
 
 	.launchers {
 		display: grid;
-		grid-template-columns: repeat(5, 1fr);
+		/* Autant de colonnes que de lanceurs (trois au moins) : avec cinq
+		   colonnes fixes, « Epic Games » était coupé alors qu'il y avait la place. */
+		grid-template-columns: repeat(var(--launchers), minmax(0, 1fr));
 		gap: 10px;
 	}
 

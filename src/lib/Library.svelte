@@ -54,6 +54,63 @@
 			scrollRow = cur - VISIBLE_ROWS + 1;
 		}
 	});
+
+	/**
+	 * Chargement par lots : avec les bibliothèques Steam et Epic, la grille
+	 * comptait des centaines de jaquettes, toutes construites (et demandées)
+	 * d'un coup — le défilement saccadait. On en affiche `BATCH`, puis, quand
+	 * la sélection approche du bas, une rangée « Chargement… » et le lot
+	 * suivant après un court instant.
+	 */
+	const BATCH = 48;
+	/** Rangées restantes sous la sélection qui déclenchent le lot suivant. */
+	const PRELOAD_ROWS = 2;
+	/** Pause avant d'ajouter le lot : on voit qu'il charge, sans attendre. */
+	const BATCH_DELAY = 250;
+
+	let limit = $state(BATCH);
+	let loadingMore = $state(false);
+	const shown = $derived(games.slice(0, limit));
+	const hasMore = $derived(limit < games.length);
+
+	// Nouveau filtre ou nouveau tri : on repart du premier lot.
+	$effect(() => {
+		void filter;
+		void sort;
+		limit = BATCH;
+		loadingMore = false;
+		if (batchTimer) clearTimeout(batchTimer);
+		batchTimer = null;
+	});
+
+	/**
+	 * Minuteur du lot en attente, hors de l'effet : sinon chaque déplacement
+	 * de la sélection pendant la pause relançait l'effet, annulait le minuteur,
+	 * et la grille restait bloquée sur « Chargement… ».
+	 */
+	let batchTimer: ReturnType<typeof setTimeout> | null = null;
+
+	// La sélection approche du bas du lot : on charge le suivant. Si elle l'a
+	// déjà dépassé (touche maintenue), on rattrape tout de suite.
+	$effect(() => {
+		if (!hasMore) return;
+		if (index >= limit) {
+			limit = Math.ceil((index + 1) / BATCH) * BATCH;
+			return;
+		}
+		const lastRow = Math.ceil(limit / columns) - 1;
+		if (currentRow < lastRow - PRELOAD_ROWS + 1 || batchTimer) return;
+		loadingMore = true;
+		batchTimer = setTimeout(() => {
+			batchTimer = null;
+			limit += BATCH;
+			loadingMore = false;
+		}, BATCH_DELAY);
+	});
+
+	$effect(() => () => {
+		if (batchTimer) clearTimeout(batchTimer);
+	});
 </script>
 
 <section class="library">
@@ -86,7 +143,7 @@
 
 	<div class="viewport">
 		<div class="grid" style="--columns: {columns}; --row: {scrollRow}">
-			{#each games as game, i (game.id)}
+			{#each shown as game, i (game.id)}
 				<button
 					class="tile"
 					class:selected={focused && zone === 'grid' && i === index}
@@ -103,6 +160,13 @@
 					<span class="caption">{game.title}</span>
 				</button>
 			{/each}
+			{#if hasMore}
+				<!-- Lot suivant : il arrive quand la sélection approche du bas. -->
+				<div class="more">
+					<span class="spinner" class:active={loadingMore}></span>
+					{loadingMore ? 'Chargement des jeux suivants…' : `${games.length - limit} autres jeux`}
+				</div>
+			{/if}
 		</div>
 	</div>
 
@@ -227,6 +291,34 @@
 		gap: var(--gap);
 		transform: translateY(calc(var(--row) * -1 * (var(--row-height) + var(--gap))));
 		transition: transform var(--normal) var(--ease);
+	}
+
+	/* Rangée de fin de lot, sur toute la largeur. */
+	.more {
+		grid-column: 1 / -1;
+		display: flex;
+		align-items: center;
+		justify-content: center;
+		gap: 14px;
+		height: calc(var(--row-height) / 3);
+		border-radius: var(--radius);
+		background: var(--surface);
+		font-size: 18px;
+		color: var(--text-dim);
+	}
+
+	.more .spinner {
+		width: 26px;
+		height: 26px;
+		border-radius: 50%;
+		border: 4px solid var(--surface-strong);
+		opacity: 0.4;
+	}
+
+	.more .spinner.active {
+		border-top-color: var(--accent);
+		opacity: 1;
+		animation: spin 800ms linear infinite;
 	}
 
 	.tile {
