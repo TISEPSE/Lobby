@@ -114,7 +114,7 @@
 	let mediaIndex = $state(Number(params.get('slide') ?? 0));
 	/** Visionneuse ouverte ; `?viewer=1` l'ouvre (capture, avec `media=demo`). */
 	let viewerOpen = $state(params.get('viewer') === '1');
-	let viewerComponent: { togglePause: () => void } | null = $state(null);
+	let viewerComponent: { handleAction: (action: Action) => void; poke: () => void } | null = $state(null);
 	/** Plein écran sans bordure (mode console) ou fenêtre classique. */
 	let fullscreen = $state(true);
 
@@ -448,16 +448,23 @@
 				: []
 	);
 
-	/** Visionneuse : gauche / droite parcourent, A met en pause, B referme. */
+	/**
+	 * Visionneuse. Sur une capture : gauche / droite (ou L1 / R1) passent au
+	 * média voisin. Sur une bande-annonce, c'est un lecteur : A lecture / pause,
+	 * gauche / droite ±10 s (`VideoPlayer`), haut / bas le volume, L1 / R1 le
+	 * média voisin. B referme.
+	 */
 	function handleViewer(action: Action) {
+		const isVideo = detailMedia[mediaIndex]?.kind === 'video';
+		const last = detailMedia.length - 1;
 		if (action === 'cancel') viewerOpen = false;
-		else if (action === 'left') mediaIndex = Math.max(0, mediaIndex - 1);
-		else if (action === 'right') mediaIndex = Math.min(detailMedia.length - 1, mediaIndex + 1);
-		else if (action === 'accept') viewerComponent?.togglePause();
-		// Haut / bas : volume des vidéos (le même que Réglages → Audio → Vidéos).
-		else if ((action === 'up' || action === 'down') && detailMedia[mediaIndex]?.kind === 'video') {
+		else if (action === 'prev' || (!isVideo && action === 'left')) mediaIndex = Math.max(0, mediaIndex - 1);
+		else if (action === 'next' || (!isVideo && action === 'right')) mediaIndex = Math.min(last, mediaIndex + 1);
+		else if (isVideo && (action === 'up' || action === 'down')) {
+			// Le même volume que Réglages → Audio → Vidéos.
 			stepVolume('volume_video', action === 'up' ? 10 : -10);
-		}
+			viewerComponent?.poke();
+		} else if (isVideo) viewerComponent?.handleAction(action);
 	}
 
 	/** Slider « Captures et vidéos », sous la présentation du jeu. */
@@ -704,7 +711,8 @@
 		if (action === 'search' && !optionsOpen && !menuOptionsOpen && !viewerOpen) {
 			return openSearch();
 		}
-		// L1 / R1 : le dock, et rien d'autre.
+		// L1 / R1 : le dock — sauf dans la visionneuse, où ils passent au média voisin.
+		if ((action === 'prev' || action === 'next') && opened && viewerOpen) return handleViewer(action);
 		if (action === 'prev' || action === 'next') return stepSection(action === 'next' ? 1 : -1);
 		// L2 / R2 : les catégories de l'écran, là où il y en a.
 		if (action === 'pagePrev' || action === 'pageNext') {
@@ -922,9 +930,10 @@
 		if (optionsOpen || (menuOptionsOpen && !opened)) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (opened) {
 			if (viewerOpen) {
+				// Le lecteur vidéo affiche ses propres touches.
 				return detailMedia[mediaIndex]?.kind === 'video'
-					? list(['a', 'Lecture / pause'], ['dpad', 'Volume'], ['b', 'Fermer'])
-					: list(['b', 'Fermer']);
+					? list()
+					: list(['dpad', 'Média précédent / suivant'], ['b', 'Fermer']);
 			}
 			if (detailZone === 'media') return list(['a', 'Agrandir'], ['b', 'Retour']);
 			if (menuOptionsOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);

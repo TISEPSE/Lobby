@@ -73,6 +73,13 @@
 	/* Jauge de volume (Réglages → Audio). */
 	--volume-bar: 220px;
 	--volume-bar-height: 8px;
+	/* Lecteur des bandes-annonces : ombre des bandeaux, barre de progression,
+	   curseur, jauge de volume et icône d'action au centre. */
+	--player-shade: rgba(0, 0, 0, 0.85);
+	--player-bar: 6px;
+	--player-knob: 16px;
+	--player-volume: 90px;
+	--player-flash: 110px;
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;

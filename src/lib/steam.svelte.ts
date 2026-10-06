@@ -85,7 +85,16 @@ export const DEMO_MEDIA: MediaItem[] = [
 	...['1145360', '588650', '252950'].map((id) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`),
 	'https://cdn.cloudflare.steamstatic.com/steam/apps/1145360/library_600x900.jpg',
 	...['753640', '413150'].map((id) => `https://cdn.cloudflare.steamstatic.com/steam/apps/${id}/library_hero.jpg`),
-].map((src) => ({ kind: 'image' as const, thumb: src, src }));
+].map((src): MediaItem => ({ kind: 'image', thumb: src, src }));
+
+// Une bande-annonce de démo en tête (affiche seule, sans flux) : de quoi juger
+// la mise en page du lecteur dans un navigateur.
+DEMO_MEDIA.unshift({
+	kind: 'video',
+	thumb: 'https://cdn.cloudflare.steamstatic.com/steam/apps/1145360/library_hero.jpg',
+	src: '',
+	name: 'Bande-annonce de lancement',
+});
 
 /**
  * Médias d'une fiche, dans l'ordre de la grille : quelques bandes-annonces
