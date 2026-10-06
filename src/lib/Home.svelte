@@ -77,6 +77,14 @@
 		</div>
 	{/if}
 
+	{#if games.length === 0 && !resume}
+		<!-- PC neuf : aucun jeu encore. A mène à la détection (Réglages → Jeux). -->
+		<div class="empty" class:selected={focused}>
+			<span class="empty-title">Aucun jeu pour l'instant</span>
+			<span class="empty-text">Réglages → Jeux → Lancer la détection : Lobby trouve tes jeux Steam, Epic et ceux de tes dossiers.</span>
+		</div>
+	{/if}
+
 	<div
 		class="rail"
 		class:on-resume={onResume}
@@ -150,6 +158,35 @@
 			opacity: 0;
 			transform: translateY(14px);
 		}
+	}
+
+	.empty {
+		display: flex;
+		flex-direction: column;
+		gap: 10px;
+		margin: 0 var(--safe-x);
+		padding: 30px 36px;
+		max-width: var(--detail-width);
+		border-radius: var(--radius-lg);
+		background: var(--dock-bg);
+		border: 1px solid var(--dock-border);
+		outline: 3px solid transparent;
+		transition: outline-color var(--fast) var(--ease);
+	}
+
+	.empty.selected {
+		outline-color: var(--accent);
+		box-shadow: 0 0 34px 6px var(--accent-soft);
+	}
+
+	.empty-title {
+		font-size: 30px;
+		font-weight: 800;
+	}
+
+	.empty-text {
+		font-size: 19px;
+		color: var(--text-dim);
 	}
 
 	.rail {

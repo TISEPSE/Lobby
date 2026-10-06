@@ -7,7 +7,8 @@
  * Rust, et gardée ici pour la session.
  */
 import { persist, restore } from './persist';
-import type { Details, MediaItem } from './types';
+import type { Details, Game, MediaItem } from './types';
+import { generateProceduralCover } from './art';
 
 /**
  * File d'attente des requêtes vers Steam : quatre à la fois au plus. Avec la
@@ -126,6 +127,29 @@ export function coverOf(appid: string, fallback: string): string {
 export function heroFor(game: { id: string; appid?: string | null; hero: string }): string {
 	const sheet = game.appid ? details[game.appid] : undefined;
 	return artwork[game.id]?.hero || sheet?.hero || game.hero || '';
+}
+
+/**
+ * Image d'une jaquette, telle que la tuile l'affiche : l'affiche choisie par
+ * l'utilisateur (fichier local) d'abord, puis la fiche Steam, le catalogue,
+ * et à défaut une jaquette composée. Partagée par `Cover.svelte` et le
+ * préchargement du démarrage : une seule logique, rien ne peut diverger.
+ */
+export function coverFor(game: Game): string {
+	const online = artwork[game.id];
+	const sheet = game.appid ? details[game.appid] : undefined;
+	const style = artStyles[game.id] ?? 'auto';
+	if (style === 'auto' && online?.cover) return online.cover;
+	if (style === 'banner' && (online?.banner || sheet?.banner || game.hero)) {
+		return online?.banner || sheet?.banner || game.hero;
+	}
+	if (style === 'artwork' && (online?.hero || sheet?.hero || game.hero)) {
+		return online?.hero || sheet?.hero || game.hero;
+	}
+	if (sheet?.cover?.trim()) return sheet.cover;
+	if (online?.cover?.trim()) return online.cover;
+	if (game.cover?.trim()) return game.cover;
+	return generateProceduralCover(game.title, game.source);
 }
 
 /** Artwork de fond, même principe. */

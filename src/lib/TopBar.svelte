@@ -86,7 +86,7 @@
 			onclick={() => onOpenSearch?.()}
 		>
 			<img src="/assets/icons/search.svg" alt="" />
-			<span>Rechercher parmi {gamesCount} jeux</span>
+			<span class="search-label">Rechercher parmi {gamesCount} jeux</span>
 			<span class="y"><Glyph button="y" size="26px" /></span>
 		</button>
 
@@ -271,6 +271,14 @@
 
 	.search.active {
 		color: var(--text);
+	}
+
+	/* Jamais sur deux lignes : au pire, coupé d'un « … ». */
+	.search-label {
+		min-width: 0;
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
 
 	.y {

@@ -1,6 +1,6 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails, artStyles, artwork, ensureArtwork } from './steam.svelte.js';
+	import { details, ensureDetails, artStyles, artwork, ensureArtwork, coverFor } from './steam.svelte.js';
 	import { generateProceduralCover } from './art';
 
 	let {
@@ -38,32 +38,8 @@
 	// manquer, un id jamais.
 	const style = $derived(artStyles[game.id] ?? 'auto');
 
-	const coverSrc = $derived.by(() => {
-		if (override) return override;
-		// Le fichier local d'abord : c'est la jaquette retenue pour ce jeu.
-		if (style === 'auto' && online?.cover) {
-			return online.cover;
-		}
-		// Le fichier local passe avant la fiche Steam : c'est l'affiche que
-		// l'utilisateur a choisie, elle ne doit pas être recouverte par celle
-		// que Steam propose.
-		if (style === 'banner' && (online?.banner || sheet?.banner || game.hero)) {
-			return online?.banner || sheet?.banner || game.hero;
-		}
-		if (style === 'artwork' && (online?.hero || sheet?.hero || game.hero)) {
-			return online?.hero || sheet?.hero || game.hero;
-		}
-		if (sheet?.cover && sheet.cover.trim().length > 0) {
-			return sheet.cover;
-		}
-		if (online?.cover && online.cover.trim().length > 0) {
-			return online.cover;
-		}
-		if (game.cover && game.cover.trim().length > 0) {
-			return game.cover;
-		}
-		return generateProceduralCover(game.title, game.source);
-	});
+	// Même logique que le préchargement du démarrage (`coverFor`).
+	const coverSrc = $derived(override || coverFor(game));
 
 	let failed = $state(false);
 

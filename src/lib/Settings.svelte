@@ -2,6 +2,7 @@
 	import { onMount } from 'svelte';
 	import type { Action } from './gamepad';
 	import type { VolumeKey } from './types';
+	import { notices } from './notices.svelte.js';
 	import VirtualKeyboard from './VirtualKeyboard.svelte';
 
 	let {
@@ -9,6 +10,8 @@
 		gameFolders = [],
 		buttonLayout = 'ps5',
 		soundEnabled = true,
+		introEnabled = true,
+		onToggleIntro,
 		volumes = { volume_master: 100, volume_menu: 100, volume_alerts: 100, volume_launch: 100, volume_video: 100 },
 		onStepVolume,
 		screensaverMinutes = 5,
@@ -33,6 +36,9 @@
 		gameFolders: string[];
 		buttonLayout: string;
 		soundEnabled?: boolean;
+		/** Animation de démarrage. */
+		introEnabled?: boolean;
+		onToggleIntro?: () => void;
 		/** Volumes en pour cent (Réglages → Audio). */
 		volumes?: Record<VolumeKey, number>;
 		/** Monte ou baisse un volume de `delta` points. */
@@ -92,7 +98,7 @@
 			id: 'system',
 			label: 'Système',
 			icon: 'settings',
-			hint: 'Affichage de la console.',
+			hint: 'Affichage, et journal des derniers messages.',
 		},
 	];
 
@@ -185,7 +191,7 @@
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 3; // [0: touches, 1: veille, 2: ordre de l'accueil]
+				return 4; // [0: touches, 1: veille, 2: ordre de l'accueil, 3: animation de démarrage]
 			case 'audio':
 				return 1 + VOLUMES.length; // [0: sons activés, 1..: volumes]
 			case 'system':
@@ -297,6 +303,8 @@
 				onCycleScreensaver?.();
 			} else if (focusRow === 2) {
 				onCycleHomeOrder?.();
+			} else if (focusRow === 3) {
+				onToggleIntro?.();
 			}
 		} else if (cat === 'audio') {
 			if (focusRow === 0) {
@@ -524,6 +532,23 @@
 						</div>
 						<span class="badge-layout">{homeOrderLabel} ▸</span>
 					</button>
+
+					<button
+						type="button"
+						class="setting-row"
+						class:focused={focused && focusCol === 'content' && focusRow === 3}
+						onclick={() => {
+							focusCol = 'content';
+							focusRow = 3;
+							executeContentAction();
+						}}
+					>
+						<div class="row-label">
+							<span class="title">Animation de démarrage</span>
+							<span class="desc">Logo, chargement de la bibliothèque et « Bonjour » à l'allumage</span>
+						</div>
+						<span class="badge-layout">{introEnabled ? 'Oui ▸' : 'Non ▸'}</span>
+					</button>
 				</div>
 
 			{:else if currentCategory.id === 'audio'}
@@ -591,6 +616,27 @@
 						<span class="badge-layout">{fullscreen ? 'Plein écran ▸' : 'Fenêtre ▸'}</span>
 					</button>
 				</div>
+
+				<!-- Les derniers messages du bandeau : un avertissement passé trop
+				     vite se relit ici. -->
+				<section class="journal">
+					<span class="journal-title">Journal</span>
+					{#if notices.length === 0}
+						<p class="journal-empty">Aucun message depuis le démarrage.</p>
+					{:else}
+						<ul>
+							{#each notices.slice(0, 12) as entry (entry.at + entry.message)}
+								<li class:failed={!entry.ok}>
+									<span class="journal-time">
+										{new Date(entry.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+									</span>
+									<span class="journal-text">{entry.message}</span>
+								</li>
+							{/each}
+						</ul>
+					{/if}
+				</section>
+
 			{/if}
 		</div>
 	</main>
@@ -961,6 +1007,56 @@
 		background: var(--surface);
 		color: var(--text-dim);
 		border-color: transparent;
+	}
+
+	/* Journal des messages (Réglages → Système). */
+	.journal {
+		display: flex;
+		flex-direction: column;
+		gap: 12px;
+		margin-top: 28px;
+	}
+
+	.journal-title {
+		font-size: 17px;
+		font-weight: 700;
+		letter-spacing: 0.08em;
+		text-transform: uppercase;
+		color: var(--text-dim);
+	}
+
+	.journal ul {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
+	}
+
+	.journal li {
+		display: flex;
+		gap: 16px;
+		padding: 10px 16px;
+		border-radius: var(--radius);
+		background: var(--surface);
+		font-size: 17px;
+	}
+
+	.journal li.failed {
+		box-shadow: inset 3px 0 0 var(--danger);
+	}
+
+	.journal-time {
+		flex: none;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.journal-empty {
+		margin: 0;
+		font-size: 17px;
+		color: var(--text-dim);
 	}
 
 	/* Jauge de volume : gauche / droite la règlent par pas de 10 %. */

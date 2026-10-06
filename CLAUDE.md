@@ -67,6 +67,8 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Fenêtre
 
+- **Mise à l'échelle de l'écran** (`fit_to_screen`, `lib.rs`) : l'interface est dessinée pour du 1920 × 1080 (`DESIGN_WIDTH` / `DESIGN_HEIGHT`) ; le zoom du webview vaut min(largeur / 1920, hauteur / 1080) en pixels logiques, recalculé à chaque redimensionnement. Sur un portable, « Rechercher parmi N jeux » passait à la ligne ; sur une TV 4K, tout était minuscule. Zoom **du navigateur** (`set_zoom`), pas `zoom` CSS : la page voit 1920 × 1080 pixels CSS et `vw` / `vh` restent justes.
+
 - Démarrage en **plein écran sans bordure** (`fullscreen: true`, `decorations: false` dans `tauri.conf.json`).
 - **Pas de pointeur** : `set_cursor_visible(false)` sur la fenêtre au démarrage, et `cursor: none !important` sur tout élément (des boutons déclaraient `cursor: pointer` et faisaient réapparaître la main).
 - Porte de sortie : **F11** ou Réglages → Système → Affichage bascule vers une fenêtre classique avec sa barre de titre (`toggle_fullscreen`, bordures réglées *avant* le plein écran).
@@ -119,6 +121,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - `epic_login` est **asynchrone** : sous Windows, créer une fenêtre depuis une commande synchrone (fil principal) peut bloquer l'application — c'est pour ça que la première version n'ouvrait rien.
 - Le code n'est **pas lu par `JSON.parse`** : le visualiseur JSON de WebView2 ajoute son propre texte autour. On le cherche par expression régulière (`"authorizationCode": "…"`), en réessayant quelques secondes.
 - Fermer la fenêtre sans se connecter envoie `epic-login` avec « connexion annulée » : l'interface ne reste pas bloquée sur « Connexion… ». Chaque étape laisse une trace dans le journal (`Epic : …`).
+- Le fournisseur ferme sa pop-up par `window.close()`, que Tauri ne relayait pas : la fenêtre restait **blanche et impossible à fermer**, au-dessus de tout, jusqu'à la fin de la connexion Epic. Un script injecté remplace `close()` par une navigation vers `https://epic-popup-close.invalid/`, interceptée → la pop-up est détruite. Elle garde sa barre de titre (`decorations`, `closable`).
 - **« Autres méthodes de connexion »** (Google, Xbox, PlayStation, Steam…) ouvrent une pop-up (`window.open`), que Tauri **refuse par défaut** — rien ne se passait. `on_new_window` crée une vraie fenêtre (`NewWindowResponse::Create`, `window_features`) : même environnement WebView2, donc `window.opener` fonctionne et la pop-up rend la main à Epic. Fermer la fenêtre de connexion ferme aussi les pop-ups (`epic-popup-<n>`).
 - La page finale d'Epic peut se **charger plusieurs fois** : seul le **premier** code compte (`done.swap`, et `window.__epicCodeSent` côté page). Un code ne s'échange qu'une fois — les doublons étaient refusés (400) et affichaient des erreurs alors que la connexion avait réussi. Dès la fin, la fenêtre de connexion **et** les pop-ups des fournisseurs sont détruites (`close_login_windows`).
 - La session Epic (jeton de renouvellement) est **chiffrée** sur le disque (`epic.session`, `secure_store`) ; l'ancien `epic.json` en clair est converti puis supprimé à la première lecture.
@@ -226,6 +229,17 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sur une **fiche de jeu**, il n'y a pas de tuile à prolonger : un troisième bouton « Options » (et la touche X) ouvre le même jeu d'actions dans `OptionsMenu.svelte`, avec des lignes identiques à celles du tiroir.
 - Tout ce qui touche à l'installation est **confié à Steam** (`steam://install|validate|uninstall`) ou au launcher Epic (`com.epicgames.launcher://apps/…`), par la commande Rust `open_url` — qui n'accepte que ces deux protocoles **et seulement les caractères `[A-Za-z0-9:/?=._-]`** (`url_is_safe`, testé) : sous Windows l'adresse passe par `cmd /C start`, qui interprète `&`, `|`, `^`, `%` — `steam://x&calc` lançait une autre commande.
 
+## PC neuf
+
+- Dans l'application, `games` part **vide** : la bibliothèque vient de `library.json` ou de la détection. `data/games.json` (13 jeux de démonstration) ne sert plus qu'hors application (navigateur, captures) — livré dans l'installeur, il faisait afficher les jeux de l'auteur sur n'importe quel PC.
+- Accueil sans jeu : encart « Aucun jeu pour l'instant » ; A ouvre Réglages → Jeux (détection).
+- La photo Steam d'un PC vient du cache de **son** client Steam (`config/avatarcache`), pas de l'installeur.
+- Le journal (`tauri-plugin-log`, `%LOCALAPPDATA%\fr.interface.console\logs`) est actif aussi dans l'application installée : c'est là qu'on comprend un souci sur un autre PC.
+
+## Journal des messages (`notices.svelte.ts`)
+
+- `notify()` garde les 30 derniers messages ; Réglages → Système → **Journal** les liste (erreurs liserées de rouge). Un avertissement passé trop vite se relit là.
+
 ## Données sur le disque (`persist.ts`, `save_store`)
 
 - Le stockage du webview (`localStorage`) **dépend de l'origine** : `tauri dev` sert `localhost:5177`, l'exécutable compilé une autre adresse. Tout ce qui n'y vivait que là (statistiques, journal, choix d'affiches) **disparaissait dans l'exe**, et l'accueil y perdait l'ordre « dernière partie ».
@@ -251,7 +265,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - Après `screensaver_minutes` sans aucune action (5 min par défaut, réglable dans Réglages → Apparence, `0` = jamais), `ScreenSaver.svelte` prend l'écran : artworks de la bibliothèque qui se relaient toutes les 12 s avec un lent panoramique, heure et date en bas à gauche.
 - La première action **réveille seulement** : elle n'est pas transmise à l'écran en dessous, pour ne pas lancer un jeu en voulant rallumer l'écran.
-- Pas de veille pendant la vidéo d'introduction, ni s'il n'y a aucun artwork à montrer.
+- Pas de veille pendant l'animation de démarrage, ni s'il n'y a aucun artwork à montrer.
 
 ## Statistiques (`Stats.svelte`, `stats.ts`)
 
@@ -314,9 +328,16 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Comparaison via `normalizeForSearch` : sans accents ni ponctuation, « repo » trouve « R.E.P.O. ».
 - Capture : `?search=1` ouvre la fenêtre.
 
-## Vidéo d'introduction
+## Animation de démarrage (`BootIntro.svelte`)
 
-- **Retirée** (fichiers, `BootVideo.svelte`, réglages `boot_video*`) : les vidéos livrées étaient pixelisées et mal faites. L'application démarre directement sur l'accueil.
+- D'après une vidéo Claude Design de l'utilisateur (10,5 s), **rejouée en direct** pour être personnelle : quatre traits de couleur convergent, éclat (onde verte) et les quatre pastilles de la manette en losange (Y jaune, B rouge, A vert, X bleu, `--pad-*`), **LOBBY** / CONSOLE, puis une couronne de 60 graduations qui s'allument au fil du **vrai chargement**, « N / total jeux » et l'étape réelle, puis « Bonjour / Bonsoir, <pseudo> » sous la photo cerclée d'accent ; à la sortie, le fond s'efface sur l'accueil et la photo file vers sa place dans le dock (FLIP sur `.top .profile .avatar`). Son `boot` : accord de quatre notes synthétisé (`playChime`, famille Notifications) à l'éclat.
+- **Chargement réel** (`bootLoad()` dans `App.svelte`), dit tel quel sous le compteur : réglages → bibliothèque installée, statistiques, affiches → comptes Steam (local + liste chiffrée) et Epic (réseau, attendu 8 s au plus, `EPIC_WAIT`) → jaquette **et** fond de chaque jeu installé, puis jaquettes du premier lot de la bibliothèque (48), décodées (`Image.decode`, 4 s au plus chacune, `IMAGE_WAIT`). Le **total grandit en direct** (`allGames` : installés + possédés) ; le compteur suit les jeux **prêts** (installé : images décodées ; possédé : liste arrivée) et ne dépasse jamais la jauge.
+- La jauge ne fait jamais un tour en moins de `MIN_LOADING` (vitesse bornée) : bibliothèque en cache, le compteur sautait d'un coup au total.
+- Logo **fixe au centre de l'écran**, textes posés dessous en absolu : en flux, l'apparition du nom faisait remonter les pastilles.
+- Fond sombre **dès la création de la fenêtre** (`backgroundColor` dans `tauri.conf.json`, `index.html`) : plus d'éclair blanc avant l'animation.
+- N'importe quelle touche la passe (sortie courte, sans vol). Réglages → Apparence → « Animation de démarrage » (`intro_enabled`). Pas de veille pendant. `?intro=0` la saute (captures).
+- `coverFor(game)` (`steam.svelte.ts`) : l'image d'une jaquette, partagée par `Cover.svelte` et le préchargement — une seule logique.
+- Les anciennes vidéos d'introduction (pixelisées) restent retirées.
 
 ## Feuille de route
 

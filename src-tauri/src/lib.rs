@@ -274,6 +274,9 @@ pub struct UserSettings {
   /// Retours sonores de l'interface.
   #[serde(default = "default_true")]
   pub sound_enabled: bool,
+  /// Animation de démarrage (logo, chargement, « Bonjour, <pseudo> »).
+  #[serde(default = "default_true")]
+  pub intro_enabled: bool,
   /// Clé SteamGridDB, saisie par l'utilisateur. Elle n'est **jamais** écrite
   /// dans le dépôt : elle ne vit que dans le fichier de réglages local.
   #[serde(default)]
@@ -462,6 +465,7 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     button_layout: "ps5".to_string(),
     game_folders: default_folders,
     sound_enabled: true,
+    intro_enabled: true,
     steamgriddb_key: String::new(),
     screensaver_minutes: 5,
     home_order: default_home_order(),
@@ -1279,6 +1283,30 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Taille pour laquelle l'interface est dessinée (une TV 1080p).
+const DESIGN_WIDTH: f64 = 1920.0;
+const DESIGN_HEIGHT: f64 = 1080.0;
+
+/// Met toute l'interface à l'échelle de la fenêtre, d'un bloc : zoom du
+/// webview = min(largeur / 1920, hauteur / 1080), en pixels logiques. Sur un
+/// portable, « Rechercher parmi N jeux » passait à la ligne ; sur une TV 4K,
+/// tout était minuscule. C'est le zoom du navigateur, pas `zoom` en CSS : la
+/// page voit alors 1920 × 1080 pixels CSS, et `vw` / `vh` restent justes.
+fn fit_to_screen(window: &tauri::WebviewWindow) {
+  let (Ok(size), Ok(scale)) = (window.inner_size(), window.scale_factor()) else {
+    return;
+  };
+  if size.width == 0 || size.height == 0 {
+    return;
+  }
+  let width = size.width as f64 / scale;
+  let height = size.height as f64 / scale;
+  let zoom = (width / DESIGN_WIDTH).min(height / DESIGN_HEIGHT);
+  if let Err(error) = window.set_zoom(zoom) {
+    log::warn!("Mise à l'échelle impossible : {error}");
+  }
+}
+
 /// Jeu Steam en cours (appid), 0 sinon. `steam -applaunch` rend la main
 /// aussitôt : c'est Steam lui-même qui dit quand la partie commence et finit,
 /// dans le registre sous Windows (`RunningAppID`), dans `~/.steam/registry.vdf`
@@ -1443,14 +1471,23 @@ pub fn run() {
       // dès qu'il passe sur la fenêtre, quel que soit l'élément survolé.
       if let Some(window) = app.get_webview_window("main") {
         let _ = window.set_cursor_visible(false);
+        // L'interface est dessinée pour du 1920 × 1080 : on la met à l'échelle
+        // de l'écran, au démarrage puis à chaque changement de taille.
+        fit_to_screen(&window);
+        let fitted = window.clone();
+        window.on_window_event(move |event| {
+          if matches!(event, tauri::WindowEvent::Resized(_) | tauri::WindowEvent::ScaleFactorChanged { .. }) {
+            fit_to_screen(&fitted);
+          }
+        });
       }
-      if cfg!(debug_assertions) {
-        app.handle().plugin(
-          tauri_plugin_log::Builder::default()
-            .level(log::LevelFilter::Info)
-            .build(),
-        )?;
-      }
+      // Journal aussi dans l'application installée : c'est là qu'on en a
+      // besoin pour comprendre un souci de connexion sur un autre PC.
+      app.handle().plugin(
+        tauri_plugin_log::Builder::default()
+          .level(log::LevelFilter::Info)
+          .build(),
+      )?;
       Ok(())
     })
     .run(tauri::generate_context!())

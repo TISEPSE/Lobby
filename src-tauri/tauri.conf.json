@@ -13,6 +13,7 @@
     "windows": [
       {
         "title": "Lobby",
+        "backgroundColor": "#020403",
         "width": 1600,
         "height": 900,
         "center": true,

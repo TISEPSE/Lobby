@@ -23,9 +23,11 @@
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame, installGame, installEpicGame } from './lib/steamActions';
-	import { artwork, details, heroFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
+	import { artwork, details, heroFor, coverFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
 	import PadToast from './lib/PadToast.svelte';
+	import BootIntro from './lib/BootIntro.svelte';
+	import { remember } from './lib/notices.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { listen, padCount, type Action } from './lib/gamepad';
 	import type { GlyphButton } from './lib/glyphs';
@@ -77,6 +79,7 @@
 		setScreensaverMinutes,
 		setHomeOrder,
 		setLibraryView,
+		setIntroEnabled,
 		stepVolume,
 		setSteamGridKey,
 		addGameFolder,
@@ -143,6 +146,44 @@
 	let homeIndex = $state(params.has('index') ? wantedIndex : -1);
 	/** La bibliothèque enregistrée est chargée : on sait s'il y a un jeu à reprendre. */
 	let libraryReady = $state(false);
+
+	/**
+	 * Animation de démarrage (`BootIntro`) : jouée à chaque lancement, sauf si
+	 * elle est désactivée dans Apparence (`?intro=0` la saute, pour les
+	 * captures). Sa jauge suit le vrai chargement : réglages, bibliothèque,
+	 * puis les images des premiers jeux de l'accueil, préchargées.
+	 */
+	let introPlaying = $state(params.get('intro') !== '0' && params.get('boot') !== '0');
+	let introComponent = $state<{ skip: () => void } | null>(null);
+	/**
+	 * Chargement réel pendant l'animation (`bootLoad`) : étape affichée, comptes
+	 * arrivés, et jeux dont les images sont décodées.
+	 */
+	let boot = $state({
+		step: 'Lecture des réglages…',
+		settings: false,
+		library: false,
+		steam: false,
+		epic: false,
+		imagesDone: 0,
+		imagesTotal: 0,
+	});
+	/** Jeux installés prêts : leurs images (jaquette et fond) décodées. */
+	let bootReadyIds = $state<Record<string, true>>({});
+	/** Jeux prêts, pour le compteur « N / total » : installés décodés + possédés arrivés. */
+	const bootReady = $derived(
+		Object.keys(bootReadyIds).length +
+			(boot.steam ? uninstalledSteamGames(steamAccount.owned).length : 0) +
+			(boot.epic ? uninstalledEpicGames(epicAccount.library).length : 0)
+	);
+	/** Avancement de la jauge, étape par étape. */
+	const bootProgress = $derived(
+		(boot.settings ? 0.05 : 0) +
+			(boot.library ? 0.15 : 0) +
+			(boot.steam ? 0.15 : 0) +
+			(boot.epic ? 0.15 : 0) +
+			(boot.imagesTotal > 0 ? 0.5 * (boot.imagesDone / boot.imagesTotal) : boot.library && boot.steam && boot.epic ? 0.5 : 0)
+	);
 	let libraryIndex = $state(wanted === 'library' ? wantedIndex : 0);
 	/**
 	 * Recherche : une fenêtre (clavier virtuel + jeux), plus une page. Y
@@ -410,6 +451,11 @@
 		// Bas : les panneaux (lanceurs, semaine, mises à jour).
 		if (action === 'down') {
 			homeZone = 'panels';
+			return;
+		}
+		// Aucun jeu (PC neuf) : A ouvre Réglages → Jeux, où se lance la détection.
+		if (homeGames.length === 0 && !resumeGame) {
+			if (action === 'accept') goToSection('settings');
 			return;
 		}
 		if (action === 'left') homeIndex = Math.max(resumeGame ? -1 : 0, homeIndex - 1);
@@ -681,6 +727,12 @@
 			return;
 		}
 
+		// N'importe quelle touche passe l'animation de démarrage.
+		if (introPlaying) {
+			introComponent?.skip();
+			return;
+		}
+
 		// Un seul endroit décide du son : les écrans n'ont pas à y penser.
 		if (action === 'accept') playSound('accept');
 		else if (action === 'cancel') playSound('cancel');
@@ -782,6 +834,7 @@
 		const resolved = typeof message === 'string' ? { ok, message } : message;
 		notice = resolved.message;
 		noticeOk = resolved.ok;
+		remember(resolved.message, resolved.ok);
 		if (!resolved.ok) playSound('error');
 		if (noticeTimer) clearTimeout(noticeTimer);
 		noticeTimer = setTimeout(() => (notice = ''), resolved.ok ? 3000 : 6000);
@@ -807,6 +860,98 @@
 		return { ok: false, message: 'Installation impossible : boutique inconnue.' };
 	}
 
+	/** Promesse qui abandonne après `ms` : on n'attend jamais indéfiniment. */
+	function within<T>(promise: Promise<T>, ms: number): Promise<T | void> {
+		return Promise.race([promise, new Promise<void>((resolve) => setTimeout(resolve, ms))]);
+	}
+
+	/** Décode une image ; résout aussi en cas d'échec ou après `IMAGE_WAIT`. */
+	function decodeImage(url: string): Promise<void> {
+		if (!url) return Promise.resolve();
+		const image = new Image();
+		image.src = url;
+		return within(image.decode().catch(() => {}), IMAGE_WAIT).then(() => {});
+	}
+
+	/** Attente maximale d'Epic (réseau) et d'une image, au démarrage. */
+	const EPIC_WAIT = 8000;
+	const IMAGE_WAIT = 4000;
+
+	/**
+	 * Tout ce qui est chargé pendant l'animation de démarrage, dans l'ordre, et
+	 * dit tel quel sous le compteur. Le total (`allGames`) grandit au fil des
+	 * comptes qui arrivent ; le compteur suit les jeux réellement prêts.
+	 */
+	async function bootLoad() {
+		await initSettings();
+		boot.settings = true;
+		// Désactivée dans Apparence : on va droit à l'accueil (le chargement
+		// continue de la même façon, sans être montré).
+		if (!settings.intro_enabled) introPlaying = false;
+
+		boot.step = 'Lecture de la bibliothèque…';
+		await Promise.all([initLibrary(), initArtStore()]);
+		libraryReady = true;
+		boot.library = true;
+		boot.step = games.length
+			? `Bibliothèque : ${games.length} jeu${games.length > 1 ? 'x' : ''} installé${games.length > 1 ? 's' : ''}`
+			: 'Aucun jeu installé — détection dans Réglages';
+
+		// Comptes : Steam (fichiers locaux + liste chiffrée) et Epic (réseau).
+		const steam = initSteamAccount()
+			.then(() =>
+				initSteamLibrary((ok, message) => {
+					if (ok) {
+						// Première connexion, profil encore par défaut : on reprend
+						// le pseudo et la photo du compte Steam.
+						if (settings.profile_name === 'Joueur') useSteamProfile();
+						notify(`Bibliothèque Steam synchronisée : ${message} jeux.`);
+					} else if (message === 'connexion annulée') notify('Connexion Steam annulée.');
+					else notify(`Bibliothèque Steam impossible : ${message}`, false);
+				})
+			)
+			.then(() => {
+				boot.steam = true;
+				const owned = Object.keys(steamAccount.owned).length;
+				if (owned) boot.step = `Compte Steam : ${owned} jeux`;
+			});
+		const epic = initEpicAccount((ok, message) => {
+			if (ok) notify(`Epic Games connecté : ${message}.`);
+			// Fenêtre fermée à la main : ce n'est pas une erreur.
+			else if (message === 'connexion annulée') notify('Connexion Epic annulée.');
+			else notify(`Connexion Epic impossible : ${message}`, false);
+		}).then(async () => {
+			// La lecture du compte part en tâche de fond : on attend sa fin.
+			while (!epicAccount.ready) await new Promise((resolve) => setTimeout(resolve, 100));
+			const owned = epicAccount.library.length;
+			if (owned) boot.step = `Compte Epic : ${owned} jeux`;
+		});
+		await Promise.all([steam, within(epic, EPIC_WAIT)]);
+		boot.steam = true;
+		boot.epic = true;
+
+		// Jaquettes : celles de chaque jeu installé (jaquette et fond), puis le
+		// premier lot de la bibliothèque, avec le filtre et le tri mémorisés.
+		const installed = games.slice();
+		const firstBatch = libraryGames.filter((game) => game.installed === false).slice(0, 48);
+		boot.imagesTotal = installed.length + firstBatch.length;
+		boot.imagesDone = 0;
+		const tick = () => {
+			boot.imagesDone += 1;
+			boot.step = `Jaquettes : ${boot.imagesDone} / ${boot.imagesTotal}`;
+		};
+		await Promise.all([
+			...installed.map((game) =>
+				Promise.all([decodeImage(coverFor(game)), decodeImage(heroFor(game))]).then(() => {
+					bootReadyIds[game.id] = true;
+					tick();
+				})
+			),
+			...firstBatch.map((game) => decodeImage(coverFor(game)).then(tick)),
+		]);
+		boot.step = 'Prêt';
+	}
+
 	onMount(() => {
 		// Les téléchargements Steam sont relus régulièrement tant que
 		// l'interface est ouverte.
@@ -815,27 +960,7 @@
 		// Les sons sont décodés d'avance : le premier appui doit déjà sonner
 		// juste, pas retomber sur le bip de secours.
 		if (settings.sound_enabled) preloadSounds();
-		initSettings();
-		Promise.all([initLibrary(), initArtStore()]).then(() => (libraryReady = true));
-		// Le compte local d'abord : la liste complète en complète les temps.
-		initSteamAccount().then(() =>
-			initSteamLibrary((ok, message) => {
-				if (ok) {
-					// Première connexion, profil encore par défaut : on reprend
-					// le pseudo et la photo du compte Steam.
-					if (settings.profile_name === 'Joueur') useSteamProfile();
-					notify(`Bibliothèque Steam synchronisée : ${message} jeux.`);
-				}
-				else if (message === 'connexion annulée') notify('Connexion Steam annulée.');
-				else notify(`Bibliothèque Steam impossible : ${message}`, false);
-			})
-		);
-		initEpicAccount((ok, message) => {
-			if (ok) notify(`Epic Games connecté : ${message}.`);
-			// Fenêtre fermée à la main : ce n'est pas une erreur.
-			else if (message === 'connexion annulée') notify('Connexion Epic annulée.');
-			else notify(`Connexion Epic impossible : ${message}`, false);
-		});
+		void bootLoad();
 		const stop = listen(handle);
 		// Filet de sécurité : sans cela, une erreur non rattrapée laissait une
 		// interface figée sans rien dire. On préfère un bandeau explicite.
@@ -855,7 +980,7 @@
 			pads = padCount();
 			// Pas de veille pendant l'introduction, ni sans artwork à montrer.
 			const delay = settings.screensaver_minutes * 60_000;
-			if (delay > 0 && saverImages.length > 0) {
+			if (delay > 0 && !introPlaying && saverImages.length > 0) {
 				if (Date.now() - lastInput >= delay) saverOn = true;
 			}
 		}, 1000);
@@ -989,6 +1114,9 @@
 		if (section === 'profile' && statsOpen) return list(['a', 'Ouvrir'], ['r2', 'Période'], ['b', 'Retour']);
 		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['b', 'Accueil']);
 		if (section === 'settings') return list(['a', 'Valider'], ['b', 'Accueil']);
+		if (homeZone === 'row' && homeGames.length === 0 && !resumeGame) {
+			return list(['a', 'Détecter mes jeux'], ['dpad', 'Lanceurs et activité'], ['y', 'Recherche']);
+		}
 		if (homeZone === 'panels') {
 			const what = panelIndex === 0 ? 'Bibliothèque' : panelIndex === 1 ? 'Statistiques' : 'Voir le jeu';
 			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche']);
@@ -1118,6 +1246,11 @@
 			onRemoveFolder={removeGameFolder}
 			onChangeLayout={setButtonLayout}
 			soundEnabled={settings.sound_enabled}
+			introEnabled={settings.intro_enabled}
+			onToggleIntro={() => {
+				setIntroEnabled(!settings.intro_enabled);
+				notify(settings.intro_enabled ? 'Animation de démarrage activée.' : 'Animation de démarrage désactivée.');
+			}}
 			volumes={{
 				volume_master: settings.volume_master,
 				volume_menu: settings.volume_menu,
@@ -1178,6 +1311,19 @@
 	</div>
 	{/key}
 </main>
+
+{#if introPlaying}
+	<BootIntro
+		bind:this={introComponent}
+		name={settings.profile_name}
+		avatar={settings.avatar_path}
+		total={allGames.length}
+		ready={bootReady}
+		step={boot.step}
+		progress={bootProgress}
+		onDone={() => (introPlaying = false)}
+	/>
+{/if}
 
 {#if saverOn}
 	<ScreenSaver images={saverImages} />

@@ -73,7 +73,15 @@ export function deduplicateGames(list: Game[]): Game[] {
 	return Array.from(map.values());
 }
 
-export const games = $state<Game[]>(deduplicateGames(rawGames as Game[]));
+/**
+ * Jeux installés. Dans l'application, la liste part **vide** : elle vient de
+ * `library.json` ou de la détection. Les jeux de `data/games.json` ne servent
+ * qu'hors application (onglet de navigateur, captures) — ils étaient livrés
+ * dans l'installeur, et un PC neuf affichait les jeux de quelqu'un d'autre.
+ */
+export const games = $state<Game[]>(
+	(globalThis as any).__TAURI_INTERNALS__ ? [] : deduplicateGames(rawGames as Game[])
+);
 
 /** Statistiques par identifiant de jeu. */
 export const stats = $state<Record<string, GameStats>>(load());

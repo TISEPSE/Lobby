@@ -35,6 +35,9 @@ const LOGIN_WINDOW: &str = "epic-login";
 /// Préfixe des pop-ups ouvertes par la page Epic (« Autres méthodes de
 /// connexion » : Google, Xbox, PlayStation, Steam…), numérotées.
 const POPUP_PREFIX: &str = "epic-popup-";
+/// Adresse factice vers laquelle une pop-up de fournisseur navigue quand sa
+/// page appelle `window.close()` : on l'intercepte pour détruire la fenêtre.
+const POPUP_CLOSE_HOST: &str = "epic-popup-close.invalid";
 static POPUP_COUNT: AtomicUsize = AtomicUsize::new(0);
 
 /// Ce qui est gardé sur le disque : de quoi renouveler la session, rien d'autre.
@@ -368,6 +371,7 @@ pub fn open_login(app: &tauri::AppHandle) -> Result<(), String> {
       let app = app.clone();
       move |url, features| {
         let label = format!("{POPUP_PREFIX}{}", POPUP_COUNT.fetch_add(1, Ordering::SeqCst));
+        let label_for_close = label.clone();
         log::info!("Epic : pop-up ouverte {}", url.host_str().unwrap_or("?"));
         let built = tauri::WebviewWindowBuilder::new(
           &app,
@@ -379,6 +383,36 @@ pub fn open_login(app: &tauri::AppHandle) -> Result<(), String> {
         .center()
         .always_on_top(true)
         .focused(true)
+        // Toujours fermable à la main, avec sa barre de titre.
+        .decorations(true)
+        .closable(true)
+        // Le fournisseur (Steam, Google…) ferme sa pop-up par `window.close()`
+        // une fois la connexion faite ; Tauri ne détruisait pas la fenêtre, qui
+        // restait blanche au-dessus de tout jusqu'à la fin de la connexion
+        // Epic. On remplace `close()` par une navigation vers une adresse
+        // factice, interceptée ci-dessous.
+        .initialization_script(&format!(
+          "window.close = () => location.replace('https://{POPUP_CLOSE_HOST}/');"
+        ))
+        .on_navigation({
+          let app = app.clone();
+          let label = label_for_close.clone();
+          move |url| {
+            if url.host_str() != Some(POPUP_CLOSE_HOST) {
+              return true;
+            }
+            log::info!("Epic : pop-up fermée par le fournisseur");
+            let app = app.clone();
+            let label = label.clone();
+            // Pas de destruction depuis le gestionnaire de navigation lui-même.
+            tauri::async_runtime::spawn(async move {
+              if let Some(window) = app.get_webview_window(&label) {
+                let _ = window.destroy();
+              }
+            });
+            false
+          }
+        })
         .on_document_title_changed(|window, title| {
           let _ = window.set_title(&title);
         })

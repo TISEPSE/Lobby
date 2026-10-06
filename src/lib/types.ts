@@ -95,6 +95,8 @@ export interface UserSettings {
 	game_folders: string[];
 	/** Retours sonores de l'interface. */
 	sound_enabled: boolean;
+	/** Animation de démarrage (logo, chargement, « Bonjour, <pseudo> »). */
+	intro_enabled: boolean;
 	/** Clé SteamGridDB, propre à l'utilisateur : jamais dans le dépôt. */
 	steamgriddb_key: string;
 	/** Minutes d'inactivité avant l'écran de veille ; 0 = jamais. */

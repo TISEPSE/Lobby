@@ -11,7 +11,7 @@
  * entendu.
  */
 
-type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad' | 'section';
+type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad' | 'section' | 'boot';
 
 /** Fichier et volume de chaque signal. Sans fichier, on synthétise. */
 const CUES: Record<Cue, { file?: string; gain: number }> = {
@@ -29,6 +29,9 @@ const CUES: Record<Cue, { file?: string; gain: number }> = {
 	// Changement de section (L1 / R1) : un souffle très court, synthétisé
 	// (`playWhoosh`) — un glissement, pas un clic de plus.
 	section: { gain: 0.5 },
+	// Démarrage : un accord montant de quatre notes, une par pastille de la
+	// manette, à l'instant de l'éclat (`playChime`).
+	boot: { gain: 0.6 },
 };
 
 /** Repli synthétisé : fréquence de départ, d'arrivée et durée. */
@@ -40,6 +43,7 @@ const TONES: Record<Cue, { from: number; to: number; duration: number }> = {
 	launch: { from: 440, to: 880, duration: 0.3 },
 	pad: { from: 660, to: 880, duration: 0.18 },
 	section: { from: 900, to: 2600, duration: 0.16 },
+	boot: { from: 523, to: 1047, duration: 1.4 },
 };
 
 let context: AudioContext | null = null;
@@ -54,6 +58,7 @@ const GROUP: Record<Cue, 'menu' | 'alerts' | 'launch'> = {
 	pad: 'alerts',
 	launch: 'launch',
 	section: 'menu',
+	boot: 'alerts',
 };
 
 /** Volumes de 0 à 1 : général et par famille. */
@@ -130,6 +135,10 @@ export function play(cue: Cue) {
 		playWhoosh(ctx, levelOf(cue));
 		return;
 	}
+	if (cue === 'boot') {
+		playChime(ctx, levelOf(cue));
+		return;
+	}
 
 	const buffer = buffers.get(cue);
 	if (buffer) {
@@ -186,6 +195,30 @@ function playWhoosh(ctx: AudioContext, level: number) {
 	source.connect(filter).connect(envelope).connect(ctx.destination);
 	source.start(now);
 	source.stop(now + duration + 0.02);
+}
+
+/**
+ * Accord de démarrage : quatre notes (do, mi, sol, do aigu) qui s'égrènent,
+ * une par pastille, puis tiennent et s'éteignent doucement.
+ */
+function playChime(ctx: AudioContext, level: number) {
+	const now = ctx.currentTime;
+	const notes = [523.25, 659.25, 783.99, 1046.5];
+	const { duration } = TONES.boot;
+	notes.forEach((frequency, i) => {
+		const start = now + i * 0.07;
+		const oscillator = ctx.createOscillator();
+		oscillator.type = 'sine';
+		oscillator.frequency.setValueAtTime(frequency, start);
+		const envelope = ctx.createGain();
+		const peak = Math.max(level * 0.12, 0.0002);
+		envelope.gain.setValueAtTime(0.0001, start);
+		envelope.gain.exponentialRampToValueAtTime(peak, start + 0.03);
+		envelope.gain.exponentialRampToValueAtTime(0.0001, start + duration);
+		oscillator.connect(envelope).connect(ctx.destination);
+		oscillator.start(start);
+		oscillator.stop(start + duration + 0.05);
+	});
 }
 
 function playTone(ctx: AudioContext, cue: Cue) {
