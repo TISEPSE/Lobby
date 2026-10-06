@@ -178,6 +178,19 @@
 	function hours(minutes: number): string {
 		return minutes >= 600 ? `${Math.round(minutes / 60)} h` : formatMinutes(minutes);
 	}
+
+	/** Jeux possédés (Steam, Epic, dossiers) dont ceux qui sont installés. */
+	const installedCount = $derived(games.filter((g) => g.installed !== false).length);
+
+	/**
+	 * Jeux joués sur la période : d'après le journal, ou, pour « Tout », tout jeu
+	 * qui a du temps de jeu (Steam et Epic compris).
+	 */
+	const playedCount = $derived(
+		period === 'all'
+			? games.filter((g) => playtimeOf(g.id) > 0).length
+			: new Set(log.map((entry) => entry.id)).size
+	);
 </script>
 
 <section class="stats">
@@ -185,7 +198,9 @@
 		<span class="caption">Statistiques</span>
 		<h1>{greeting}, {profileName}</h1>
 		<p class="lead">
-			{games.length} jeux · {hours(games.reduce((sum, g) => sum + playtimeOf(g.id), 0))} de jeu au total
+			{games.length} jeux possédés · {installedCount} installés · {hours(
+				games.reduce((sum, g) => sum + playtimeOf(g.id), 0)
+			)} de jeu au total
 		</p>
 		{#if highlights.length > 0}
 			<div class="chips">
@@ -210,8 +225,8 @@
 			<div class="kpis">
 				<div class="kpi">
 					<img src="/assets/icons/controller.svg" alt="" />
-					<span class="value">{games.length}</span>
-					<span class="label">Jeux</span>
+					<span class="value">{playedCount}</span>
+					<span class="label">Jeux joués</span>
 				</div>
 				<div class="kpi">
 					<img src="/assets/icons/clock.svg" alt="" />

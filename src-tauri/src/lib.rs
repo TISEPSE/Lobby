@@ -1212,6 +1212,54 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Jeu Steam en cours (appid), 0 sinon. `steam -applaunch` rend la main
+/// aussitôt : c'est Steam lui-même qui dit quand la partie commence et finit,
+/// dans le registre sous Windows (`RunningAppID`), dans `~/.steam/registry.vdf`
+/// ailleurs.
+#[tauri::command]
+fn steam_running_app() -> u32 {
+  #[cfg(windows)]
+  {
+    use winreg::enums::HKEY_CURRENT_USER;
+    winreg::RegKey::predef(HKEY_CURRENT_USER)
+      .open_subkey(r"Software\Valve\Steam")
+      .and_then(|key| key.get_value::<u32, _>("RunningAppID"))
+      .unwrap_or(0)
+  }
+  #[cfg(not(windows))]
+  {
+    let Some(home) = std::env::var_os("HOME") else { return 0 };
+    let path = Path::new(&home).join(".steam/registry.vdf");
+    std::fs::read_to_string(path)
+      .ok()
+      .and_then(|text| running_app_in_vdf(&text))
+      .unwrap_or(0)
+  }
+}
+
+/// `"RunningAppID"		"1145360"` dans `registry.vdf` (Linux).
+#[cfg_attr(windows, allow(dead_code))]
+fn running_app_in_vdf(text: &str) -> Option<u32> {
+  let at = text.find("\"RunningAppID\"")? + "\"RunningAppID\"".len();
+  let rest = &text[at..];
+  let start = rest.find('"')? + 1;
+  let end = start + rest[start..].find('"')?;
+  rest[start..end].trim().parse().ok()
+}
+
+#[cfg(test)]
+mod running_app_tests {
+  use super::running_app_in_vdf;
+
+  #[test]
+  fn reads_running_app_from_registry_vdf() {
+    let text = "\"Steam\"\n{\n\t\t\"RunningAppID\"\t\t\"1145360\"\n}";
+    assert_eq!(running_app_in_vdf(text), Some(1145360));
+    assert_eq!(running_app_in_vdf("\"RunningAppID\"\t\"0\""), Some(0));
+    assert_eq!(running_app_in_vdf("rien"), None);
+  }
+}
+
 /// Ouvre une adresse avec l'application du système : c'est ainsi qu'on demande
 /// à Steam d'installer, de vérifier ou de désinstaller un jeu (`steam://…`).
 /// Caractères admis dans une adresse `steam://` ou `com.epicgames.launcher://`.
@@ -1296,6 +1344,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       launch_game,
       is_running,
+      steam_running_app,
       power_action,
       steam_details,
       cache_game_art,

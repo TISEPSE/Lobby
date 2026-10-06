@@ -99,11 +99,29 @@ export async function logoutEpic() {
 	epicAccount.error = '';
 }
 
+/** Même règle que `normalize()` côté Rust : lettres et chiffres, en minuscules. */
+function normalizeTitle(title: string): string {
+	return (title.match(/[\p{L}\p{N}]/gu) ?? []).join('').toLowerCase();
+}
+
+/** Bibliothèque Epic indexée par titre normalisé → nom interne du jeu. */
+const byTitle = $derived(
+	new Map(epicAccount.library.map((game) => [normalizeTitle(game.title), game.app_name.toLowerCase()]))
+);
+
 /**
  * Minutes de jeu Epic d'un jeu (`epic-<appname>`). L'identifiant suffit : un
  * jeu Epic non installé n'est pas dans la liste des jeux de la bibliothèque.
+ *
+ * Un jeu repéré seulement par son dossier (`.egstore`, sans manifeste lisible)
+ * a un identifiant tiré du titre (`epic-rocketleague`), pas du nom interne
+ * (`Sugar`) : on le retrouve alors par son titre dans la bibliothèque du compte.
  */
 export function epicMinutesOf(id: string): number {
 	if (!id.startsWith('epic-')) return 0;
-	return epicAccount.playtime[id.slice('epic-'.length)] ?? 0;
+	const key = id.slice('epic-'.length);
+	const direct = epicAccount.playtime[key];
+	if (direct !== undefined) return direct;
+	const appName = byTitle.get(key);
+	return appName ? (epicAccount.playtime[appName] ?? 0) : 0;
 }

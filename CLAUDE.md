@@ -103,6 +103,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Commande Rust `launch_game(program, args)` : démarre le processus et rend le PID.
 - `is_running(pid)` dit quand la partie se termine (tasklist sous Windows, `/proc` ailleurs).
 - Les jeux Steam se lancent par `steam -applaunch <appid>` : c'est Steam qui connaît les arguments.
+- **Temps de jeu Steam** : `steam -applaunch` rend la main aussitôt, son processus ne dit rien. `watchSteam` interroge `steam_running_app` toutes les 3 s — l'appid du jeu en cours selon Steam (`RunningAppID` dans le registre sous Windows, `~/.steam/registry.vdf` sous Linux, testé) : la partie commence quand Steam annonce notre jeu, finit quand il ne l'annonce plus, et entre dans le journal (`recordSession`). Dix minutes sans démarrage (mise à jour, annulation) : on abandonne.
 - Hors application (simple onglet de navigateur), `play()` se contente de l'annoncer — le front reste utilisable pour juger le design.
 
 ## Fiches Steam (commande Rust `steam_details`)
@@ -154,7 +155,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - **Bibliothèque complète** : `epic_account` lit aussi toute la bibliothèque (`library-service …/items`, paginée par `cursor`), garde les applications publiques, puis demande au **catalogue** (`catalog-public-service …/bulk/items`) titre, catégories et jaquettes (`DieselGameBoxTall` verticale, `DieselGameBox` large). Seuls les **jeux** restent (catégorie `games`, pas de `mainGameItem` : pas de DLC). Les fiches du catalogue sont en **cache chiffré** (`epic.catalog`) : la première lecture prend une trentaine de secondes pour ~550 jeux, les suivantes ne demandent que les nouveaux. Huit requêtes de catalogue à la fois.
 - Les jeux Epic non installés (`uninstalledEpicGames`, `epic-<appname>`, `installed: false`) rejoignent « Tous » comme ceux de Steam, avec la jaquette du catalogue (pas de recherche d'affiche pour eux, `Cover.svelte`). Un jeu déjà installé n'est pas doublé (identifiant ou titre). « Installer » ouvre `com.epicgames.launcher://apps/<AppName>?action=install`.
 - `epicMinutesOf` ne regarde que l'identifiant : un jeu non installé n'est pas dans `games`. Le **Profil et les Statistiques reçoivent `allGames`** (installés + possédés Steam et Epic) : sans ça, 1 450 h de Fortnite non installé n'apparaissaient nulle part.
-- Un jeu Epic repéré seulement par son dossier (`.egstore`) a un identifiant tiré du titre : son temps de jeu Epic ne lui est pas encore rattaché.
+- Un jeu Epic repéré seulement par son dossier (`.egstore`, sans `.mancpn` lisible) a un identifiant tiré du titre (`epic-rocketleague`), pas du nom interne (`Sugar`) : `epicMinutesOf` le retrouve alors **par son titre** dans la bibliothèque du compte (même normalisation que `normalize()` côté Rust).
 
 ## Profil (`Profile.svelte`)
 
@@ -260,6 +261,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Calendrier (`heatmap()`) : 53 colonnes d'une semaine, lundi en haut, la dernière s'arrête à aujourd'hui ; cinq niveaux (`--heat-0` à `--heat-4` : rien, ½ h, 1 h, 2 h, 4 h et plus). Les jours hors de la période restent affichés mais s'effacent. Les dates se calculent par le calendrier, jamais en ajoutant des tranches de 24 h (changement d'heure).
 - Deux zones se parcourent : le calendrier (la case sélectionnée affiche sa date et son temps de jeu — à la manette, pas de survol ; on ne tombe jamais sur un jour à venir) et le classement (A ouvre la fiche). Au bout du calendrier, droite passe au classement.
 - « Tout » compte le temps Steam (`playtimeOf`) ; les autres périodes viennent du **journal** des parties (`sessions`), Steam ne donnant qu'un total. Une partie de **moins d'une minute n'est pas comptée** (`steam -applaunch` rend la main aussitôt).
+- L'en-tête donne les jeux **possédés** et **installés** ; le chiffre « Jeux joués » suit la période (journal), ou, pour « Tout », les jeux qui ont du temps de jeu.
 - `stats.ts` ne fait que des calculs (fonctions pures) ; le composant n'a plus qu'à dessiner.
 - Capture : `?screen=stats&stats=demo&period=week|month|quarter|year|all` remplit le journal de parties fictives, jamais enregistrées.
 
@@ -331,7 +333,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs. — *fait*
 8. **Au niveau de warmUP** (warmup-gamelauncher.com/features) :
    - Interface « couch gaming » 100 % manette — *fait*
-   - Statistiques (temps, parties, top jeux, genres, boutiques, par période) — *fait*. Reste : nombre total de jeux possédés / installés, et la mesure des jeux Steam (surveiller le processus du jeu, pas `steam -applaunch`).
+   - Statistiques (temps, parties, top jeux, genres, boutiques, par période) — *fait*. Jeux possédés / installés et mesure des jeux Steam (`RunningAppID`) — *fait*.
    - Bibliothèque unifiée : Steam, Epic, dossiers, `.lnk`, registre — *fait*. Reste : GOG, EA, Xbox, Ubisoft, Amazon, émulateurs (dossiers de ROMs, émulateur choisi par jeu).
    - Synchronisation : X dans la bibliothèque — *fait*
    - Reprise rapide : carte « Reprendre » en tête de l'accueil, la dernière partie se relance en un appui — *fait*

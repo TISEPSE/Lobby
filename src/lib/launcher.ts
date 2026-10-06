@@ -29,7 +29,9 @@ export async function play(game: Game): Promise<Outcome> {
 			args,
 		});
 		markLaunched(game.id);
-		watch(pid, game.id);
+		const steamApp = args[0] === '-applaunch' ? Number(args[1]) : 0;
+		if (steamApp) watchSteam(steamApp, game.id);
+		else watch(pid, game.id);
 		return { ok: true, message: `${game.title} démarre…` };
 	} catch (error) {
 		return { ok: false, message: `Impossible de lancer ${game.title} : ${error}` };
@@ -53,4 +55,37 @@ async function watch(pid: number, id: string) {
 			window.dispatchEvent(new CustomEvent('game-exited'));
 		}
 	}, 2000);
+}
+
+/** Temps laissé à Steam pour démarrer le jeu (mise à jour, synchronisation cloud…). */
+const STEAM_START_TIMEOUT = 10 * 60_000;
+
+/**
+ * Un jeu Steam : `steam -applaunch` rend la main aussitôt, son processus ne dit
+ * rien. C'est Steam qui sait quel jeu tourne (`steam_running_app`) : la partie
+ * commence quand il annonce notre jeu, et finit quand il ne l'annonce plus.
+ */
+async function watchSteam(appid: number, id: string) {
+	const { invoke } = await import('@tauri-apps/api/core');
+	const launched = Date.now();
+	let start = 0;
+	const timer = setInterval(async () => {
+		let running = 0;
+		try {
+			running = await invoke<number>('steam_running_app');
+		} catch {
+			running = 0;
+		}
+		if (!start) {
+			if (running === appid) start = Date.now();
+			// Le jeu n'a jamais démarré (annulé, erreur Steam) : on abandonne.
+			else if (Date.now() - launched > STEAM_START_TIMEOUT) clearInterval(timer);
+			return;
+		}
+		if (running === appid) return;
+		clearInterval(timer);
+		const minutes = (Date.now() - start) / 60_000;
+		if (minutes >= 1) recordSession(id, start, minutes);
+		window.dispatchEvent(new CustomEvent('game-exited'));
+	}, 3000);
 }
