@@ -1,4 +1,6 @@
-# Interface Console
+# Lobby (Interface Console)
+
+**Lobby** est le nom de l'application (fenêtre, exécutable, installeur) ; « Interface Console » reste le nom du dépôt. L'identifiant `fr.interface.console` ne change pas : le dossier de données (réglages, sessions chiffrées, jaquettes) reste le même.
 
 Interface de type console ("10-foot UI") qui transforme un PC en console de jeux. Elle se lance au démarrage, s'affiche sur TV et se contrôle uniquement à la manette.
 
@@ -14,7 +16,6 @@ Interface de type console ("10-foot UI") qui transforme un PC en console de jeux
 
 ## Stack
 
-- **Tauri 2** (coquille Rust) + **Svelte 5** + **Vite** + TypeScript.
 - Le rendu est du web : la direction artistique vit dans le CSS, pas dans du code.
 - Cible : Linux (Arch / Bazzite), Wayland via Gamescope. Développement sous Windows (WebView2), tout doit rester portable.
 - **Aucune clé d'API dans le code ni le dépôt** : jaquettes et fiches viennent des points d'entrée publics de Steam. La seule clé (SteamGridDB, facultative) est **saisie par l'utilisateur** et ne vit que dans `settings.json`. Steam et Epic passent par une connexion au compte, jamais par une clé.
@@ -22,36 +23,6 @@ Interface de type console ("10-foot UI") qui transforme un PC en console de jeux
 ### Pourquoi pas Godot
 
 Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans l'historique git (commit « Sauvegarde de la version Godot avant bascule sur Tauri ») : écrans, thème, détection de jeux, lecteur `.lnk`, métadonnées Steam, intégration Gamescope. La bascule a eu lieu parce que chaque évolution visuelle y coûtait un `StyleBoxFlat`, des offsets mesurés à la main et un cycle import/relance, là où le même changement tient en trois lignes de CSS. **Pour retrouver un algorithme (détection Steam/Epic, parseur `.lnk`, seuils manette), lire le commit de sauvegarde plutôt que de le réinventer.**
-
-## Structure du projet
-
-```
-.
-├── index.html
-├── package.json
-├── vite.config.ts
-├── public/
-│   └── assets/
-│       ├── buttons/        # glyphes des touches : xbox/ et ps5/
-│       ├── icons/          # icônes d'interface (étoile Font Awesome, etc.)
-│       ├── avatars/        # photos de profil fournies
-│       ├── sounds/         # retours sonores (.wav)
-│       └── boot/           # vidéos d'introduction
-├── src/
-│   ├── App.svelte          # racine : écran courant, entrées, lancement
-│   ├── app.css             # thème : variables de couleur, rayons, durées
-│   └── lib/
-│       ├── Home.svelte     # accueil : artwork + carrousel
-│       ├── Detail.svelte   # fiche d'un jeu
-│       ├── Backdrop.svelte # artwork en fondu enchaîné
-│       ├── HelpBar.svelte  # barre d'aide, glyphes de la manette branchée
-│       ├── gamepad.ts      # manette et clavier → actions
-│       ├── launcher.ts     # lancement d'un jeu via Tauri
-│       └── data/games.json # bibliothèque
-├── src-tauri/              # coquille Rust (fenêtre, lancement de process)
-├── system/                 # scripts Linux : gamescope, systemd, autologin
-└── Références-XBOX/        # captures de référence pour la direction artistique
-```
 
 ## Conventions
 
@@ -273,7 +244,6 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Données de jeu
 
-- `src/lib/data/games.json` : identifiant, titre, appid Steam, adresses de la jaquette et de l'artwork.
 - Les images viennent du CDN public de Steam. Toutes les jaquettes verticales n'existent pas : on retombe sur `header.jpg` plutôt que d'afficher une case vide.
 - Fiches (note, genres, date, résumé) : `store.steampowered.com/api/appdetails` ; recherche par titre : `steamcommunity.com/actions/SearchApps`. Aucun compte, aucune clé.
 - Comparer les titres en **deux passes** : nom identique d'abord, ressemblance ensuite. Sinon « Hollow Knight » tombe sur « Hollow Knight: Silksong ».
@@ -283,13 +253,14 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - La table statique d'appids (`match_steam_app`) ne se vérifie pas toute seule : elle contenait `osu → 1222440`, un jeu délisté dont les images CDN sont celles de GOLF KEEPER. Avant d'y ajouter une ligne, ouvrir `store.steampowered.com/app/<id>`.
 - La note Metacritic est ramenée sur 5 (`score / 20`) et s'affiche en étoiles (icône Font Awesome dans `public/assets/icons/star.svg`). À 0, on n'affiche rien : une rangée éteinte ferait croire à une mauvaise note.
 
-## Intégration système (dossier `system/`)
+## Intégration système
 
-- `interface-console.sh` (installé en `/usr/local/bin/interface-console`) lance Gamescope en plein écran sur le binaire Tauri. Résolution, fréquence et chemin se règlent par variables d'environnement (`INTERFACE_CONSOLE_WIDTH`, `_HEIGHT`, `_REFRESH`, `_BIN`).
-- `interface-console.service` prend `tty1` (`Conflicts=getty@tty1`), comme la session du Steam Deck. `Restart=on-failure` seulement : quitter l'interface doit ramener à un terminal, pas la relancer en boucle.
-- `install.sh` copie le binaire dans `/opt/interface-console/`, écrit l'unité pour le bon utilisateur et recharge systemd. `autologin.conf` couvre la variante sans unité dédiée.
-- Sous Linux, Tauri s'appuie sur WebKitGTK (`webkit2gtk-4.1`).
-- Toujours prévoir une porte de sortie pour ne pas se bloquer hors du système pendant les tests (voir `system/README.md`).
+- Scripts Linux (Gamescope, systemd, autologin) : voir `system/CLAUDE.md`. Toujours garder une porte de sortie pour ne pas se bloquer hors du système pendant les tests.
+
+## Logo et exécutable
+
+- Logo : monogramme « L » lumineux avec une croix directionnelle, en verre dépoli vert (généré avec Gemini). La source est `src-tauri/app-icon.png` (1024 px, coins transparents) ; `npx tauri icon src-tauri/app-icon.png` en tire toutes les tailles dans `src-tauri/icons/`.
+- `npm run tauri build` produit `src-tauri/target/release/app.exe` (nom du paquet Cargo ; installé sous le nom « Lobby ») et l'installeur `src-tauri/target/release/bundle/nsis/Lobby_<version>_x64-setup.exe`. Cible limitée à NSIS (`bundle.targets`) : le `.msi` demande WiX, dont le téléchargement restait bloqué.
 
 ## Commandes utiles
 
@@ -323,26 +294,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Feuille de route
 
-1. **Socle** : accueil (carrousel), fiche de jeu, navigation manette, lancement réel. — *fait*
-2. **Bibliothèque** : grille, filtres (Tous / Favoris / Récemment joué), tri. — *fait*
-2b. **Recherche** : clavier à l'écran et résultats filtrés à la frappe. — *fait*
-3. **Réglages** : profil (pseudo, photo parmi celles fournies), dossiers de jeux, système. — *fait*
-4. **Détection de jeux** : détection Steam / Epic / dossiers de jeux / raccourcis `.lnk` en Rust avec validation utilisateur. — *fait*
-5. **Fiches** : notes, genres, résumés et jaquettes récupérés automatiquement — *fait*. Les visuels sont **téléchargés une fois** dans `<app data>/artwork/` (`cache_game_art`) : l'interface lit un fichier, pas une adresse web, donc l'association jeu ↔ jaquette ne peut plus changer et tout s'affiche hors ligne.
-6. **Système** : build Linux, Gamescope, systemd, boot direct.
-7. **Finitions** : vidéo d'introduction, son, écran de veille, gestion des erreurs. — *fait*
-8. **Au niveau de warmUP** (warmup-gamelauncher.com/features) :
-   - Interface « couch gaming » 100 % manette — *fait*
-   - Statistiques (temps, parties, top jeux, genres, boutiques, par période) — *fait*. Jeux possédés / installés et mesure des jeux Steam (`RunningAppID`) — *fait*.
-   - Bibliothèque unifiée : Steam, Epic, dossiers, `.lnk`, registre — *fait*. Reste : GOG, EA, Xbox, Ubisoft, Amazon, émulateurs (dossiers de ROMs, émulateur choisi par jeu).
-   - Synchronisation : X dans la bibliothèque — *fait*
-   - Reprise rapide : carte « Reprendre » en tête de l'accueil, la dernière partie se relance en un appui — *fait*
-   - Écran de pré-lancement : captures, bandes-annonces et « Plus sur… » sous la fiche — *fait*
-   - Onglet Découverte (« Pour toi ») : recommandations, sorties à venir, bandes-annonces Steam (`movies` de `appdetails`), liste de souhaits, jeux oubliés.
-   - Succès : tableau de bord unifié, taux de complétion, rareté, progression dans le temps, filtres par plateforme (Steam sans clé si le profil est public, RetroAchievements avec une clé saisie dans Réglages).
-   - Overlay FPS et historique de performances : MangoHud sous Linux, journaux relus dans les statistiques.
-   - Discord : statut du jeu en cours (Rich Presence), puis amis en ligne, messages et groupes par code d'invitation. Les fonctions sociales exigent une application Discord et une connexion OAuth, ce qui contredit « aucune clé » : à trancher avant de s'y lancer.
-   - Clavier virtuel : pensé aussi pour écrire des messages (Discord), commandes vocales plus tard.
+- Ce qui est fait et ce qui reste : skill `roadmap` (`.claude/skills/roadmap/SKILL.md`). La tenir à jour quand une étape avance.
 
 ## Règles de travail pour Claude
 
