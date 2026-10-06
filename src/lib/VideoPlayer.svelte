@@ -11,7 +11,7 @@
 	 * icône au centre (lecture, pause, ±10 s).
 	 *
 	 * Touches : A lecture / pause (ou revoir à la fin) · gauche / droite
-	 * déplacent **directement le curseur de la barre** (pas de 5 s ; maintenu,
+	 * déplacent **directement le curseur de la barre** (pas de 2 s ; maintenu,
 	 * il défile, le temps visé s'affiche au-dessus) · haut / bas le volume,
 	 * jauge verticale sur le côté (géré par l'appelant, qui passe `volume`) ·
 	 * L1 / R1 média précédent / suivant (idem) · B fermer.
@@ -42,7 +42,7 @@
 	} = $props();
 
 	/** Pas du curseur à chaque appui sur gauche / droite, en secondes. */
-	const SEEK = 5;
+	const SEEK = 2;
 	/** Commandes visibles tant que la lecture n'a pas duré ce temps sans appui. */
 	const HUD_DELAY = 3000;
 
@@ -245,9 +245,9 @@
 
 	<!-- Volume sur le côté, en jauge verticale : ▲ ▼ le règlent. -->
 	<div class="side-volume" class:active={volumeActive}>
-		<kbd>▲</kbd>
+		<Glyph button="up" size="30px" />
 		<span class="column"><span class="level" style="height: {volumePercent}%"></span></span>
-		<kbd>▼</kbd>
+		<Glyph button="down" size="30px" />
 		<img src="/assets/icons/volume.svg" alt="" />
 		<span class="side-value">{volumePercent} %</span>
 	</div>
@@ -283,7 +283,7 @@
 					{ended ? 'Revoir' : paused ? 'Lecture' : 'Pause'}
 				</span>
 				<span class="hint">
-					<span class="keys"><kbd>◀</kbd><kbd>▶</kbd></span>
+					<span class="keys"><Glyph button="left" size="30px" /><Glyph button="right" size="30px" /></span>
 					Avancer / reculer
 				</span>
 				{#if hasNeighbours}
@@ -506,7 +506,11 @@
 		margin-top: 4px;
 	}
 
+	/* Largeur fixe : en passant de « 90 % » à « 100 % », la jauge
+	   s'élargissait d'un coup. */
 	.side-value {
+		width: 5ch;
+		text-align: center;
 		font-size: 17px;
 		font-weight: 700;
 		font-variant-numeric: tabular-nums;
@@ -558,20 +562,6 @@
 	.keys {
 		display: flex;
 		gap: 4px;
-	}
-
-	/* Flèches de la croix directionnelle, en touches de clavier stylisées. */
-	kbd {
-		display: grid;
-		place-items: center;
-		width: 30px;
-		height: 30px;
-		border-radius: 8px;
-		background: var(--surface-strong);
-		border: 1px solid rgba(255, 255, 255, 0.18);
-		color: var(--text);
-		font-family: inherit;
-		font-size: 13px;
 	}
 
 	/* Icône d'action au centre : elle grossit et s'efface, comme sur YouTube. */

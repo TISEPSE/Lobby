@@ -1,0 +1,8 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="48" height="48" viewBox="0 0 48 48">
+  <!-- Croix directionnelle, branche « down » allumée : même style que les autres glyphes de manette. -->
+  <path d="M18,5 H30 Q32,5 32,7 V16 H41 Q43,16 43,18 V30 Q43,32 41,32 H32 V41 Q32,43 30,43 H18 Q16,43 16,41 V32 H7 Q5,32 5,30 V18 Q5,16 7,16 H16 V7 Q16,5 18,5 Z" fill="#2a2a2a" stroke="#ffffff" stroke-width="2.5" stroke-linejoin="round"/>
+  <g transform="rotate(180 24 24)">
+    <path d="M18,5 H30 Q32,5 32,7 V18 H16 V7 Q16,5 18,5 Z" fill="#ffffff"/>
+    <polygon points="24,8.5 28.5,14 19.5,14" fill="#2a2a2a"/>
+  </g>
+</svg>
