@@ -57,7 +57,12 @@
 	--toast-pad: 0;
 	--toast-bottom: 14px;
 	--toast-bg: rgba(20, 22, 26, 0.88);
-	--toast-open: 360ms;
+	/* Apparition un peu plus posée que les autres animations : le rond
+	   surgit (`--toast-pop`), puis la pilule s'ouvre (`--toast-open`). La
+	   sortie reste vive (`--toast-shrink`). */
+	--toast-pop: 340ms;
+	--toast-open: 460ms;
+	--toast-shrink: 360ms;
 	/* Début de la sortie ; elle dure ~800 ms et finit avant que le composant
 	   ne retire la notification (3,6 s, `STAY`). */
 	--toast-stay: 2700ms;

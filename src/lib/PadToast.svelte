@@ -119,11 +119,11 @@
 		   sortie est la même chose à l'envers : le texte s'efface, la pilule se
 		   referme sur le rond, puis le rond disparaît. */
 		animation:
-			toast-pop var(--normal) var(--ease) both,
-			toast-open var(--toast-open) var(--ease) var(--normal) both,
-			toast-shrink var(--toast-open) var(--ease) calc(var(--toast-stay) + var(--fast)) forwards,
+			toast-pop var(--toast-pop) var(--ease) both,
+			toast-open var(--toast-open) var(--ease) var(--toast-pop) both,
+			toast-shrink var(--toast-shrink) var(--ease) calc(var(--toast-stay) + var(--fast)) forwards,
 			toast-unpop var(--normal) var(--ease)
-				calc(var(--toast-stay) + var(--fast) + var(--toast-open)) forwards;
+				calc(var(--toast-stay) + var(--fast) + var(--toast-shrink)) forwards;
 	}
 
 	@keyframes toast-pop {
@@ -190,7 +190,7 @@
 		padding: 0 30px 0 18px;
 		white-space: nowrap;
 		animation:
-			toast-text var(--normal) var(--ease) var(--toast-open) both,
+			toast-text var(--toast-pop) var(--ease) var(--toast-open) both,
 			toast-text-out var(--fast) var(--ease) var(--toast-stay) forwards;
 	}
 
