@@ -11,8 +11,10 @@
 	 * icône au centre (lecture, pause, ±10 s).
 	 *
 	 * Touches : A lecture / pause (ou revoir à la fin) · gauche / droite
-	 * reculer / avancer de 10 s · haut / bas volume (géré par l'appelant, qui
-	 * passe `volume`) · L1 / R1 vidéo précédente / suivante (idem) · B fermer.
+	 * déplacent **directement le curseur de la barre** (pas de 5 s ; maintenu,
+	 * il défile, le temps visé s'affiche au-dessus) · haut / bas le volume,
+	 * jauge verticale sur le côté (géré par l'appelant, qui passe `volume`) ·
+	 * L1 / R1 média précédent / suivant (idem) · B fermer.
 	 *
 	 * Les bandes-annonces de Steam ne sont plus que des flux HLS : WebKitGTK
 	 * (Linux) sait les lire seul, WebView2 (Windows) non — hls.js prend alors
@@ -39,8 +41,8 @@
 		hasNeighbours?: boolean;
 	} = $props();
 
-	/** Saut de gauche / droite, en secondes. */
-	const SEEK = 10;
+	/** Pas du curseur à chaque appui sur gauche / droite, en secondes. */
+	const SEEK = 5;
 	/** Commandes visibles tant que la lecture n'a pas duré ce temps sans appui. */
 	const HUD_DELAY = 3000;
 
@@ -58,6 +60,22 @@
 	/** Icône brève au centre de l'écran ; `key` relance l'animation. */
 	let flash = $state<{ key: number; icon?: string; text?: string } | null>(null);
 	let flashKey = 0;
+
+	/** Le curseur vient d'être déplacé : il grossit et affiche le temps visé. */
+	let scrubbing = $state(false);
+	let scrubTimer: ReturnType<typeof setTimeout> | null = null;
+
+	/** Le volume vient de changer : sa jauge reste visible un instant. */
+	let volumeActive = $state(false);
+	let volumeTimer: ReturnType<typeof setTimeout> | null = null;
+	let lastVolume = volume;
+	$effect(() => {
+		if (volume === lastVolume) return;
+		lastVolume = volume;
+		volumeActive = true;
+		if (volumeTimer) clearTimeout(volumeTimer);
+		volumeTimer = setTimeout(() => (volumeActive = false), 1200);
+	});
 
 	const progress = $derived(duration > 0 ? Math.min(1, current / duration) : 0);
 	const loaded = $derived(duration > 0 ? Math.min(1, buffered / duration) : 0);
@@ -119,6 +137,8 @@
 
 	$effect(() => () => {
 		if (hudTimer) clearTimeout(hudTimer);
+		if (scrubTimer) clearTimeout(scrubTimer);
+		if (volumeTimer) clearTimeout(volumeTimer);
 	});
 
 	/** Montre les commandes, puis les efface si la lecture continue sans appui. */
@@ -151,10 +171,15 @@
 				showFlash('pause');
 			}
 		} else if (action === 'left' || action === 'right') {
+			// Le curseur de la barre se déplace directement ; maintenir la touche
+			// le fait défiler (répétition de la manette).
 			const step = action === 'left' ? -SEEK : SEEK;
 			const end = Number.isFinite(video.duration) ? video.duration : Infinity;
 			video.currentTime = Math.max(0, Math.min(end - 0.25, video.currentTime + step));
-			showFlash(undefined, `${step > 0 ? '+' : '−'}${SEEK} s`);
+			current = video.currentTime;
+			scrubbing = true;
+			if (scrubTimer) clearTimeout(scrubTimer);
+			scrubTimer = setTimeout(() => (scrubbing = false), 900);
 		}
 	}
 
@@ -218,6 +243,15 @@
 		{/key}
 	{/if}
 
+	<!-- Volume sur le côté, en jauge verticale : ▲ ▼ le règlent. -->
+	<div class="side-volume" class:active={volumeActive}>
+		<kbd>▲</kbd>
+		<span class="column"><span class="level" style="height: {volumePercent}%"></span></span>
+		<kbd>▼</kbd>
+		<img src="/assets/icons/volume.svg" alt="" />
+		<span class="side-value">{volumePercent} %</span>
+	</div>
+
 	<header class="top">
 		<span class="title">{title}</span>
 		{#if name}<span class="name">{name}</span>{/if}
@@ -227,10 +261,12 @@
 	<footer class="bottom">
 		<div class="timeline">
 			<span class="time">{clock(current)}</span>
-			<div class="timeline-bar">
+			<div class="timeline-bar" class:scrubbing>
 				<span class="loaded" style="width: {loaded * 100}%"></span>
 				<span class="played" style="width: {progress * 100}%"></span>
-				<span class="knob" style="left: {progress * 100}%"></span>
+				<span class="knob" style="left: {progress * 100}%">
+					<span class="bubble">{clock(current)}</span>
+				</span>
 			</div>
 			<span class="time">{duration ? clock(duration) : '--:--'}</span>
 		</div>
@@ -248,13 +284,7 @@
 				</span>
 				<span class="hint">
 					<span class="keys"><kbd>◀</kbd><kbd>▶</kbd></span>
-					−10 s / +10 s
-				</span>
-				<span class="hint">
-					<span class="keys"><kbd>▲</kbd><kbd>▼</kbd></span>
-					Volume
-					<span class="volume-bar"><span style="width: {volumePercent}%"></span></span>
-					<span class="volume-value">{volumePercent} %</span>
+					Avancer / reculer
 				</span>
 				{#if hasNeighbours}
 					<span class="hint">
@@ -386,6 +416,7 @@
 		box-shadow: 0 0 14px var(--accent-soft);
 	}
 
+	/* Le curseur est la sélection du lecteur : gauche / droite le déplacent. */
 	.knob {
 		position: absolute;
 		top: 50%;
@@ -393,8 +424,99 @@
 		height: var(--player-knob);
 		border-radius: 50%;
 		background: var(--text);
-		box-shadow: 0 0 0 4px var(--accent);
+		box-shadow:
+			0 0 0 4px var(--accent),
+			0 0 18px 4px var(--accent-soft);
 		transform: translate(-50%, -50%);
+		transition:
+			transform var(--fast) var(--ease),
+			left 120ms linear;
+	}
+
+	.scrubbing .knob {
+		transform: translate(-50%, -50%) scale(1.35);
+	}
+
+	/* Temps visé, au-dessus du curseur, pendant qu'on le déplace. */
+	.bubble {
+		position: absolute;
+		bottom: calc(100% + 14px);
+		left: 50%;
+		padding: 6px 12px;
+		border-radius: 999px;
+		background: var(--dock-bg);
+		font-size: 17px;
+		font-weight: 700;
+		white-space: nowrap;
+		font-variant-numeric: tabular-nums;
+		opacity: 0;
+		transform: translateX(-50%) scale(calc(1 / 1.35));
+		transition: opacity var(--fast) var(--ease);
+	}
+
+	.scrubbing .bubble {
+		opacity: 1;
+	}
+
+	/* Jauge de volume verticale, sur le bord droit, centrée en hauteur. */
+	.side-volume {
+		position: absolute;
+		top: 50%;
+		right: var(--safe-x);
+		display: flex;
+		flex-direction: column;
+		align-items: center;
+		gap: 10px;
+		padding: 16px 12px;
+		border-radius: 999px;
+		background: var(--dock-bg);
+		border: 1px solid var(--dock-border);
+		backdrop-filter: blur(18px);
+		transform: translateY(-50%);
+		transition:
+			opacity var(--normal) var(--ease),
+			transform var(--normal) var(--ease),
+			box-shadow var(--fast) var(--ease);
+	}
+
+	.side-volume.active {
+		box-shadow: 0 0 30px 4px var(--accent-soft);
+	}
+
+	.column {
+		position: relative;
+		width: var(--volume-bar-height);
+		height: var(--player-volume-height);
+		border-radius: 999px;
+		background: var(--surface-strong);
+		overflow: hidden;
+	}
+
+	.level {
+		position: absolute;
+		inset: auto 0 0;
+		border-radius: inherit;
+		background: var(--accent);
+		transition: height var(--fast) var(--ease);
+	}
+
+	.side-volume img {
+		width: 22px;
+		height: 22px;
+		margin-top: 4px;
+	}
+
+	.side-value {
+		font-size: 17px;
+		font-weight: 700;
+		font-variant-numeric: tabular-nums;
+	}
+
+	/* Commandes effacées : la jauge s'efface avec elles, sauf si on règle le
+	   volume à l'instant. */
+	.idle .side-volume:not(.active) {
+		opacity: 0;
+		transform: translate(12px, -50%);
 	}
 
 	.controls {
@@ -450,28 +572,6 @@
 		color: var(--text);
 		font-family: inherit;
 		font-size: 13px;
-	}
-
-	.volume-bar {
-		position: relative;
-		width: var(--player-volume);
-		height: var(--volume-bar-height);
-		border-radius: 999px;
-		background: var(--surface-strong);
-		overflow: hidden;
-	}
-
-	.volume-bar span {
-		position: absolute;
-		inset: 0 auto 0 0;
-		background: var(--accent);
-		transition: width var(--fast) var(--ease);
-	}
-
-	.volume-value {
-		min-width: 4ch;
-		color: var(--text);
-		font-variant-numeric: tabular-nums;
 	}
 
 	/* Icône d'action au centre : elle grossit et s'efface, comme sur YouTube. */

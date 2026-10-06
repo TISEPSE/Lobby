@@ -4,7 +4,16 @@
 	 * la nouvelle image n'apparaît qu'une fois chargée, sinon on verrait un
 	 * clignotement noir à chaque déplacement de la sélection.
 	 */
-	let { src, dimmed = false }: { src: string; dimmed?: boolean } = $props();
+	let {
+		src,
+		dimmed = false,
+		detail = false,
+	}: {
+		src: string;
+		dimmed?: boolean;
+		/** Fiche d'un jeu : le voile s'appuie à gauche et laisse l'artwork vivre à droite. */
+		detail?: boolean;
+	} = $props();
 
 	let shown = $state('');
 	let previous = $state('');
@@ -21,7 +30,7 @@
 	});
 </script>
 
-<div class="backdrop" class:dimmed>
+<div class="backdrop" class:dimmed class:detail>
 	{#if previous}
 		<div class="layer" style="background-image: url({previous})"></div>
 	{/if}
@@ -80,5 +89,12 @@
 		background:
 			linear-gradient(to right, rgba(7, 8, 11, 0.96) 38%, rgba(7, 8, 11, 0.72) 62%, rgba(7, 8, 11, 0.5) 100%),
 			linear-gradient(to top, rgba(7, 8, 11, 0.9) 8%, rgba(7, 8, 11, 0.45) 55%, rgba(7, 8, 11, 0.4) 100%);
+	}
+
+	/* Fiche : sombre sous le texte à gauche, l'artwork presque intact à droite. */
+	.detail .scrim {
+		background:
+			linear-gradient(to right, rgba(7, 8, 11, 0.94) 22%, rgba(7, 8, 11, 0.6) 48%, rgba(7, 8, 11, 0.1) 80%),
+			linear-gradient(to top, rgba(7, 8, 11, 0.85) 4%, rgba(7, 8, 11, 0) 40%);
 	}
 </style>

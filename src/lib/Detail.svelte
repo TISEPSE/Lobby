@@ -1,13 +1,15 @@
 <script lang="ts">
 	import type { Game } from './types';
 	import { details, ensureDetails, mediaOf, DEMO_MEDIA } from './steam.svelte.js';
-	import Cover from './Cover.svelte';
+	import { lastPlayedText } from './library.svelte.js';
+	import { platformOf } from './stats';
 	import { downloadFor, phaseLabel, sizeText } from './downloads.svelte.js';
 
 	/**
-	 * Fiche d'un jeu. La jaquette arrive depuis sa place sur l'accueil : le
-	 * navigateur anime lui-même le changement de position via `view-transition`,
-	 * on n'a pas à mesurer le rectangle de départ comme en Godot.
+	 * Fiche d'un jeu, d'après la maquette de l'utilisateur : la boutique en
+	 * petites capitales d'accent, le titre en très grand, un résumé court, trois
+	 * chiffres (temps de jeu, dernière partie, note), puis JOUER · Détails du jeu
+	 * · Options. Pas de jaquette : l'artwork du jeu occupe le fond.
 	 *
 	 * Deux pages l'une sous l'autre : la présentation, puis « Captures et
 	 * vidéos » (grille de médias + panneau « Plus sur… »). Descendre depuis
@@ -46,6 +48,15 @@
 			playtime,
 		].filter((fact) => fact.trim() !== '')
 	);
+	/** Les trois chiffres sous le résumé ; la note, ou à défaut la sortie. */
+	const stats = $derived(
+		[
+			['Temps de jeu', playtime],
+			['Dernière partie', lastPlayedText(game.id) || 'Jamais'],
+			rating > 0 ? ['Note', ''] : ['Sortie', sheet?.release_date ?? ''],
+		].filter(([label, value]) => label === 'Note' || value.trim() !== '')
+	);
+
 	const media = $derived(
 		new URLSearchParams(location.search).get('media') === 'demo' ? DEMO_MEDIA : mediaOf(sheet)
 	);
@@ -91,32 +102,34 @@
 <div class="detail" class:down={zone === 'media'}>
 <div class="pages">
 <section class="hero">
-	<!-- La fiche montre la **même** affiche que la tuile : elle lisait la
-	     jaquette de la fiche Steam, donc le choix de l'utilisateur n'y
-	     apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait
-	     rien du tout. -->
-	<div class="cover" style="view-transition-name: cover-{game.id}">
-		<Cover {game} />
-	</div>
-
 	<div class="info">
+		<span class="store">{platformOf(game)}</span>
 		<h1>{game.title}</h1>
-		<p class="facts">{facts.join('  ·  ')}</p>
-
-		{#if rating > 0}
-		<div class="stars" aria-label="Note {rating} sur 5">
-			{#each [0, 1, 2, 3, 4] as i}
-				<svg viewBox="0 0 640 640" class:on={rating >= i + 0.5}>
-					<path
-						d="M341.5 45.1C337.4 37.1 329.1 32 320.1 32C311.1 32 302.8 37.1 298.7 45.1L225.1 189.3L65.2 214.7C56.3 216.1 48.9 222.4 46.1 231C43.3 239.6 45.6 249 51.9 255.4L166.3 369.9L141.1 529.8C139.7 538.7 143.4 547.7 150.7 553C158 558.3 167.6 559.1 175.7 555L320.1 481.6L464.4 555C472.4 559.1 482.1 558.3 489.4 553C496.7 547.7 500.4 538.8 499 529.8L473.7 369.9L588.1 255.4C594.5 249 596.7 239.6 593.9 231C591.1 222.4 583.8 216.1 574.8 214.7L415 189.3L341.5 45.1z"
-					/>
-				</svg>
-			{/each}
-			<span class="value">{rating.toFixed(1)}</span>
-		</div>
-		{/if}
-
 		<p class="synopsis">{summary}</p>
+
+		<div class="stats">
+			{#each stats as [label, value] (label)}
+				<div>
+					<span class="stat-label">{label}</span>
+					<span class="stat-value">
+						{#if label === 'Note'}
+							<span class="stars" aria-label="Note {rating} sur 5">
+								{#each [0, 1, 2, 3, 4] as i}
+									<svg viewBox="0 0 640 640" class:on={rating >= i + 0.5}>
+										<path
+											d="M341.5 45.1C337.4 37.1 329.1 32 320.1 32C311.1 32 302.8 37.1 298.7 45.1L225.1 189.3L65.2 214.7C56.3 216.1 48.9 222.4 46.1 231C43.3 239.6 45.6 249 51.9 255.4L166.3 369.9L141.1 529.8C139.7 538.7 143.4 547.7 150.7 553C158 558.3 167.6 559.1 175.7 555L320.1 481.6L464.4 555C472.4 559.1 482.1 558.3 489.4 553C496.7 547.7 500.4 538.8 499 529.8L473.7 369.9L588.1 255.4C594.5 249 596.7 239.6 593.9 231C591.1 222.4 583.8 216.1 574.8 214.7L415 189.3L341.5 45.1z"
+										/>
+									</svg>
+								{/each}
+								<span class="value">{rating.toFixed(1)}</span>
+							</span>
+						{:else}
+							{value}
+						{/if}
+					</span>
+				</div>
+			{/each}
+		</div>
 
 		{#if progress}
 			<div class="progress">
@@ -129,15 +142,14 @@
 		{/if}
 
 		<div class="actions">
-			<button class="action" class:focus-ring={selected === 0}>
+			<button class="action cta" class:focus-ring={selected === 0}>
+				<img src="/assets/icons/{game.installed === false ? 'download' : 'play'}.svg" alt="" />
 				{game.installed === false ? 'Installer' : 'Jouer'}
 			</button>
-			<button class="action ghost" class:focus-ring={selected === 1}>
-				{favorite ? 'Retirer des favoris' : 'Ajouter aux favoris'}
-			</button>
-			<!-- Tout ce qui modifie le jeu (affiche, mise à jour, fichiers) passe
-			     par ici : la fiche n'a pas à porter cinq boutons. -->
-			<button class="action ghost square" class:focus-ring={selected === 2} title="Options">
+			<!-- Descend vers « Captures et vidéos » et le panneau « Plus sur… ». -->
+			<button class="action" class:focus-ring={selected === 1}>Détails du jeu</button>
+			<!-- Favori, affiche, mise à jour, fichiers : tout passe par ici. -->
+			<button class="action icon" class:focus-ring={selected === 2} title="Options">
 				<img src="/assets/icons/settings.svg" alt="" />
 				Options
 			</button>
@@ -228,12 +240,11 @@
 		transform: translateY(-100%);
 	}
 
+	/* Colonne de gauche, centrée en hauteur : l'artwork respire à droite. */
 	.hero {
 		position: relative;
-		display: grid;
-		grid-template-columns: clamp(220px, 19vw, 330px) 1fr;
-		gap: clamp(32px, 4vw, 72px);
-		align-content: center;
+		display: flex;
+		align-items: center;
 		height: 100%;
 		padding: var(--safe-y) var(--safe-x);
 		animation: enter var(--normal) var(--ease) both;
@@ -246,44 +257,68 @@
 		}
 	}
 
-	.cover {
-		position: relative;
-		width: 100%;
-		aspect-ratio: 2 / 3;
-		overflow: hidden;
-		border-radius: var(--radius-lg);
-		box-shadow: 0 30px 70px rgba(0, 0, 0, 0.65);
-		align-self: center;
+	.info {
+		display: flex;
+		flex-direction: column;
+		align-items: flex-start;
+		max-width: var(--detail-width);
 	}
 
-	.info {
-		align-self: center;
-		/* Le titre prend toute la largeur disponible : le brider le cassait en
-		   trois lignes alors que la moitié droite de l'écran était vide. */
-		max-width: none;
-		padding-right: 4vw;
+	.store {
+		font-size: 19px;
+		font-weight: 800;
+		letter-spacing: 0.12em;
+		text-transform: uppercase;
+		color: var(--accent);
 	}
 
 	h1 {
-		margin: 0;
-		font-size: clamp(42px, 4.6vw, 80px);
-		font-weight: 700;
-		line-height: 1.04;
-		letter-spacing: -0.025em;
+		margin: 10px 0 0;
+		font-size: clamp(48px, 5.6vw, 104px);
+		font-weight: 800;
+		line-height: 1;
+		letter-spacing: -0.03em;
 		text-wrap: balance;
+		text-shadow: 0 4px 30px rgba(0, 0, 0, 0.4);
 	}
 
-	.facts {
-		margin: 10px 0 0;
-		font-size: 21px;
+	/* Un résumé court : trois lignes, à largeur de lecture. */
+	.synopsis {
+		display: -webkit-box;
+		-webkit-line-clamp: 3;
+		line-clamp: 3;
+		-webkit-box-orient: vertical;
+		overflow: hidden;
+		margin: 22px 0 0;
+		max-width: 60ch;
+		font-size: 22px;
+		line-height: 1.45;
+		color: rgba(255, 255, 255, 0.88);
+	}
+
+	.stats {
+		display: flex;
+		gap: clamp(40px, 6vw, 110px);
+		margin: 30px 0 0;
+	}
+
+	.stat-label {
+		display: block;
+		font-size: 17px;
 		color: var(--text-dim);
+	}
+
+	.stat-value {
+		display: block;
+		margin-top: 6px;
+		font-size: 30px;
+		font-weight: 700;
 	}
 
 	.stars {
 		display: flex;
 		align-items: center;
-		gap: 8px;
-		margin-top: 14px;
+		gap: 6px;
 	}
 
 	.stars svg {
@@ -298,18 +333,8 @@
 
 	.value {
 		margin-left: 6px;
-		font-size: 20px;
-		color: var(--text-dim);
-	}
-
-	/* Le résumé, lui, garde une largeur de lecture : une ligne trop longue se
-	   lit mal, même sur grand écran. */
-	.synopsis {
-		margin: 22px 0 0;
-		max-width: 68ch;
 		font-size: 22px;
-		line-height: 1.5;
-		color: rgba(255, 255, 255, 0.86);
+		color: var(--text-dim);
 	}
 
 	/* Un jeu en cours de téléchargement le dit ici, sous ses informations. */
@@ -317,7 +342,8 @@
 		display: flex;
 		align-items: center;
 		gap: 16px;
-		margin-top: 22px;
+		width: 100%;
+		margin-top: 24px;
 		max-width: 52ch;
 	}
 
@@ -337,7 +363,7 @@
 	}
 
 	.state {
-		font-size: 16px;
+		font-size: 17px;
 		color: var(--text-dim);
 		white-space: nowrap;
 	}
@@ -345,36 +371,48 @@
 	.actions {
 		display: flex;
 		gap: 16px;
-		margin-top: 34px;
+		margin-top: 36px;
 	}
 
+	/* Pilules : JOUER pleine d'accent, les autres en verre. */
 	button {
-		padding: 18px 42px;
-		border-radius: var(--radius);
+		display: inline-flex;
+		align-items: center;
+		gap: 12px;
+		padding: 18px 34px;
+		border-radius: 999px;
 		font-size: 22px;
-		font-weight: 600;
-		transition: transform var(--fast) var(--ease), background var(--fast) var(--ease);
+		font-weight: 700;
+		transition:
+			transform var(--fast) var(--ease),
+			background var(--fast) var(--ease);
 	}
 
 	.action {
 		background: var(--surface-strong);
+		backdrop-filter: blur(12px);
 	}
 
-	.ghost {
-		background: var(--surface);
-		color: var(--text-dim);
+	.action.cta {
+		padding: 18px 40px;
+		background: var(--accent);
+		color: var(--on-accent);
+		text-transform: uppercase;
+		letter-spacing: 0.06em;
 	}
 
-	.square {
-		display: inline-flex;
-		align-items: center;
-		gap: 10px;
-		padding: 18px 28px;
-	}
-
-	.square img {
+	.action img {
 		width: 22px;
 		height: 22px;
+	}
+
+	/* Icônes blanches : foncées sur l'aplat d'accent. */
+	.action.cta img {
+		filter: brightness(0);
+		opacity: 0.85;
+	}
+
+	.action.icon img {
 		opacity: 0.85;
 	}
 
@@ -604,9 +642,14 @@
 		color: var(--text-dim);
 	}
 
-	/* Le halo suit la sélection : un seul bouton actif à la fois. */
+	/* Le halo suit la sélection : un seul bouton actif à la fois. JOUER garde
+	   son aplat d'accent ; les autres s'éclaircissent. */
 	.action.focus-ring {
-		background: var(--surface-strong);
+		transform: scale(1.05);
+	}
+
+	.action:not(.cta).focus-ring {
+		background: var(--detail-button-focus);
 		color: var(--text);
 	}
 </style>

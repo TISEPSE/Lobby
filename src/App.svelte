@@ -523,7 +523,8 @@
 		else if (action === 'right') detailButton = Math.min(2, detailButton + 1);
 		else if (action === 'accept') {
 			if (detailButton === 0) launch();
-			else if (detailButton === 1) switchFavorite();
+			// « Détails du jeu » : la page « Captures et vidéos » et « Plus sur… ».
+			else if (detailButton === 1) detailZone = 'media';
 			else openDetailOptions();
 		} else if (action === 'options') openDetailOptions();
 	}
@@ -971,7 +972,7 @@
 			}
 			if (detailZone === 'media') return list(['a', 'Agrandir'], ['b', 'Retour']);
 			if (menuOptionsOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
-			const action = detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Favori' : 'Options';
+			const action = detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Détails du jeu' : 'Options';
 			return list(['a', action], ['x', 'Options'], ['b', 'Retour']);
 		}
 		if (section === 'library') {
@@ -1002,13 +1003,17 @@
 	});
 </script>
 
-<Backdrop src={backdropSrc} dimmed={opened !== null || section !== 'home'} />
+<Backdrop
+	src={backdropSrc}
+	dimmed={opened !== null ? detailZone === 'media' : section !== 'home'}
+	detail={opened !== null && detailZone === 'actions'}
+/>
 
 <TopBar
 	{section}
 	{clock}
 	{pads}
-	gamesCount={games.length}
+	gamesCount={allGames.length}
 	profileName={settings.profile_name}
 	avatar={settings.avatar_path}
 	onSelectSection={goToSection}

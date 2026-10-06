@@ -78,12 +78,16 @@
 	--player-shade: rgba(0, 0, 0, 0.85);
 	--player-bar: 6px;
 	--player-knob: 16px;
-	--player-volume: 90px;
+	--player-volume-height: 200px;
 	--player-flash: 110px;
 	/* Accueil : espace entre titre, rangée et panneaux ; panneaux du bas. */
 	--home-gap: 3vh;
 	--panel-gap: 24px;
 	--panel-height: 220px;
+	/* Fiche : largeur de la colonne de gauche (titre, résumé, chiffres). */
+	--detail-width: 980px;
+	/* Bouton de la fiche sélectionné (hors JOUER, qui garde son accent). */
+	--detail-button-focus: rgba(255, 255, 255, 0.22);
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;

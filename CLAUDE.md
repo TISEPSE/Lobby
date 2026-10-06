@@ -35,7 +35,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Texte d'au moins 17 px à l'écran, contraste élevé : ça se lit depuis un canapé.
 - La sélection doit toujours être visible (agrandissement + contour d'accent + halo) et jamais perdue.
 - Dans une grille, **descendre depuis la dernière rangée ne fait rien**. Ramener la sélection sur la toute dernière tuile la faisait sauter en diagonale, à l'autre bout de l'écran.
-- Transition entre écrans : `view-transition-name` partagé sur la jaquette. Le navigateur anime le déplacement, on ne mesure aucun rectangle à la main.
+- Transition vers une fiche : `startViewTransition` (fondu), le dock garde son propre nom pour ne pas clignoter. La fiche n'a plus de jaquette (maquette) : plus de jaquette partagée à animer.
 - **Changer de section n'utilise pas `startViewTransition`** : il photographiait toute la page, dock flouté compris, et le fondu saccadait. Le contenu entre seul (`.screen`, `{#key section}` : fondu court + léger glissement), le dock ne bouge pas. Les view transitions restent pour la fiche (jaquette partagée), et le dock y porte son propre nom (`view-transition-name: dock`) pour ne pas clignoter.
 - Le voile posé sur un artwork est un dégradé (`Backdrop.svelte`) : lisible en bas, artwork préservé en haut. Sur une fiche, il s'appuie à gauche, là où se trouve le texte.
 - L'artwork ne change qu'une fois la nouvelle image chargée : deux couches se relaient, sinon on verrait un clignotement noir à chaque déplacement de la sélection.
@@ -44,6 +44,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Hub (dock du haut, `TopBar.svelte`)
 
+- Le champ de recherche annonce le nombre de jeux **de toute la bibliothèque** (`allGames` : installés et possédés), comme la recherche elle-même.
 - **Dock façon Xbox** (`--topbar-height` 76 px, boutons de 40 px, **centré à la largeur de son contenu** — étiré d'un bord à l'autre, il barrait tout l'écran ; variables `--dock-*`) : pilule translucide floutée. À gauche Accueil et Bibliothèque, au centre le **champ de recherche** (« Rechercher parmi N jeux », glyphe Y posé dessus), à droite Réglages puis le **Profil** (la photo). **L'heure et les manettes sont hors du dock**, dans le coin haut droit de l'écran : ce ne sont pas des sections. Les glyphes **LB / RB** (L1 / R1) encadrent le dock.
 - **On ne circule dans le dock qu'avec L1 / R1** : la sélection ne monte jamais dessus, elle reste dans le contenu. Monter depuis le haut d'un écran ne fait rien. Pas de bouclage aux extrémités. Ordre : Accueil · Bibliothèque · Réglages · Profil. La recherche n'est **pas** une étape : c'est une fenêtre (Y, ou clic sur le champ).
 - Le dock n'a donc pas d'état « sélectionné » : la section courante est une **pilule claire** (`--dock-active`) qui affiche son nom, sans contour d'accent — le contour reste réservé à la sélection, dans le contenu.
@@ -99,7 +100,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - `download_once` cherche donc un fichier existant **quel que soit son suffixe** (`art_files()`) : le choix de l'utilisateur est retrouvé tel quel, même après un vidage du stockage du navigateur.
 - Le fichier local passe avant la fiche Steam dans `Cover.svelte`, sans quoi le choix serait recouvert.
 - Les affiches sont rangées sous l'**identifiant du jeu**, jamais sous l'appid : un appid peut manquer, un id jamais.
-- **Tout ce qui montre une jaquette passe par `Cover.svelte`** — tuiles, fenêtre de choix et fiche de jeu. La fiche lisait la jaquette de la fiche Steam : le choix de l'utilisateur n'y apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait rien du tout.
+- **Tout ce qui montre une jaquette passe par `Cover.svelte`** — tuiles et fenêtre de choix (la fiche de jeu n'en montre plus). La fiche lisait la jaquette de la fiche Steam : le choix de l'utilisateur n'y apparaissait pas, et un jeu sans jaquette chez Steam n'y montrait rien du tout.
 
 ## Jaquettes manquantes : SteamGridDB
 
@@ -179,6 +180,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - `lastPlayed` est posé **au lancement** (`markLaunched`), pas à la fin de la partie : pour un jeu Steam, le processus rend la main aussitôt et la carte ne l'aurait jamais montré.
 - Capture : `?resume=demo` invente un jeu à reprendre.
 
+## Fiche d'un jeu (`Detail.svelte`)
+
+- D'après la maquette de l'utilisateur (sans la rangée de jeux ni les boutons ronds du bas) : à gauche, la **boutique** en petites capitales d'accent, le **titre en très grand**, un **résumé de trois lignes**, **trois chiffres** (temps de jeu, dernière partie, note en étoiles — ou la sortie sans note), puis **JOUER** (pilule d'accent, « Installer » pour un jeu non installé) · **Détails du jeu** (descend vers « Captures et vidéos » et « Plus sur… ») · **Options** (favori compris). Pas de jaquette : l'artwork occupe le fond.
+- Le fond a son propre voile (`Backdrop`, `detail`) : sombre sous le texte, l'artwork presque intact à droite. La page « Captures et vidéos » reprend le voile sombre.
+- La sélection d'un bouton l'agrandit ; JOUER garde son aplat d'accent (`--detail-button-focus` pour les autres).
+- Pièges de nommage dans ce composant : `.play` est déjà l'icône de lecture des diapositives (JOUER est `.cta`), et `dl` est stylé pour le panneau « Plus sur… » (les chiffres sont des `div`).
+
 ## Fiche : captures et vidéos
 
 - La fiche a **deux pages l'une sous l'autre** : la présentation, puis « Captures et vidéos ». Descendre depuis les boutons fait glisser la seconde (une page entière, `translateY(-100%)`) ; haut (ou B) revient. Un repère « Captures et vidéos ▾ » en bas dit qu'il y a une suite.
@@ -188,7 +196,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sous le slider, le panneau « Plus sur… » : description (`about`) à gauche, fiche technique (genres, sortie, développeur, éditeur, temps de jeu) à droite.
 - Capture : `?screen=detail&index=N&media=demo&slide=2` (images du CDN de Steam).
 - A ouvre la **visionneuse** (`MediaViewer.svelte`). Une capture s'y affiche centrée, **bornée sur l'écran** (`100vw`/`100vh` moins les marges, `--viewer-inset`) : en pourcentage, dans une grille aux rangées automatiques, `max-height` ne s'appliquait pas et l'image débordait. Gauche / droite (ou L1 / R1) passent au média voisin, B referme.
-- Une bande-annonce passe dans le **lecteur** (`VideoPlayer.svelte`), plein écran, façon lecteur multimédia Xbox : titre et nom en haut ; en bas la barre de progression (écoulé / durée, part déjà chargée) et **toutes les touches affichées avec leurs glyphes** — avant, il fallait tout deviner. A lecture / pause (« Revoir » à la fin), ◀ ▶ reculer / avancer de 10 s, ▲ ▼ volume (`volume_video`, le même que Réglages → Audio, jauge dans la barre), L1 / R1 média précédent / suivant (dans la visionneuse, L1 / R1 ne changent donc pas de section), B fermer. Les commandes **s'effacent après 3 s** de lecture sans appui et reviennent au moindre appui ou à la pause ; chaque action fait apparaître son icône au centre (lecture, pause, ±10 s), comme sur YouTube. Variables `--player-*`. Capture : `?screen=detail&media=demo&slide=0&viewer=1` (une bande-annonce de démo en tête de `DEMO_MEDIA`, affiche seule).
+- Une bande-annonce passe dans le **lecteur** (`VideoPlayer.svelte`), plein écran, façon lecteur multimédia Xbox : titre et nom en haut ; en bas la barre de progression (écoulé / durée, part déjà chargée) et **toutes les touches affichées avec leurs glyphes** — avant, il fallait tout deviner. A lecture / pause (« Revoir » à la fin), ◀ ▶ déplacent **directement le curseur** de la barre (pas de 5 s — 10 s était trop ; maintenu, il défile ; le temps visé s'affiche dans une bulle au-dessus), ▲ ▼ volume (`volume_video`, le même que Réglages → Audio) dans une **jauge verticale sur le côté droit**, L1 / R1 média précédent / suivant (dans la visionneuse, L1 / R1 ne changent donc pas de section), B fermer. Les commandes **s'effacent après 3 s** de lecture sans appui et reviennent au moindre appui ou à la pause ; chaque action fait apparaître son icône au centre (lecture, pause, ±10 s), comme sur YouTube. Variables `--player-*`. Capture : `?screen=detail&media=demo&slide=0&viewer=1` (une bande-annonce de démo en tête de `DEMO_MEDIA`, affiche seule).
 - `steam_details` récupère `screenshots`, `movies`, `developers`, `publishers`, `about_the_game`. Une fiche en cache plus ancienne que `DETAILS_VERSION` est redemandée (et gardée si Steam ne répond pas) : sans ça, les jeux déjà vus n'auraient jamais de médias.
 - **Steam ne fournit plus de fichier webm/mp4** pour les bandes-annonces récentes, seulement des flux HLS (`hls_h264`, CORS ouvert). WebKitGTK les lit seul ; sous WebView2, **hls.js** prend le relais, chargé seulement à l'ouverture d'une vidéo. Lecture avec le son, et en muet si le webview la refuse sans geste de l'utilisateur.
 
