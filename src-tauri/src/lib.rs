@@ -271,13 +271,6 @@ pub struct UserSettings {
   pub avatar_path: String,
   pub button_layout: String,
   pub game_folders: Vec<String>,
-  /// Vidéo jouée au lancement, parmi celles livrées dans `assets/boot`.
-  /// Vide : on va droit à l'accueil.
-  #[serde(default)]
-  pub boot_video: String,
-  /// Permet de garder la vidéo choisie tout en la désactivant.
-  #[serde(default = "default_true")]
-  pub boot_video_enabled: bool,
   /// Retours sonores de l'interface.
   #[serde(default = "default_true")]
   pub sound_enabled: bool,
@@ -468,8 +461,6 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     avatar_path: "/assets/avatars/a11_face.svg".to_string(),
     button_layout: "ps5".to_string(),
     game_folders: default_folders,
-    boot_video: "/assets/boot/steamos_startup.webm".to_string(),
-    boot_video_enabled: true,
     sound_enabled: true,
     steamgriddb_key: String::new(),
     screensaver_minutes: 5,

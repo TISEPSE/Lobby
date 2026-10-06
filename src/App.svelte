@@ -9,7 +9,6 @@
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
 	import PowerMenu from './lib/PowerMenu.svelte';
-	import BootVideo from './lib/BootVideo.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads } from './lib/downloads.svelte.js';
@@ -74,8 +73,6 @@
 		setProfileName,
 		setAvatar,
 		setButtonLayout,
-		setBootVideo,
-		setBootVideoEnabled,
 		setSoundEnabled as saveSoundEnabled,
 		setScreensaverMinutes,
 		setHomeOrder,
@@ -155,28 +152,11 @@
 	} | null = $state(null);
 
 	/**
-	 * Vidéo d'introduction : jouée une fois au lancement, par-dessus l'interface
-	 * déjà construite derrière. `?boot=0` la saute (outil de capture).
-	 */
-	let bootPlaying = $state(params.get('boot') !== '0');
-
-	/**
 	 * Écran de veille : on garde l'instant de la dernière action plutôt qu'un
 	 * compte à rebours à annuler et relancer sans arrêt.
 	 */
 	let saverOn = $state(params.get('saver') === '1');
 	let lastInput = $state(Date.now());
-
-	/** Vidéos livrées avec l'interface ; la première entrée n'en joue aucune. */
-	const BOOT_VIDEOS = [
-		'',
-		'/assets/boot/steamos_startup.webm',
-		'/assets/boot/steamos_splash.webm',
-		'/assets/boot/steam_frame_boot.webm',
-		'/assets/boot/xbox_boot_2026.webm',
-		'/assets/boot/sonic_advance.webm',
-		'/assets/boot/radagon_elden_ring.webm',
-	];
 
 	/**
 	 * Filtre et tri de la bibliothèque : ceux de la dernière session (réglages),
@@ -391,6 +371,8 @@
 	function stepSection(step: number) {
 		const at = SECTIONS.indexOf(section);
 		const next = SECTIONS[Math.min(SECTIONS.length - 1, Math.max(0, at + step))];
+		// Un léger souffle dit qu'on change de section ; au bout du dock, rien.
+		if (next !== section) playSound('section');
 		opened = null;
 		optionsOpen = false;
 		menuOptionsOpen = false;
@@ -472,6 +454,10 @@
 		else if (action === 'left') mediaIndex = Math.max(0, mediaIndex - 1);
 		else if (action === 'right') mediaIndex = Math.min(detailMedia.length - 1, mediaIndex + 1);
 		else if (action === 'accept') viewerComponent?.togglePause();
+		// Haut / bas : volume des vidéos (le même que Réglages → Audio → Vidéos).
+		else if ((action === 'up' || action === 'down') && detailMedia[mediaIndex]?.kind === 'video') {
+			stepVolume('volume_video', action === 'up' ? 10 : -10);
+		}
 	}
 
 	/** Slider « Captures et vidéos », sous la présentation du jeu. */
@@ -655,12 +641,6 @@
 			return;
 		}
 
-		// N'importe quelle touche passe l'introduction.
-		if (bootPlaying) {
-			bootPlaying = false;
-			return;
-		}
-
 		// Un seul endroit décide du son : les écrans n'ont pas à y penser.
 		if (action === 'accept') playSound('accept');
 		else if (action === 'cancel') playSound('cancel');
@@ -832,7 +812,7 @@
 			pads = padCount();
 			// Pas de veille pendant l'introduction, ni sans artwork à montrer.
 			const delay = settings.screensaver_minutes * 60_000;
-			if (delay > 0 && !bootPlaying && saverImages.length > 0) {
+			if (delay > 0 && saverImages.length > 0) {
 				if (Date.now() - lastInput >= delay) saverOn = true;
 			}
 		}, 1000);
@@ -941,7 +921,11 @@
 		}
 		if (optionsOpen || (menuOptionsOpen && !opened)) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (opened) {
-			if (viewerOpen) return list(['a', 'Lecture / pause'], ['b', 'Fermer']);
+			if (viewerOpen) {
+				return detailMedia[mediaIndex]?.kind === 'video'
+					? list(['a', 'Lecture / pause'], ['dpad', 'Volume'], ['b', 'Fermer'])
+					: list(['b', 'Fermer']);
+			}
 			if (detailZone === 'media') return list(['a', 'Agrandir'], ['b', 'Retour']);
 			if (menuOptionsOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
 			const action = detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Favori' : 'Options';
@@ -1075,14 +1059,6 @@
 			onAddFolder={addGameFolder}
 			onRemoveFolder={removeGameFolder}
 			onChangeLayout={setButtonLayout}
-			bootVideo={settings.boot_video}
-			bootVideoEnabled={settings.boot_video_enabled}
-			onCycleBootVideo={() => {
-				const next =
-					BOOT_VIDEOS[(BOOT_VIDEOS.indexOf(settings.boot_video) + 1) % BOOT_VIDEOS.length];
-				setBootVideo(next);
-				notify(next ? "Vidéo d'introduction changée." : "Plus de vidéo au démarrage.");
-			}}
 			soundEnabled={settings.sound_enabled}
 			volumes={{
 				volume_master: settings.volume_master,
@@ -1139,19 +1115,11 @@
 				if (next) preloadSounds();
 				notify(next ? 'Sons activés.' : 'Sons coupés.');
 			}}
-			onToggleBootVideo={() => {
-				setBootVideoEnabled(!settings.boot_video_enabled);
-				notify(settings.boot_video_enabled ? 'Vidéo activée.' : 'Vidéo désactivée.');
-			}}
 		/>
 	{/if}
 	</div>
 	{/key}
 </main>
-
-{#if bootPlaying && settings.boot_video_enabled && settings.boot_video}
-	<BootVideo src={settings.boot_video} volume={videoVolume} onFinished={() => (bootPlaying = false)} />
-{/if}
 
 {#if saverOn}
 	<ScreenSaver images={saverImages} />

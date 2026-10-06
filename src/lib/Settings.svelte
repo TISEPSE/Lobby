@@ -8,8 +8,6 @@
 		focused = true,
 		gameFolders = [],
 		buttonLayout = 'ps5',
-		bootVideo = '',
-		bootVideoEnabled = true,
 		soundEnabled = true,
 		volumes = { volume_master: 100, volume_menu: 100, volume_alerts: 100, volume_launch: 100, volume_video: 100 },
 		onStepVolume,
@@ -27,8 +25,6 @@
 		onAddFolder,
 		onRemoveFolder,
 		onChangeLayout,
-		onCycleBootVideo,
-		onToggleBootVideo,
 		onToggleSound,
 		onCycleScreensaver,
 		onChangeSteamGridKey,
@@ -36,8 +32,6 @@
 		focused?: boolean;
 		gameFolders: string[];
 		buttonLayout: string;
-		bootVideo?: string;
-		bootVideoEnabled?: boolean;
 		soundEnabled?: boolean;
 		/** Volumes en pour cent (Réglages → Audio). */
 		volumes?: Record<VolumeKey, number>;
@@ -61,8 +55,6 @@
 		onAddFolder: (path: string) => void;
 		onRemoveFolder: (path: string) => void;
 		onChangeLayout: (layout: string) => void;
-		onCycleBootVideo?: () => void;
-		onToggleBootVideo?: () => void;
 		onToggleSound?: () => void;
 		onCycleScreensaver?: () => void;
 		onChangeSteamGridKey?: (key: string) => void;
@@ -125,7 +117,7 @@
 		{ key: 'volume_menu', title: 'Menus', desc: 'Déplacements, validation et retour' },
 		{ key: 'volume_alerts', title: 'Notifications', desc: 'Manette connectée, erreurs' },
 		{ key: 'volume_launch', title: 'Lancement d’un jeu', desc: 'Le son joué quand une partie démarre' },
-		{ key: 'volume_video', title: 'Vidéos', desc: 'Vidéo d’introduction et bandes-annonces' },
+		{ key: 'volume_video', title: 'Vidéos', desc: 'Bandes-annonces des fiches de jeu' },
 	];
 
 	/** Ligne de volume sélectionnée, ou null. */
@@ -186,14 +178,6 @@
 		}
 	}
 
-	/** « /assets/boot/steamos_startup.webm » se lit « Steamos startup ». */
-	const bootVideoName = $derived.by(() => {
-		if (!bootVideo) return 'Aucune';
-		const base = bootVideo.split('/').pop()?.replace(/\.[^.]+$/, '') ?? '';
-		const words = base.replace(/[_-]+/g, ' ').trim();
-		return words.charAt(0).toUpperCase() + words.slice(1);
-	});
-
 	// Nombre d'éléments interactifs dans le panneau de droite selon la catégorie
 	const contentRowsCount = $derived.by(() => {
 		switch (currentCategory.id) {
@@ -201,7 +185,7 @@
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 5; // [0: touches, 1: vidéo, 2: jouer au démarrage, 3: veille, 4: ordre de l'accueil]
+				return 3; // [0: touches, 1: veille, 2: ordre de l'accueil]
 			case 'audio':
 				return 1 + VOLUMES.length; // [0: sons activés, 1..: volumes]
 			case 'system':
@@ -310,12 +294,8 @@
 				const next = buttonLayout === 'ps5' ? 'xbox' : buttonLayout === 'xbox' ? 'auto' : 'ps5';
 				onChangeLayout(next);
 			} else if (focusRow === 1) {
-				onCycleBootVideo?.();
-			} else if (focusRow === 2) {
-				onToggleBootVideo?.();
-			} else if (focusRow === 3) {
 				onCycleScreensaver?.();
-			} else if (focusRow === 4) {
+			} else if (focusRow === 2) {
 				onCycleHomeOrder?.();
 			}
 		} else if (cat === 'audio') {
@@ -522,40 +502,6 @@
 						}}
 					>
 						<div class="row-label">
-							<span class="title">Vidéo d'introduction</span>
-							<span class="desc">Jouée au lancement de la console</span>
-						</div>
-						<span class="badge-layout">{bootVideoName} ▸</span>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 2}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 2;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Jouer au démarrage</span>
-							<span class="desc">Passe directement à l'accueil si désactivé</span>
-						</div>
-						<span class="badge-layout">{bootVideoEnabled ? 'Oui ▸' : 'Non ▸'}</span>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 3}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 3;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
 							<span class="title">Écran de veille</span>
 							<span class="desc">Artworks de la bibliothèque après un moment sans rien toucher</span>
 						</div>
@@ -565,10 +511,10 @@
 					<button
 						type="button"
 						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 4}
+						class:focused={focused && focusCol === 'content' && focusRow === 2}
 						onclick={() => {
 							focusCol = 'content';
-							focusRow = 4;
+							focusRow = 2;
 							executeContentAction();
 						}}
 					>

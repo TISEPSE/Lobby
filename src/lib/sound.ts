@@ -11,7 +11,7 @@
  * entendu.
  */
 
-type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad';
+type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad' | 'section';
 
 /** Fichier et volume de chaque signal. Sans fichier, on synthétise. */
 const CUES: Record<Cue, { file?: string; gain: number }> = {
@@ -26,6 +26,9 @@ const CUES: Record<Cue, { file?: string; gain: number }> = {
 	launch: { file: 'ps5-popup-2.wav', gain: 0.8 },
 	// Manette branchée ou débranchée : le même signal, plus discret.
 	pad: { file: 'ps5-popup-2.wav', gain: 0.45 },
+	// Changement de section (L1 / R1) : un souffle très court, synthétisé
+	// (`playWhoosh`) — un glissement, pas un clic de plus.
+	section: { gain: 0.5 },
 };
 
 /** Repli synthétisé : fréquence de départ, d'arrivée et durée. */
@@ -36,6 +39,7 @@ const TONES: Record<Cue, { from: number; to: number; duration: number }> = {
 	error: { from: 260, to: 200, duration: 0.2 },
 	launch: { from: 440, to: 880, duration: 0.3 },
 	pad: { from: 660, to: 880, duration: 0.18 },
+	section: { from: 900, to: 2600, duration: 0.16 },
 };
 
 let context: AudioContext | null = null;
@@ -49,6 +53,7 @@ const GROUP: Record<Cue, 'menu' | 'alerts' | 'launch'> = {
 	error: 'alerts',
 	pad: 'alerts',
 	launch: 'launch',
+	section: 'menu',
 };
 
 /** Volumes de 0 à 1 : général et par famille. */
@@ -121,6 +126,11 @@ export function play(cue: Cue) {
 	// À zéro, on ne joue rien du tout (pas même le repli synthétique).
 	if (levelOf(cue) <= 0) return;
 
+	if (cue === 'section') {
+		playWhoosh(ctx, levelOf(cue));
+		return;
+	}
+
 	const buffer = buffers.get(cue);
 	if (buffer) {
 		playBuffer(ctx, buffer, levelOf(cue));
@@ -144,6 +154,38 @@ function playBuffer(ctx: AudioContext, buffer: AudioBuffer, gain: number) {
 	volume.gain.value = gain;
 	source.connect(volume).connect(ctx.destination);
 	source.start();
+}
+
+/**
+ * Souffle de glissement : un bruit blanc très court, passé dans un filtre dont
+ * la fréquence monte — l'oreille l'entend comme un « fffuit » qui glisse.
+ */
+function playWhoosh(ctx: AudioContext, level: number) {
+	const { from, to, duration } = TONES.section;
+	const now = ctx.currentTime;
+
+	const noise = ctx.createBuffer(1, Math.ceil(ctx.sampleRate * duration), ctx.sampleRate);
+	const data = noise.getChannelData(0);
+	for (let i = 0; i < data.length; i++) data[i] = Math.random() * 2 - 1;
+	const source = ctx.createBufferSource();
+	source.buffer = noise;
+
+	const filter = ctx.createBiquadFilter();
+	filter.type = 'bandpass';
+	filter.Q.value = 1.4;
+	filter.frequency.setValueAtTime(from, now);
+	filter.frequency.exponentialRampToValueAtTime(to, now + duration);
+
+	// Montée douce puis extinction : pas de claquement au début ni à la fin.
+	const envelope = ctx.createGain();
+	const peak = Math.max(level * 0.35, 0.0002);
+	envelope.gain.setValueAtTime(0.0001, now);
+	envelope.gain.exponentialRampToValueAtTime(peak, now + duration * 0.35);
+	envelope.gain.exponentialRampToValueAtTime(0.0001, now + duration);
+
+	source.connect(filter).connect(envelope).connect(ctx.destination);
+	source.start(now);
+	source.stop(now + duration + 0.02);
 }
 
 function playTone(ctx: AudioContext, cue: Cue) {

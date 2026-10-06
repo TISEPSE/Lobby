@@ -374,10 +374,10 @@ export function playtimeText(id: string): string {
 	return `${Math.floor(minutes / 60)} h ${String(minutes % 60).padStart(2, '0')}`;
 }
 
-export type Filter = 'all' | 'installed' | 'favorites' | 'recent';
+export type Filter = 'all' | 'installed' | 'favorites';
 
 /** Ordre des filtres, tel qu'on les parcourt avec LT / RT. */
-export const FILTERS: Filter[] = ['all', 'installed', 'favorites', 'recent'];
+export const FILTERS: Filter[] = ['all', 'installed', 'favorites'];
 export const SORTS: Sort[] = ['title', 'recent', 'playtime'];
 export type Sort = 'title' | 'recent' | 'playtime';
 
@@ -385,7 +385,6 @@ export const FILTER_LABELS: Record<Filter, string> = {
 	all: 'Tous',
 	installed: 'Installés',
 	favorites: 'Favoris',
-	recent: 'Récemment joué',
 };
 
 export const SORT_LABELS: Record<Sort, string> = {
@@ -447,7 +446,6 @@ export function view(filter: Filter, sort: Sort, list: Game[] = games): Game[] {
 	const kept = list.filter((game) => {
 		if (filter === 'installed') return game.installed !== false;
 		if (filter === 'favorites') return isFavorite(game.id);
-		if (filter === 'recent') return lastPlayedAt(game.id) !== null;
 		return true;
 	});
 
