@@ -24,7 +24,7 @@
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame, installGame, installEpicGame } from './lib/steamActions';
-	import { artwork, details, heroFor, mediaOf } from './lib/steam.svelte.js';
+	import { artwork, details, heroFor, mediaOf, initArtStore } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
 	import PadToast from './lib/PadToast.svelte';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
@@ -773,7 +773,7 @@
 		// juste, pas retomber sur le bip de secours.
 		if (settings.sound_enabled) preloadSounds();
 		initSettings();
-		initLibrary().then(() => (libraryReady = true));
+		Promise.all([initLibrary(), initArtStore()]).then(() => (libraryReady = true));
 		// Le compte local d'abord : la liste complète en complète les temps.
 		initSteamAccount().then(() =>
 			initSteamLibrary((ok, message) => {

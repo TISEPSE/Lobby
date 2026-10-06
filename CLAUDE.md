@@ -204,6 +204,12 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Sur une **fiche de jeu**, il n'y a pas de tuile à prolonger : un troisième bouton « Options » (et la touche X) ouvre le même jeu d'actions dans `OptionsMenu.svelte`, avec des lignes identiques à celles du tiroir.
 - Tout ce qui touche à l'installation est **confié à Steam** (`steam://install|validate|uninstall`) ou au launcher Epic (`com.epicgames.launcher://apps/…`), par la commande Rust `open_url` — qui n'accepte que ces deux protocoles **et seulement les caractères `[A-Za-z0-9:/?=._-]`** (`url_is_safe`, testé) : sous Windows l'adresse passe par `cmd /C start`, qui interprète `&`, `|`, `^`, `%` — `steam://x&calc` lançait une autre commande.
 
+## Données sur le disque (`persist.ts`, `save_store`)
+
+- Le stockage du webview (`localStorage`) **dépend de l'origine** : `tauri dev` sert `localhost:5177`, l'exécutable compilé une autre adresse. Tout ce qui n'y vivait que là (statistiques, journal, choix d'affiches) **disparaissait dans l'exe**, et l'accueil y perdait l'ordre « dernière partie ».
+- Le disque est donc la référence : `persist(name, key, value)` écrit `<app data>/store/<name>.json` (commande `save_store`, nom limité à `[a-z-]`, écriture atomique) et garde le navigateur en secours ; `restore()` lit le disque, sinon le navigateur, et **recopie alors sur le disque** (migration). Magasins : `stats`, `sessions`, `art-styles`, `artwork`.
+- `ScannedGame` (Rust) met `#[serde(default)]` sur ses champs facultatifs : sans ça, un seul jeu sans `executable` faisait refuser **toute** la sauvegarde de `library.json`, en silence — la bibliothèque ne vivait que dans le navigateur, et l'exe voyait tous les jeux Steam « non installés ».
+
 ## Erreurs
 
 - Les actions qui peuvent échouer (`play`, `runPower`, `steamActions`) renvoient un `Outcome` (`{ ok, message }`) plutôt qu'une chaîne : l'appelant sait alors si c'est une confirmation ou une erreur.

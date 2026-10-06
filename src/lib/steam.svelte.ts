@@ -6,6 +6,7 @@
  * Aucune clé, aucun compte. Chaque fiche est mise en cache sur le disque par
  * Rust, et gardée ici pour la session.
  */
+import { persist, restore } from './persist';
 import type { Details, MediaItem } from './types';
 
 /**
@@ -144,11 +145,19 @@ function loadArtwork(): Record<string, Artwork> {
 }
 
 function saveArtwork() {
-	try {
-		localStorage.setItem(ARTWORK_KEY, JSON.stringify(artwork));
-	} catch {
-		/* sans stockage, on redemandera au prochain lancement */
-	}
+	persist('artwork', ARTWORK_KEY, artwork);
+}
+
+/**
+ * Choix d'affiches et visuels téléchargés, relus depuis le disque au démarrage
+ * (`persist.ts`) : l'exécutable compilé n'a pas le stockage de navigateur de
+ * `tauri dev`.
+ */
+export async function initArtStore() {
+	const styles = await restore<Record<string, ArtStyle>>('art-styles', ART_KEY);
+	if (styles && typeof styles === 'object') Object.assign(artStyles, styles);
+	const saved = await restore<Record<string, Artwork>>('artwork', ARTWORK_KEY);
+	if (saved && typeof saved === 'object') Object.assign(artwork, saved);
 }
 
 /**
@@ -272,11 +281,7 @@ export async function chooseArt(
 	} else {
 		artStyles[gameId] = 'artwork';
 	}
-	try {
-		localStorage.setItem(ART_KEY, JSON.stringify(artStyles));
-	} catch {
-		/* sans stockage, le choix ne vaut que pour la session */
-	}
+	persist('art-styles', ART_KEY, artStyles);
 }
 
 /** Candidats visibles dans un simple onglet de navigateur, sans Rust. */

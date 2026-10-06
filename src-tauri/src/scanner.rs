@@ -50,11 +50,20 @@ pub struct ScannedGame {
   pub id: String,
   pub title: String,
   pub appid: Option<String>,
+  // Champs facultatifs côté interface : sans `default`, un seul jeu qui ne
+  // les porte pas faisait refuser toute la sauvegarde de la bibliothèque, en
+  // silence — elle ne vivait alors que dans le stockage du navigateur.
+  #[serde(default)]
   pub cover: String,
+  #[serde(default)]
   pub hero: String,
+  #[serde(default)]
   pub logo: String,
+  #[serde(default)]
   pub source: String, // "steam", "epic", "folder", "shortcut"
+  #[serde(default)]
   pub executable: String,
+  #[serde(default)]
   pub args: Vec<String>,
 }
 

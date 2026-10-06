@@ -350,6 +350,61 @@ fn save_library(app: tauri::AppHandle, games: Vec<ScannedGame>) -> Result<(), St
   fs::write(path, text).map_err(|e| format!("Impossible d'écrire la bibliothèque : {e}"))
 }
 
+/// Nom de magasin admis : quelques lettres et tirets, jamais un chemin.
+fn store_name_is_safe(name: &str) -> bool {
+  !name.is_empty() && name.len() <= 32 && name.bytes().all(|b| b.is_ascii_lowercase() || b == b'-')
+}
+
+fn store_path(app: &tauri::AppHandle, name: &str) -> Result<PathBuf, String> {
+  if !store_name_is_safe(name) {
+    return Err(format!("Nom de magasin refusé : {name}"));
+  }
+  let dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("Dossier de données introuvable : {error}"))?
+    .join("store");
+  fs::create_dir_all(&dir).map_err(|error| format!("Dossier de données impossible à créer : {error}"))?;
+  Ok(dir.join(format!("{name}.json")))
+}
+
+/// Données de l'interface (statistiques, journal des parties, choix d'affiches)
+/// gardées sur le disque : le stockage du webview dépend de l'origine de la
+/// page, et l'exécutable compilé n'a pas la même que `tauri dev` — tout y
+/// semblait perdu.
+#[tauri::command]
+fn save_store(app: tauri::AppHandle, name: String, data: String) -> Result<(), String> {
+  let path = store_path(&app, &name)?;
+  // Écriture dans un fichier voisin puis renommage : jamais de fichier à moitié écrit.
+  let tmp = path.with_extension("json.tmp");
+  fs::write(&tmp, data).map_err(|e| format!("Écriture impossible ({name}) : {e}"))?;
+  fs::rename(&tmp, &path).map_err(|e| format!("Écriture impossible ({name}) : {e}"))
+}
+
+#[tauri::command]
+fn load_store(app: tauri::AppHandle, name: String) -> Result<Option<String>, String> {
+  let path = store_path(&app, &name)?;
+  if !path.exists() {
+    return Ok(None);
+  }
+  fs::read_to_string(path).map(Some).map_err(|e| format!("Lecture impossible ({name}) : {e}"))
+}
+
+#[cfg(test)]
+mod store_tests {
+  use super::store_name_is_safe;
+
+  #[test]
+  fn store_names_cannot_escape_the_folder() {
+    assert!(store_name_is_safe("stats"));
+    assert!(store_name_is_safe("art-styles"));
+    assert!(!store_name_is_safe("../settings"));
+    assert!(!store_name_is_safe("a/b"));
+    assert!(!store_name_is_safe(""));
+    assert!(!store_name_is_safe("Stats"));
+  }
+}
+
 /// Charge la bibliothèque persistée sur le disque.
 #[tauri::command]
 fn load_library(app: tauri::AppHandle) -> Result<Vec<ScannedGame>, String> {
@@ -1364,6 +1419,8 @@ pub fn run() {
       open_url,
       scan_installed_games,
       save_library,
+      save_store,
+      load_store,
       load_library,
       save_user_settings,
       load_user_settings,

@@ -11,6 +11,7 @@ import type { Game, GameStats, SessionRecord } from './types';
 import { steamPlayOf } from './steamAccount.svelte.js';
 import { epicMinutesOf } from './epicAccount.svelte.js';
 import { details } from './steam.svelte.js';
+import { persist, restore } from './persist';
 
 const STORAGE_KEY = 'interface-console.stats';
 const LIBRARY_KEY = 'interface-console.library';
@@ -84,7 +85,20 @@ export const stats = $state<Record<string, GameStats>>(load());
  */
 export const sessions = $state<SessionRecord[]>(loadSessions());
 
+/**
+ * Charge la bibliothèque, puis les statistiques et le journal depuis le disque
+ * (`persist.ts`) : sans ça, l'exécutable compilé — qui n'a pas le stockage de
+ * navigateur de `tauri dev` — n'avait ni dernières parties, ni temps de jeu.
+ */
 export async function initLibrary() {
+	await loadGames();
+	const savedStats = await restore<Record<string, GameStats>>('stats', STORAGE_KEY);
+	if (savedStats && typeof savedStats === 'object') Object.assign(stats, savedStats);
+	const savedSessions = await restore<SessionRecord[]>('sessions', SESSIONS_KEY);
+	if (Array.isArray(savedSessions)) sessions.splice(0, sessions.length, ...savedSessions);
+}
+
+async function loadGames() {
 	const tauri = (window as any).__TAURI_INTERNALS__;
 	if (tauri) {
 		try {
@@ -112,9 +126,8 @@ export async function initLibrary() {
 				const cleaned = deduplicateGames(parsed);
 				games.length = 0;
 				games.push(...cleaned);
-				if (cleaned.length !== parsed.length) {
-					saveLibrary();
-				}
+				// Rien sur le disque : on y recopie la bibliothèque du navigateur.
+				saveLibrary();
 			}
 		}
 	} catch {}
@@ -253,11 +266,7 @@ function loadSessions(): SessionRecord[] {
 }
 
 function save() {
-	try {
-		localStorage.setItem(STORAGE_KEY, JSON.stringify(stats));
-	} catch {
-		/* rien à faire : les statistiques ne valent pas un écran d'erreur */
-	}
+	persist('stats', STORAGE_KEY, stats);
 }
 
 export function statsOf(id: string): GameStats {
@@ -354,11 +363,7 @@ export function recordSession(id: string, start: number, minutes: number) {
 	};
 	save();
 	sessions.push({ id, start, minutes: played });
-	try {
-		localStorage.setItem(SESSIONS_KEY, JSON.stringify(sessions));
-	} catch {
-		/* même raison que `save()` */
-	}
+	persist('sessions', SESSIONS_KEY, sessions);
 }
 
 /** Temps de jeu lisible : « 2 h 15 », « 40 min » ou « Jamais joué ». */
