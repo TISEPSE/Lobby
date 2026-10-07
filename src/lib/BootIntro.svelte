@@ -1,5 +1,7 @@
 <script lang="ts">
 	import { onMount } from 'svelte';
+	import { fade, scale } from 'svelte/transition';
+	import { cubicIn, cubicOut } from 'svelte/easing';
 	import { play as playSound } from './sound';
 
 	/**
@@ -169,13 +171,18 @@
 
 	<!-- 1. Les quatre traits qui convergent. -->
 	{#if phase === 'converge'}
-		<div class="streaks">
+		<div class="streaks" out:fade={{ duration: 250 }}>
 			<span class="streak yellow" style="--angle: -150deg"></span>
 			<span class="streak red" style="--angle: -30deg"></span>
 			<span class="streak blue" style="--angle: 150deg"></span>
 			<span class="streak green" style="--angle: 30deg"></span>
-			<span class="core"></span>
 		</div>
+	{/if}
+
+	<!-- Le point où les traits se rejoignent : il reste allumé pendant l'éclat
+	     et les pastilles en sortent, sans un instant de noir entre les deux. -->
+	{#if phase === 'converge' || phase === 'burst'}
+		<span class="core" out:fade={{ duration: 400 }}></span>
 	{/if}
 
 	<!-- 2. L'onde de l'éclat. -->
@@ -185,7 +192,7 @@
 
 	<div class="center">
 		{#if phase !== 'converge' && phase !== 'greet' && phase !== 'exit'}
-			<div class="mark">
+			<div class="mark" out:scale={{ start: 0.3, duration: 550, easing: cubicIn }}>
 				{#if phase === 'loading'}
 					<!-- 4. La couronne de graduations, allumées au fil du chargement. -->
 					<div class="ring">
@@ -206,14 +213,14 @@
 
 		{#if phase === 'brand' || phase === 'loading'}
 			<!-- 3. Le nom. -->
-			<div class="brand">
+			<div class="brand" out:fade={{ duration: 400 }}>
 				<span class="word">LOBBY</span>
 				<span class="sub">CONSOLE</span>
 			</div>
 		{/if}
 
 		{#if phase === 'loading'}
-			<div class="status">
+			<div class="status" out:fade={{ duration: 300 }}>
 				<span class="count"><b>{counter}</b> / {total} jeux</span>
 				<span class="step">{step}</span>
 			</div>
@@ -221,7 +228,7 @@
 
 		{#if phase === 'greet' || phase === 'exit'}
 			<!-- 5. L'accueil personnel. -->
-			<div class="greet">
+			<div class="greet" in:scale={{ start: 0.5, duration: 650, delay: 150, easing: cubicOut }}>
 				<span class="avatar" bind:this={avatarEl} style:transform={phase === 'exit' ? flight : ''}>
 					{#if avatar}
 						<img src={avatar} alt="" />
@@ -306,8 +313,12 @@
 	}
 
 	.core {
+		position: absolute;
+		top: 50%;
+		left: 50%;
 		width: 18px;
 		height: 18px;
+		margin: -9px 0 0 -9px;
 		border-radius: 50%;
 		background: #9a9a9a;
 		box-shadow: 0 0 22px rgba(255, 255, 255, 0.35);
@@ -322,6 +333,26 @@
 		to {
 			transform: scale(1.2);
 			background: #fff;
+		}
+	}
+
+	/* À l'éclat, le point s'illumine puis se résorbe dans les pastilles. */
+	.burst .core {
+		animation: core-flash 700ms var(--ease) forwards;
+	}
+
+	@keyframes core-flash {
+		from {
+			transform: scale(1.2);
+			background: #fff;
+			box-shadow: 0 0 40px 10px rgba(255, 255, 255, 0.6);
+		}
+		35% {
+			transform: scale(1.8);
+		}
+		to {
+			transform: scale(0.2);
+			opacity: 0;
 		}
 	}
 
@@ -587,7 +618,6 @@
 		background: var(--intro-avatar-bg);
 		font-size: calc(var(--intro-avatar) * 0.42);
 		font-weight: 800;
-		animation: pop 600ms cubic-bezier(0.3, 1.5, 0.5, 1) both;
 		transition: transform var(--exit) cubic-bezier(0.6, 0, 0.3, 1);
 	}
 
