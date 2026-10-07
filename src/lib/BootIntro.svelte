@@ -171,7 +171,7 @@
 
 	<!-- 1. Les quatre traits qui convergent. -->
 	{#if phase === 'converge'}
-		<div class="streaks" out:fade={{ duration: 250 }}>
+		<div class="streaks" out:fade={{ duration: 120 }}>
 			<span class="streak yellow" style="--angle: -150deg"></span>
 			<span class="streak red" style="--angle: -30deg"></span>
 			<span class="streak blue" style="--angle: 150deg"></span>
@@ -182,7 +182,7 @@
 	<!-- Le point où les traits se rejoignent : il reste allumé pendant l'éclat
 	     et les pastilles en sortent, sans un instant de noir entre les deux. -->
 	{#if phase === 'converge' || phase === 'burst'}
-		<span class="core" out:fade={{ duration: 400 }}></span>
+		<span class="core" out:fade={{ duration: 200 }}></span>
 	{/if}
 
 	<!-- 2. L'onde de l'éclat. -->
@@ -192,7 +192,7 @@
 
 	<div class="center">
 		{#if phase !== 'converge' && phase !== 'greet' && phase !== 'exit'}
-			<div class="mark" out:scale={{ start: 0.3, duration: 550, easing: cubicIn }}>
+			<div class="mark" out:scale={{ start: 0.4, duration: 280, easing: cubicIn }}>
 				{#if phase === 'loading'}
 					<!-- 4. La couronne de graduations, allumées au fil du chargement. -->
 					<div class="ring">
@@ -213,14 +213,14 @@
 
 		{#if phase === 'brand' || phase === 'loading'}
 			<!-- 3. Le nom. -->
-			<div class="brand" out:fade={{ duration: 400 }}>
+			<div class="brand" out:fade={{ duration: 220 }}>
 				<span class="word">LOBBY</span>
 				<span class="sub">CONSOLE</span>
 			</div>
 		{/if}
 
 		{#if phase === 'loading'}
-			<div class="status" out:fade={{ duration: 300 }}>
+			<div class="status" out:fade={{ duration: 180 }}>
 				<span class="count"><b>{counter}</b> / {total} jeux</span>
 				<span class="step">{step}</span>
 			</div>
@@ -228,7 +228,7 @@
 
 		{#if phase === 'greet' || phase === 'exit'}
 			<!-- 5. L'accueil personnel. -->
-			<div class="greet" in:scale={{ start: 0.5, duration: 650, delay: 150, easing: cubicOut }}>
+			<div class="greet" in:scale={{ start: 0.6, duration: 320, easing: cubicOut }}>
 				<span class="avatar" bind:this={avatarEl} style:transform={phase === 'exit' ? flight : ''}>
 					{#if avatar}
 						<img src={avatar} alt="" />
@@ -295,7 +295,7 @@
 		/* La tête, blanche, est du côté du centre : c'est elle qui avance. */
 		background: linear-gradient(90deg, #fff, var(--c) 25%, transparent);
 		box-shadow: 0 0 12px var(--c);
-		animation: streak 1150ms cubic-bezier(0.55, 0, 0.85, 0.35) 150ms both;
+		animation: streak 1250ms cubic-bezier(0.55, 0, 0.85, 0.35) both;
 	}
 
 	@keyframes streak {
@@ -303,7 +303,7 @@
 			transform: rotate(var(--angle)) translateX(60vmax) scaleX(1);
 			opacity: 0;
 		}
-		15% {
+		4% {
 			opacity: 1;
 		}
 		to {
