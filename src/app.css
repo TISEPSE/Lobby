@@ -96,14 +96,12 @@
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;
 	--options-row: 56px;
-	/* Palette Xbox de la fenêtre d'options : gris presque noirs, ligne
-	   sélectionnée en aplat blanc et texte noir (le vert est l'accent). */
+	/* Palette Xbox de la fenêtre d'options : gris presque noirs ; la
+	   sélection garde le contour d'accent des autres boutons. */
 	--xbox-veil: rgba(0, 0, 0, 0.78);
 	--xbox-panel: #1b1b1b;
 	--xbox-row: #262626;
 	--xbox-line: rgba(255, 255, 255, 0.08);
-	--xbox-focus: #f2f2f2;
-	--xbox-on-focus: #0e0e0e;
 	--xbox-radius: 6px;
 	--files-width: min(1100px, 80vw);
 	--files-rows: 8;

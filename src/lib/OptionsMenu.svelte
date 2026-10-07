@@ -3,8 +3,7 @@
 	 * Options d'un jeu, en fenêtre façon Xbox — la même partout (accueil,
 	 * bibliothèque, fiche). En tête, la jaquette et le nom du jeu : on sait
 	 * toujours de quel jeu il s'agit. Les lignes entrent l'une après l'autre ;
-	 * la ligne sélectionnée passe en aplat blanc, texte noir, liseré vert — comme
-	 * les menus de la Xbox (palette `--xbox-*`).
+	 * la ligne sélectionnée porte le contour vert des autres boutons (palette `--xbox-*`).
 	 */
 	import type { Game, TileAction } from './types';
 	import Cover from './Cover.svelte';
@@ -149,32 +148,17 @@
 		transition:
 			transform var(--fast) var(--ease),
 			background var(--fast) var(--ease),
-			color var(--fast) var(--ease);
+			box-shadow var(--fast) var(--ease);
 	}
 
-	/* Sélection façon Xbox : aplat blanc, texte noir, liseré vert à gauche,
-	   et la ligne grossit à peine. */
+	/* Sélection : contour vert et halo, comme tous les autres boutons ; la
+	   ligne s'éclaircit et grossit à peine. */
 	.row.selected {
-		background: var(--xbox-focus);
-		color: var(--xbox-on-focus);
+		background: var(--surface-strong);
+		box-shadow:
+			0 0 0 3px var(--accent),
+			0 0 28px 4px var(--accent-soft);
 		transform: scale(1.02);
-	}
-
-	.row::before {
-		content: '';
-		position: absolute;
-		left: 0;
-		top: 10px;
-		bottom: 10px;
-		width: 4px;
-		border-radius: 0 4px 4px 0;
-		background: var(--accent);
-		opacity: 0;
-		transition: opacity var(--fast) var(--ease);
-	}
-
-	.row.selected::before {
-		opacity: 1;
 	}
 
 	.mark {
@@ -189,13 +173,10 @@
 		width: 22px;
 		height: 22px;
 		opacity: 0.85;
-		transition: filter var(--fast) var(--ease);
 	}
 
-	/* Icônes blanches : en noir sur l'aplat de la sélection. */
 	.row.selected .mark img {
 		opacity: 1;
-		filter: brightness(0);
 	}
 
 	.label {

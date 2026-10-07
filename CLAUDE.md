@@ -225,7 +225,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Menu d'options d'un jeu (`OptionsMenu.svelte`)
 
-- **X** ouvre **la même fenêtre partout** (accueil, bibliothèque, fiche ; état `menuOptionsOpen`), façon Xbox : en tête la jaquette (`Cover.svelte`), la boutique et le nom du jeu, puis les lignes (icône ronde + libellé) qui entrent l'une après l'autre, en pied, les glyphes A Choisir · B Fermer. **Vraie palette Xbox** (variables `--xbox-*`) : panneau gris presque noir et mat (pas de verre), coins de 6 px, liseré à l'accent ; la ligne sélectionnée passe en **aplat blanc, texte et icône noirs**, liseré vert à gauche. Variables `--options-*` pour les tailles.
+- **X** ouvre **la même fenêtre partout** (accueil, bibliothèque, fiche ; état `menuOptionsOpen`), façon Xbox : en tête la jaquette (`Cover.svelte`), la boutique et le nom du jeu, puis les lignes (icône ronde + libellé) qui entrent l'une après l'autre, en pied, les glyphes A Choisir · B Fermer. **Vraie palette Xbox** (variables `--xbox-*`) : panneau gris presque noir et mat (pas de verre), coins de 6 px, liseré à l'accent ; la ligne sélectionnée porte le **contour vert et le halo** des autres boutons (l'aplat blanc façon Xbox a été écarté). Variables `--options-*` pour les tailles.
 - L'ancien tiroir de l'accueil, qui sortait de la tuile en poussant la rangée, est abandonné (`TileOptions.svelte` n'est plus utilisé).
 - Entrées : favori, changer la jaquette, changer l'image de fond, puis pour un jeu installé changer l'exécutable, mettre à jour, vérifier les fichiers, désinstaller (un jeu non installé : « Installer »).
 - Capture : `?screen=home&index=N&options=1`.
