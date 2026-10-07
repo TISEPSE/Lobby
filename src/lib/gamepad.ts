@@ -100,7 +100,10 @@ function direction(pad: Gamepad): Action | null {
 function poll(now: number) {
 	frame = requestAnimationFrame(poll);
 	const pad = navigator.getGamepads?.().find((p) => p && p.connected) ?? null;
-	if (!pad) {
+	// Fenêtre sans le focus (un jeu, une autre application) : la manette ne
+	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
+	// une touche encore tenue ne déclenche rien.
+	if (!pad || !document.hasFocus()) {
 		held = null;
 		seenPad = '';
 		return;
