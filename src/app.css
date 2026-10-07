@@ -5,12 +5,12 @@
  */
 
 :root {
-	/* Le vert Xbox, seule couleur d'accent : toutes ses nuances (halo,
+	/* Le vert de Lobby, seule couleur d'accent : toutes ses nuances (halo,
 	   retrait, calendrier) en dérivent par `color-mix`, rien d'autre à changer. */
-	--accent: #107c10;
+	--accent: #22d366;
 	--accent-soft: color-mix(in srgb, var(--accent) 35%, transparent);
-	/* Texte posé sur un aplat d'accent : blanc, comme sur les boutons Xbox. */
-	--on-accent: #ffffff;
+	/* Texte posé sur un aplat d'accent. */
+	--on-accent: #06210f;
 	/* Barres d'un graphique hors sélection : l'accent, en retrait. */
 	--accent-dim: color-mix(in srgb, var(--accent) 55%, transparent);
 	--bg: #07080b;

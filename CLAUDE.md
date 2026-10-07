@@ -29,7 +29,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Code, variables, noms de fichiers en anglais ; commentaires et textes d'interface en français.
 - TypeScript partout, `strict` activé. Svelte 5 avec les runes (`$state`, `$derived`, `$props`, `$effect`).
 - Composants en `PascalCase.svelte`, modules en `camelCase.ts`.
-- **L'accent est le vert Xbox** (`--accent: #107c10`), partout, à la demande de l'utilisateur : une seule couleur. Ses nuances (`--accent-soft`, `--accent-dim`, `--heat-*`) en dérivent par `color-mix` — jamais de `rgba()` recopié à la main. Texte sur aplat d'accent : blanc (`--on-accent`).
+- **Une seule couleur d'accent** (`--accent: #22d366`, le vert de Lobby — le vert Xbox `#107c10` a été essayé puis écarté). Ses nuances (`--accent-soft`, `--accent-dim`, `--heat-*`) en dérivent par `color-mix` : changer l'accent se fait sur une seule ligne.
 - **Pas de valeurs magiques dans les composants** : couleurs, rayons, durées et marges sont des variables CSS définies dans `src/app.css`. Changer l'accent ou l'espacement se fait à un seul endroit.
 - Marges de sécurité TV : `--safe-x` / `--safe-y` (5 %).
 - Animations courtes (`--fast` 180 ms, `--normal` 260 ms) avec `--ease`, jamais de ralentissement perceptible.
