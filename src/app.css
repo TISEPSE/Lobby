@@ -93,7 +93,18 @@
 	/* Fenêtre d'options d'un jeu : largeur, jaquette d'en-tête, hauteur d'une ligne. */
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;
-	--options-row: 60px;
+	--options-row: 56px;
+	/* Palette Xbox de la fenêtre d'options : gris presque noirs, vert Xbox,
+	   ligne sélectionnée en aplat blanc et texte noir. */
+	--xbox-green: #107c10;
+	--xbox-green-light: #4fb43d;
+	--xbox-veil: rgba(0, 0, 0, 0.78);
+	--xbox-panel: #1b1b1b;
+	--xbox-row: #262626;
+	--xbox-line: rgba(255, 255, 255, 0.08);
+	--xbox-focus: #f2f2f2;
+	--xbox-on-focus: #0e0e0e;
+	--xbox-radius: 6px;
 	--files-width: min(1100px, 80vw);
 	--files-rows: 8;
 	--files-row: 62px;

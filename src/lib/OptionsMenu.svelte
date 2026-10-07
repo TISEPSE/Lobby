@@ -3,7 +3,8 @@
 	 * Options d'un jeu, en fenêtre façon Xbox — la même partout (accueil,
 	 * bibliothèque, fiche). En tête, la jaquette et le nom du jeu : on sait
 	 * toujours de quel jeu il s'agit. Les lignes entrent l'une après l'autre ;
-	 * la sélection porte le contour d'accent et avance légèrement.
+	 * la ligne sélectionnée passe en aplat blanc, texte noir, liseré vert — comme
+	 * les menus de la Xbox (palette `--xbox-*`).
 	 */
 	import type { Game, TileAction } from './types';
 	import Cover from './Cover.svelte';
@@ -58,27 +59,31 @@
 		z-index: 7;
 		display: grid;
 		place-items: center;
-		background: rgba(0, 0, 0, 0.7);
-		backdrop-filter: blur(10px);
+		background: var(--xbox-veil);
+		backdrop-filter: blur(6px);
 		animation: fade-in var(--fast) var(--ease) both;
 	}
 
+	/* Panneau plein, gris presque noir, coins à peine arrondis : pas de verre
+	   dépoli, c'est le sombre mat des menus Xbox. */
 	.menu {
 		display: flex;
 		flex-direction: column;
-		gap: 22px;
 		width: var(--options-width);
-		padding: 30px 32px;
-		border-radius: var(--radius-lg);
-		background: var(--surface-strong);
-		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
+		border: 1px solid var(--xbox-line);
+		border-radius: var(--xbox-radius);
+		background: var(--xbox-panel);
+		box-shadow: 0 30px 90px rgba(0, 0, 0, 0.8);
+		overflow: hidden;
 		animation: rise var(--normal) var(--ease) both;
 	}
 
 	header {
 		display: flex;
 		align-items: center;
-		gap: 22px;
+		gap: 20px;
+		padding: 24px 26px 20px;
+		border-bottom: 1px solid var(--xbox-line);
 	}
 
 	/* `Cover` remplit son parent (position absolue) : ce cadre le contient. */
@@ -87,9 +92,8 @@
 		flex: none;
 		width: var(--options-cover);
 		aspect-ratio: 2 / 3;
-		border-radius: var(--radius);
+		border-radius: var(--xbox-radius);
 		overflow: hidden;
-		box-shadow: 0 10px 30px rgba(0, 0, 0, 0.5);
 	}
 
 	.titles {
@@ -102,15 +106,15 @@
 	.store {
 		font-size: 17px;
 		font-weight: 700;
-		letter-spacing: 0.08em;
+		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: var(--accent);
+		color: var(--xbox-green-light);
 	}
 
 	h2 {
 		margin: 0;
-		font-size: 30px;
-		font-weight: 700;
+		font-size: 28px;
+		font-weight: 600;
 		line-height: 1.15;
 		overflow: hidden;
 		display: -webkit-box;
@@ -127,54 +131,71 @@
 	.rows {
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: 4px;
+		padding: 14px 14px;
 	}
 
 	.row {
+		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 16px;
 		height: var(--options-row);
 		padding: 0 18px;
-		border-radius: var(--radius);
-		background: var(--surface);
+		border-radius: var(--xbox-radius);
+		background: var(--xbox-row);
 		animation: row-in var(--normal) var(--ease) backwards;
 		animation-delay: calc(var(--i) * 30ms);
 		transition:
 			transform var(--fast) var(--ease),
 			background var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease);
+			color var(--fast) var(--ease);
 	}
 
-	/* Sélection : contour d'accent, halo, et la ligne avance légèrement —
-	   comme dans l'explorateur de fichiers. */
+	/* Sélection façon Xbox : aplat blanc, texte noir, liseré vert à gauche,
+	   et la ligne grossit à peine. */
 	.row.selected {
-		background: rgba(255, 255, 255, 0.12);
-		box-shadow:
-			0 0 0 3px var(--accent),
-			0 0 28px 4px var(--accent-soft);
-		transform: translateX(8px) scale(1.01);
+		background: var(--xbox-focus);
+		color: var(--xbox-on-focus);
+		transform: scale(1.02);
+	}
+
+	.row::before {
+		content: '';
+		position: absolute;
+		left: 0;
+		top: 10px;
+		bottom: 10px;
+		width: 4px;
+		border-radius: 0 4px 4px 0;
+		background: var(--xbox-green);
+		opacity: 0;
+		transition: opacity var(--fast) var(--ease);
+	}
+
+	.row.selected::before {
+		opacity: 1;
 	}
 
 	.mark {
 		display: grid;
 		place-items: center;
 		flex: none;
-		width: 40px;
-		height: 40px;
-		border-radius: 50%;
-		background: rgba(255, 255, 255, 0.07);
-		transition: background var(--fast) var(--ease);
-	}
-
-	.row.selected .mark {
-		background: var(--accent-soft);
+		width: 28px;
+		height: 28px;
 	}
 
 	.mark img {
-		width: 20px;
-		height: 20px;
-		opacity: 0.9;
+		width: 22px;
+		height: 22px;
+		opacity: 0.85;
+		transition: filter var(--fast) var(--ease);
+	}
+
+	/* Icônes blanches : en noir sur l'aplat de la sélection. */
+	.row.selected .mark img {
+		opacity: 1;
+		filter: brightness(0);
 	}
 
 	.label {
@@ -186,7 +207,9 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 28px;
-		font-size: 18px;
+		padding: 14px 26px;
+		border-top: 1px solid var(--xbox-line);
+		font-size: 17px;
 		color: var(--text-dim);
 	}
 
