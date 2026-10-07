@@ -178,7 +178,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Carte « Reprendre » (accueil)
 
-- En tête de la rangée, à l'index **-1**, une carte couchée (16/9, à la hauteur des tuiles, `--resume-width`) montre le dernier jeu lancé. **A le lance directement**, sans passer par sa fiche ; X ouvre le même tiroir d'options qu'une tuile.
+- En tête de la rangée, à l'index **-1**, une carte couchée (16/9, à la hauteur des tuiles, `--resume-width`) montre le dernier jeu lancé. **A le lance directement**, sans passer par sa fiche ; X ouvre la même fenêtre d'options qu'une tuile.
 - Le jeu de la carte **n'est pas répété** dans la rangée (`homeGames` l'exclut) : deux fois le même jeu côte à côte n'avait pas de sens.
 - L'accueil **démarre sur cette carte** : le dernier jeu se relance en un appui dès l'allumage. Sans jeu à reprendre, la carte n'existe pas et la sélection part de la première tuile (une fois la bibliothèque chargée, `libraryReady`).
 - Sur la carte, la rangée s'aligne sur la marge de gauche (`--safe-x`) au lieu de se centrer : centrée, elle laissait un grand vide à sa gauche.
