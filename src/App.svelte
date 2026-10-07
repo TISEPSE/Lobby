@@ -26,6 +26,7 @@
 	import { artwork, details, heroFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
 	import PadToast from './lib/PadToast.svelte';
+	import FilePicker from './lib/FilePicker.svelte';
 	import { remember } from './lib/notices.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
 	import { listen, padCount, type Action } from './lib/gamepad';
@@ -59,6 +60,7 @@
 		HOME_ORDER_LABELS,
 		addGames,
 		syncLibrary,
+		setGameExecutable,
 		FILTERS,
 		SORTS,
 		uninstalledSteamGames,
@@ -250,6 +252,10 @@
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let artPickerComponent: { handleAction: (action: Action) => void } | null = $state(null);
+	/** Explorateur de fichiers : choisir l'exécutable d'un jeu à la main. */
+	let filePickerOpen = $state(params.get('modal') === 'files');
+	let filePickerComponent: { handleAction: (action: Action) => void; selectionKey: () => string } | null =
+		$state(null);
 
 	// Outil de capture : `?stats=demo` remplit le journal de parties fictives,
 	// jamais enregistrées, pour juger l'écran dans un navigateur.
@@ -723,6 +729,7 @@
 	 */
 	function selectionKey(): string | null {
 		if (avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
+		if (filePickerOpen) return filePickerComponent?.selectionKey() ?? null;
 		if (searchOpen) return searchComponent?.selectionKey?.() ?? null;
 		if (nameKeyboardOpen) return null;
 		const settingsKey = section === 'settings' ? (settingsComponent?.selectionKey?.() ?? null) : '';
@@ -755,6 +762,7 @@
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
 		if (artPickerOpen) return artPickerComponent?.handleAction(action);
+		if (filePickerOpen) return filePickerComponent?.handleAction(action);
 		if (searchOpen) return searchComponent?.handleAction(action);
 		if (nameKeyboardOpen) return nameKeyboard?.handleAction(action);
 		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
@@ -927,6 +935,7 @@
 					...(selected.installed === false
 						? [{ id: 'install', label: 'Installer', icon: 'download' }]
 						: [
+								{ id: 'executable', label: "Changer l'exécutable", icon: 'app' },
 								{ id: 'update', label: 'Mettre à jour', icon: 'download' },
 								{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
 								{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
@@ -964,6 +973,10 @@
 			case 'install':
 				notify(await installSelected());
 				break;
+			case 'executable':
+				// La détection a pu se tromper : on choisit le bon fichier soi-même.
+				filePickerOpen = true;
+				break;
 			case 'update':
 				if (selected.appid) notify(await updateGame(selected.appid));
 				break;
@@ -996,6 +1009,8 @@
 		if (powerOpen) return list(['a', 'Valider'], ['b', 'Annuler']);
 		if (avatarPickerOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (artPickerOpen) return list(['a', 'Choisir cette image'], ['b', 'Fermer']);
+		// L'explorateur affiche ses propres touches.
+		if (filePickerOpen) return list();
 		if (scanModalOpen) {
 			return isScanning
 				? list(['b', 'Annuler'])
@@ -1288,6 +1303,19 @@
 	target={artPickerTarget}
 	onClose={() => (artPickerOpen = false)}
 	onPicked={(message, ok) => notify(message, ok)}
+/>
+
+<FilePicker
+	bind:this={filePickerComponent}
+	open={filePickerOpen}
+	game={selected}
+	onClose={() => (filePickerOpen = false)}
+	onPick={(path) => {
+		if (!selected) return;
+		setGameExecutable(selected.id, path);
+		filePickerOpen = false;
+		notify(`${selected.title} se lancera avec ${path.split(/[\\/]/).pop()}.`);
+	}}
 />
 
 <ScanResultsModal

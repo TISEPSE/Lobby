@@ -14,6 +14,11 @@ export interface Game {
 	 * complète, clé de l'API Web) : sa fiche propose « Installer ».
 	 */
 	installed?: boolean;
+	/**
+	 * Exécutable choisi à la main (options → « Changer l'exécutable ») : la
+	 * recherche automatique ne le remplace plus jamais.
+	 */
+	custom_executable?: boolean;
 }
 
 /** Ce que l'utilisateur a fait d'un jeu. Conservé à part de la liste des jeux. */

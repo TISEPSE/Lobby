@@ -65,6 +65,10 @@ pub struct ScannedGame {
   pub executable: String,
   #[serde(default)]
   pub args: Vec<String>,
+  /// Exécutable choisi à la main (options du jeu → « Changer l'exécutable ») :
+  /// la recherche automatique ne doit plus jamais le remplacer.
+  #[serde(default, skip_serializing_if = "std::ops::Not::not")]
+  pub custom_executable: bool,
 }
 
 /// Normalise un nom pour comparaison insensible à la ponctuation et casse.
@@ -279,6 +283,7 @@ pub fn scan_steam() -> Vec<ScannedGame> {
             source: "steam".to_string(),
             executable: client.clone(),
             args: vec!["-applaunch".to_string(), appid],
+            custom_executable: false,
           });
         }
       }
@@ -365,6 +370,7 @@ pub fn scan_steam_common() -> Vec<ScannedGame> {
         source: "folder".to_string(),
         executable: exe.to_string_lossy().replace('\\', "/"),
         args: vec![],
+        custom_executable: false,
       });
     }
   }
@@ -559,6 +565,7 @@ pub fn scan_registry() -> Vec<ScannedGame> {
           source: "registry".to_string(),
           executable: exe.to_string_lossy().replace('\\', "/"),
           args: vec![],
+          custom_executable: false,
         });
       }
     }
@@ -612,6 +619,7 @@ pub fn scan_epic() -> Vec<ScannedGame> {
                 source: "epic".to_string(),
                 executable: full_exe.to_string_lossy().replace('\\', "/"),
                 args: vec![],
+                custom_executable: false,
               });
             }
           }
@@ -687,6 +695,7 @@ pub fn scan_custom_folder(folder: &Path) -> Vec<ScannedGame> {
         source: if is_epic { "epic".to_string() } else { "folder".to_string() },
         executable: exe_str,
         args: vec![],
+        custom_executable: false,
       });
     }
   }
@@ -898,6 +907,7 @@ fn collect_lnk_shortcuts(dir: &Path, depth: usize, max_depth: usize, games: &mut
           source: "shortcut".to_string(),
           executable: target_clean,
           args: vec![],
+          custom_executable: false,
         });
       }
     }

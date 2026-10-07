@@ -246,6 +246,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Le disque est donc la référence : `persist(name, key, value)` écrit `<app data>/store/<name>.json` (commande `save_store`, nom limité à `[a-z-]`, écriture atomique) et garde le navigateur en secours ; `restore()` lit le disque, sinon le navigateur, et **recopie alors sur le disque** (migration). Magasins : `stats`, `sessions`, `art-styles`, `artwork`.
 - `ScannedGame` (Rust) met `#[serde(default)]` sur ses champs facultatifs : sans ça, un seul jeu sans `executable` faisait refuser **toute** la sauvegarde de `library.json`, en silence — la bibliothèque ne vivait que dans le navigateur, et l'exe voyait tous les jeux Steam « non installés ».
 
+## Changer l'exécutable d'un jeu (`FilePicker.svelte`)
+
+- La détection peut se tromper d'exécutable (MotoGP qui ne se lançait pas). Options d'un jeu installé → **« Changer l'exécutable »** ouvre un explorateur façon Xbox : « Ce PC » (disques, `list_roots`), puis dossiers et exécutables seulement (`list_dir` : sous-dossiers puis `.exe` / `.bat` / `.cmd` — exécutables ou `.sh` / AppImage sous Linux —, cachés et système omis, 2 000 entrées au plus), fil d'Ariane en haut.
+- Haut / bas parcourent (la liste glisse pour garder la sélection au tiers supérieur), A ou droite ouvre un dossier, A sur un exécutable le choisit, B ou gauche remonte (en reprenant le dossier d'où l'on sort), X ferme. Chaque dossier entre en glissant du côté où l'on va (`in:fly`). L'exécutable actuel porte « Actuel ». Départ : le dossier de l'exécutable actuel ; un jeu Steam (client Steam) part de `steamapps/common`.
+- `setGameExecutable` : chemin enregistré, arguments vidés (lancement direct), et **`custom_executable`** (aussi côté Rust, `ScannedGame`) : la recherche automatique au démarrage et « Synchroniser » ne le remplacent plus jamais — sans ça, le mauvais chemin revenait à chaque lancement.
+- Variables `--files-*`. Capture : `?index=N&modal=files` (faux dossier « MotoGP 24 »).
+
 ## Erreurs
 
 - Les actions qui peuvent échouer (`play`, `runPower`, `steamActions`) renvoient un `Outcome` (`{ ok, message }`) plutôt qu'une chaîne : l'appelant sait alors si c'est une confirmation ou une erreur.

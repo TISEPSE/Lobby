@@ -1279,6 +1279,103 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Une entrée de l'explorateur de fichiers (choix de l'exécutable d'un jeu).
+#[derive(Serialize)]
+struct FileEntry {
+  name: String,
+  path: String,
+  /// Dossier, disque, ou exécutable.
+  kind: &'static str,
+  /// Taille en octets (exécutables seulement).
+  size: u64,
+}
+
+/// Le contenu d'un dossier, tel que l'explorateur le montre.
+#[derive(Serialize)]
+struct FolderListing {
+  path: String,
+  /// Dossier parent ; vide à la racine d'un disque (on remonte alors aux disques).
+  parent: String,
+  entries: Vec<FileEntry>,
+}
+
+/// Un fichier qu'on peut lancer comme un jeu.
+fn is_launchable(path: &Path) -> bool {
+  let ext = path.extension().and_then(|e| e.to_str()).unwrap_or("").to_ascii_lowercase();
+  #[cfg(windows)]
+  {
+    matches!(ext.as_str(), "exe" | "bat" | "cmd")
+  }
+  #[cfg(not(windows))]
+  {
+    use std::os::unix::fs::PermissionsExt;
+    matches!(ext.as_str(), "sh" | "appimage" | "x86_64" | "exe")
+      || path.metadata().map(|m| m.is_file() && m.permissions().mode() & 0o111 != 0).unwrap_or(false)
+  }
+}
+
+/// Les points de départ de l'explorateur : les disques (Windows), ou la racine
+/// et le dossier personnel (Linux).
+#[tauri::command]
+fn list_roots() -> Vec<FileEntry> {
+  #[cfg(windows)]
+  {
+    (b'A'..=b'Z')
+      .map(|letter| format!("{}:\\", letter as char))
+      .filter(|root| Path::new(root).exists())
+      .map(|root| FileEntry { name: root.trim_end_matches('\\').to_string(), path: root, kind: "drive", size: 0 })
+      .collect()
+  }
+  #[cfg(not(windows))]
+  {
+    let mut roots = vec![FileEntry { name: "/".into(), path: "/".into(), kind: "drive", size: 0 }];
+    if let Some(home) = std::env::var_os("HOME") {
+      let home = home.to_string_lossy().to_string();
+      roots.push(FileEntry { name: "Dossier personnel".into(), path: home, kind: "drive", size: 0 });
+    }
+    roots
+  }
+}
+
+/// Le contenu d'un dossier : ses sous-dossiers puis ses exécutables, chacun par
+/// ordre alphabétique. Les fichiers cachés ou système et le reste sont omis :
+/// on cherche un exécutable, pas à tout parcourir.
+#[tauri::command]
+fn list_dir(path: String) -> Result<FolderListing, String> {
+  let dir = Path::new(&path);
+  let read = fs::read_dir(dir).map_err(|e| format!("Dossier illisible : {e}"))?;
+  let mut folders = Vec::new();
+  let mut files = Vec::new();
+  for entry in read.flatten() {
+    let name = entry.file_name().to_string_lossy().to_string();
+    if name.starts_with('.') || name.starts_with('$') {
+      continue;
+    }
+    let full = entry.path();
+    let Ok(meta) = entry.metadata() else { continue };
+    #[cfg(windows)]
+    {
+      use std::os::windows::fs::MetadataExt;
+      // Fichiers cachés ou système (2 | 4) : jamais ceux d'un jeu.
+      if meta.file_attributes() & 0x6 != 0 {
+        continue;
+      }
+    }
+    if meta.is_dir() {
+      folders.push(FileEntry { name, path: full.to_string_lossy().to_string(), kind: "folder", size: 0 });
+    } else if is_launchable(&full) {
+      files.push(FileEntry { name, path: full.to_string_lossy().to_string(), kind: "exe", size: meta.len() });
+    }
+  }
+  let by_name = |a: &FileEntry, b: &FileEntry| a.name.to_lowercase().cmp(&b.name.to_lowercase());
+  folders.sort_by(by_name);
+  files.sort_by(by_name);
+  folders.extend(files);
+  folders.truncate(2000);
+  let parent = dir.parent().map(|p| p.to_string_lossy().to_string()).unwrap_or_default();
+  Ok(FolderListing { path, parent, entries: folders })
+}
+
 /// Taille pour laquelle l'interface est dessinée (une TV 1080p).
 const DESIGN_WIDTH: f64 = 1920.0;
 const DESIGN_HEIGHT: f64 = 1080.0;
@@ -1436,6 +1533,8 @@ pub fn run() {
       launch_game,
       is_running,
       steam_running_app,
+      list_roots,
+      list_dir,
       power_action,
       steam_details,
       cache_game_art,

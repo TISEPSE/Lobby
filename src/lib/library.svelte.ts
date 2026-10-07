@@ -211,7 +211,8 @@ export async function syncLibrary(
 		const moved =
 			(found.executable ?? '') !== (known.executable ?? '') ||
 			JSON.stringify(found.args ?? []) !== JSON.stringify(known.args ?? []);
-		if (moved && found.executable) {
+		// Un exécutable choisi à la main reste tel quel : le scan s'était trompé.
+		if (moved && found.executable && !known.custom_executable) {
 			known.executable = found.executable;
 			known.args = found.args;
 			report.updated += 1;
@@ -242,6 +243,20 @@ export async function syncLibrary(
 
 	if (report.added || report.updated || report.removed) await saveLibrary();
 	return report;
+}
+
+/**
+ * Exécutable choisi à la main pour un jeu (la détection s'était trompée) :
+ * il est lancé directement, sans arguments, et la recherche automatique ne le
+ * remplacera plus.
+ */
+export function setGameExecutable(id: string, path: string) {
+	const game = games.find((g) => g.id === id);
+	if (!game) return;
+	game.executable = path.replace(/\\/g, '/');
+	game.args = [];
+	game.custom_executable = true;
+	saveLibrary();
 }
 
 export function removeGame(id: string) {

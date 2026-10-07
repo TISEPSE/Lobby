@@ -88,6 +88,12 @@
 	--detail-width: 980px;
 	/* Bouton de la fiche sélectionné (hors JOUER, qui garde son accent). */
 	--detail-button-focus: rgba(255, 255, 255, 0.22);
+	/* Explorateur de fichiers (choix de l'exécutable) : largeur, lignes visibles,
+	   hauteur et écart d'une ligne. */
+	--files-width: min(1100px, 80vw);
+	--files-rows: 8;
+	--files-row: 62px;
+	--files-gap: 8px;
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;
