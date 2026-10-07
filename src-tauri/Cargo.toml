@@ -37,4 +37,11 @@ tokio = { version = "1", features = ["full"] }
 winreg = "0.52"
 # DPAPI (coffre de Windows) : les secrets gardés sur le disque (session Epic)
 # ne sont lisibles que par ce compte Windows, sur ce PC. Déjà tiré par Tauri.
-windows-sys = { version = "0.59", features = ["Win32_Foundation", "Win32_Security_Cryptography"] }
+# Fenêtre au premier plan (écran de lancement : le jeu a-t-il ouvert sa fenêtre ?).
+windows-sys = { version = "0.59", features = [
+  "Win32_Foundation",
+  "Win32_Security_Cryptography",
+  "Win32_Graphics_Gdi",
+  "Win32_System_Threading",
+  "Win32_UI_WindowsAndMessaging",
+] }

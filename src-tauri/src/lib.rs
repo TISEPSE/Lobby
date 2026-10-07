@@ -563,6 +563,110 @@ fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
   Ok(fullscreen)
 }
 
+/// Écran de lancement : pendant qu'un jeu démarre, Lobby reste **au-dessus de
+/// tout** (`on`) pour cacher le bureau, les fenêtres de lancement et les
+/// écrans noirs ; il redescend (`off`) dès que la fenêtre du jeu est là.
+#[tauri::command]
+fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+  window.set_always_on_top(on).map_err(|e| e.to_string())
+}
+
+/// Fin de partie : Lobby revient au premier plan. Windows refuse souvent de
+/// donner le focus à une fenêtre en arrière-plan ; passer un instant
+/// « au-dessus de tout » contourne ce verrou.
+#[tauri::command]
+fn bring_to_front(window: tauri::WebviewWindow) {
+  let _ = window.unminimize();
+  let _ = window.show();
+  let _ = window.set_always_on_top(true);
+  let _ = window.set_focus();
+  let _ = window.set_always_on_top(false);
+}
+
+/// Processus dont une grande fenêtre n'est **pas** le jeu : le bureau, les
+/// launchers eux-mêmes (la bibliothèque Steam peut s'ouvrir en grand).
+#[cfg(windows)]
+const NOT_A_GAME: [&str; 6] = [
+  "explorer.exe",
+  "steam.exe",
+  "steamwebhelper.exe",
+  "epicgameslauncher.exe",
+  "epicwebhelper.exe",
+  "msedgewebview2.exe",
+];
+
+/// Nom de l'exécutable d'un processus (`rocketleague.exe`), en minuscules.
+#[cfg(windows)]
+fn process_name(pid: u32) -> String {
+  use windows_sys::Win32::Foundation::CloseHandle;
+  use windows_sys::Win32::System::Threading::{
+    OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
+  };
+  unsafe {
+    let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+    if handle.is_null() {
+      return String::new();
+    }
+    let mut buffer = [0u16; 1024];
+    let mut len = buffer.len() as u32;
+    let ok = QueryFullProcessImageNameW(handle, 0, buffer.as_mut_ptr(), &mut len);
+    CloseHandle(handle);
+    if ok == 0 {
+      return String::new();
+    }
+    let path = String::from_utf16_lossy(&buffer[..len as usize]);
+    path.rsplit(['\\', '/']).next().unwrap_or_default().to_lowercase()
+  }
+}
+
+/// Qui occupe l'écran pendant un lancement : `lobby` (toujours nous), `game`
+/// (une grande fenêtre d'un autre programme — le jeu est prêt), ou `other`
+/// (fenêtre de lancement, boîte de dialogue, launcher).
+#[tauri::command]
+fn foreground_state() -> &'static str {
+  #[cfg(windows)]
+  unsafe {
+    use windows_sys::Win32::Foundation::RECT;
+    use windows_sys::Win32::Graphics::Gdi::{
+      GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+    };
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+      GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    let hwnd = GetForegroundWindow();
+    if hwnd.is_null() {
+      return "other";
+    }
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(hwnd, &mut pid);
+    if pid == std::process::id() {
+      return "lobby";
+    }
+    if IsWindowVisible(hwnd) == 0 || NOT_A_GAME.contains(&process_name(pid).as_str()) {
+      return "other";
+    }
+    let mut rect: RECT = std::mem::zeroed();
+    GetWindowRect(hwnd, &mut rect);
+    let mut info: MONITORINFO = std::mem::zeroed();
+    info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
+    GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info);
+    let area = |r: &RECT| i64::from(r.right - r.left).max(0) * i64::from(r.bottom - r.top).max(0);
+    // Une fenêtre qui couvre au moins 60 % de son écran : c'est le jeu. Les
+    // fenêtres de lancement (logo de l'éditeur) sont bien plus petites.
+    if area(&rect) * 10 >= area(&info.rcMonitor) * 6 {
+      "game"
+    } else {
+      "other"
+    }
+  }
+  // Session Gamescope : le jeu prend l'écran de lui-même.
+  #[cfg(not(windows))]
+  {
+    "game"
+  }
+}
+
 /// Compte Steam connecté sur cette machine, ses jeux joués et sa photo.
 /// `None` quand Steam n'est pas installé ou qu'aucun compte n'y est connecté.
 #[tauri::command]
@@ -1533,6 +1637,9 @@ pub fn run() {
       launch_game,
       is_running,
       steam_running_app,
+      set_launch_cover,
+      bring_to_front,
+      foreground_state,
       list_roots,
       list_dir,
       power_action,

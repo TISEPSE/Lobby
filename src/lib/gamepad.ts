@@ -90,6 +90,18 @@ let seenPad = '';
  */
 const NO_PAD = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nopad');
 
+/**
+ * Actions acceptées même sans le focus. Pendant l'écran de lancement, Lobby
+ * est au-dessus du jeu sans en avoir le focus : B doit pouvoir l'écarter.
+ */
+const background = new Set<Action>();
+
+/** Actions transmises même quand la fenêtre n'a pas le focus (vide : aucune). */
+export function allowInBackground(actions: Action[]) {
+	background.clear();
+	for (const action of actions) background.add(action);
+}
+
 function emit(action: Action) {
 	for (const listener of listeners) listener(action);
 }
@@ -108,7 +120,8 @@ function poll(now: number) {
 	// Fenêtre sans le focus (un jeu, une autre application) : la manette ne
 	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
 	// une touche encore tenue ne déclenche rien.
-	if (!pad || !document.hasFocus() || NO_PAD) {
+	const focused = document.hasFocus();
+	if (!pad || NO_PAD || (!focused && background.size === 0)) {
 		held = null;
 		seenPad = '';
 		return;
@@ -130,6 +143,7 @@ function poll(now: number) {
 		const down = pad.buttons[i]?.pressed ?? false;
 		if (down && !pressed.has(i)) {
 			pressed.add(i);
+			if (!focused && !background.has(action)) continue;
 			emit(action);
 			if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
 				held = action;
@@ -140,7 +154,7 @@ function poll(now: number) {
 		}
 	}
 
-	const stick = direction(pad);
+	const stick = focused ? direction(pad) : null;
 	if (stick) {
 		if (stick !== held) {
 			held = stick;

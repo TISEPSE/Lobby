@@ -26,10 +26,11 @@
 	import { artwork, details, heroFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
 	import PadToast from './lib/PadToast.svelte';
+	import LaunchOverlay from './lib/LaunchOverlay.svelte';
 	import FilePicker from './lib/FilePicker.svelte';
 	import { remember } from './lib/notices.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
-	import { listen, padCount, type Action } from './lib/gamepad';
+	import { allowInBackground, listen, padCount, type Action } from './lib/gamepad';
 	import type { GlyphButton } from './lib/glyphs';
 	import {
 		forgetSteamLibrary,
@@ -199,6 +200,14 @@
 	let detailButton = $state(0);
 	/** Fenêtre d'alimentation : index sélectionné, et action en attente de confirmation. */
 	let powerOpen = $state(params.get('power') === '1');
+	/**
+	 * Écran de lancement : le jeu qui démarre, tant que sa fenêtre n'est pas
+	 * là. Capture : `?launch=demo` (jeu sélectionné), `&slow=1`.
+	 */
+	let launching = $state<Game | null>(null);
+	let launchSlow = $state(params.get('slow') === '1');
+	let launchTimers: ReturnType<typeof setTimeout>[] = [];
+	let launchPoll: ReturnType<typeof setInterval> | null = null;
 	let powerIndex = $state(0);
 	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
 
@@ -757,6 +766,11 @@
 	}
 
 	function dispatch(action: Action) {
+		// Écran de lancement : seul B compte, il ramène à Lobby.
+		if (launching) {
+			if (action === 'cancel') endLaunchCover();
+			return;
+		}
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
@@ -821,7 +835,57 @@
 			return notify(await installSelected());
 		}
 		playSound('launch');
-		notify(await play(selected));
+		const game = selected;
+		const outcome = await play(game);
+		if (outcome.ok && (window as any).__TAURI_INTERNALS__) startLaunchCover(game);
+		else notify(outcome);
+	}
+
+	/** Durée minimale de l'écran de lancement : il ne fait jamais qu'un éclair. */
+	const LAUNCH_MIN = 1500;
+	/** Au-delà, le jeu tarde (mise à jour, launcher) : B est proposé. */
+	const LAUNCH_SLOW = 20_000;
+	/** Au-delà, on rend la main, quoi qu'il arrive. */
+	const LAUNCH_MAX = 90_000;
+
+	/**
+	 * Écran de lancement : Lobby passe au-dessus de tout (`set_launch_cover`)
+	 * et montre le jeu qui démarre ; on interroge Windows toutes les demi-
+	 * secondes (`foreground_state`) et l'écran s'efface dès qu'une grande
+	 * fenêtre d'un autre programme — le jeu — est au premier plan. Ni bureau,
+	 * ni fenêtre de lancement entre les deux.
+	 */
+	async function startLaunchCover(game: Game) {
+		endLaunchCover();
+		const { invoke } = await import('@tauri-apps/api/core');
+		launching = game;
+		launchSlow = false;
+		// Le jeu a le focus, Lobby non : B doit quand même pouvoir l'écarter.
+		allowInBackground(['cancel']);
+		await invoke('set_launch_cover', { on: true }).catch(() => {});
+		const shown = Date.now();
+		launchTimers.push(setTimeout(() => (launchSlow = true), LAUNCH_SLOW));
+		launchTimers.push(setTimeout(endLaunchCover, LAUNCH_MAX));
+		launchPoll = setInterval(async () => {
+			const state = await invoke<string>('foreground_state').catch(() => 'other');
+			if (state === 'game' && Date.now() - shown >= LAUNCH_MIN) endLaunchCover();
+		}, 500);
+	}
+
+	function endLaunchCover() {
+		for (const timer of launchTimers) clearTimeout(timer);
+		launchTimers = [];
+		if (launchPoll) clearInterval(launchPoll);
+		launchPoll = null;
+		allowInBackground([]);
+		if (!launching) return;
+		launching = null;
+		launchSlow = false;
+		if ((window as any).__TAURI_INTERNALS__) {
+			void import('@tauri-apps/api/core').then(({ invoke }) =>
+				invoke('set_launch_cover', { on: false }).catch(() => {})
+			);
+		}
 	}
 
 	/** Installation par Steam ou par le launcher Epic, selon la boutique du jeu. */
@@ -893,6 +957,14 @@
 			toggleFullscreen();
 		};
 		window.addEventListener('keydown', onF11);
+		// Fin de partie : Lobby revient au premier plan.
+		const onGameExited = () => {
+			endLaunchCover();
+			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
+		};
+		window.addEventListener('game-exited', onGameExited);
+		// Capture : `?launch=demo` montre l'écran de lancement du jeu sélectionné.
+		if (params.get('launch') === 'demo') launching = selected ?? null;
 		window.addEventListener('error', onError);
 		window.addEventListener('unhandledrejection', onRejection);
 		const timer = setInterval(() => {
@@ -914,6 +986,8 @@
 			stopDownloads();
 			clearInterval(timer);
 			window.removeEventListener('keydown', onF11);
+			window.removeEventListener('game-exited', onGameExited);
+			endLaunchCover();
 			window.removeEventListener('error', onError);
 			window.removeEventListener('unhandledrejection', onRejection);
 		};
@@ -1325,6 +1399,10 @@
 {/if}
 
 <PadToast />
+
+{#if launching}
+	<LaunchOverlay game={launching} slow={launchSlow} />
+{/if}
 
 <HelpBar entries={help} />
 

@@ -92,10 +92,20 @@
 	--detail-button-focus: rgba(255, 255, 255, 0.22);
 	/* Explorateur de fichiers (choix de l'exécutable) : largeur, lignes visibles,
 	   hauteur et écart d'une ligne. */
+	/* Écran de lancement : jaquette, largeur de la barre, flou et lente avancée
+	   de l'artwork, respiration de la jaquette, course de la barre, voile. */
+	--launch-cover: 220px;
+	--launch-bar: 360px;
+	--launch-blur: 6px;
+	--launch-drift: 30s;
+	--launch-breath: 1.6s;
+	--launch-run: 1.3s;
+	--launch-veil-center: rgba(7, 8, 11, 0.55);
+	--launch-veil-edge: rgba(7, 8, 11, 0.92);
 	/* Fenêtre d'options d'un jeu : largeur, jaquette d'en-tête, hauteur d'une ligne. */
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;
-	--options-row: 56px;
+	--options-row: 60px;
 	/* Palette Xbox de la fenêtre d'options : gris presque noirs ; la
 	   sélection garde le contour d'accent des autres boutons. */
 	--xbox-veil: rgba(0, 0, 0, 0.78);

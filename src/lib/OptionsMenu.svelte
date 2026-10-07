@@ -81,7 +81,7 @@
 		display: flex;
 		align-items: center;
 		gap: 20px;
-		padding: 24px 26px 20px;
+		padding: 28px 30px 24px;
 		border-bottom: 1px solid var(--xbox-line);
 	}
 
@@ -130,8 +130,8 @@
 	.rows {
 		display: flex;
 		flex-direction: column;
-		gap: 4px;
-		padding: 14px 14px;
+		gap: 10px;
+		padding: 20px 20px;
 	}
 
 	.row {
@@ -188,7 +188,7 @@
 		display: flex;
 		justify-content: flex-end;
 		gap: 28px;
-		padding: 14px 26px;
+		padding: 18px 30px;
 		border-top: 1px solid var(--xbox-line);
 		font-size: 17px;
 		color: var(--text-dim);
