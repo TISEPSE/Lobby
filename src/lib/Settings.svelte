@@ -10,8 +10,6 @@
 		gameFolders = [],
 		buttonLayout = 'ps5',
 		soundEnabled = true,
-		introEnabled = true,
-		onToggleIntro,
 		volumes = { volume_master: 100, volume_menu: 100, volume_alerts: 100, volume_launch: 100, volume_video: 100 },
 		onStepVolume,
 		screensaverMinutes = 5,
@@ -36,9 +34,6 @@
 		gameFolders: string[];
 		buttonLayout: string;
 		soundEnabled?: boolean;
-		/** Animation de démarrage. */
-		introEnabled?: boolean;
-		onToggleIntro?: () => void;
 		/** Volumes en pour cent (Réglages → Audio). */
 		volumes?: Record<VolumeKey, number>;
 		/** Monte ou baisse un volume de `delta` points. */
@@ -191,7 +186,7 @@
 				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
 				return 3 + gameFolders.length;
 			case 'appearance':
-				return 4; // [0: touches, 1: veille, 2: ordre de l'accueil, 3: animation de démarrage]
+				return 3; // [0: touches, 1: veille, 2: ordre de l'accueil]
 			case 'audio':
 				return 1 + VOLUMES.length; // [0: sons activés, 1..: volumes]
 			case 'system':
@@ -303,8 +298,6 @@
 				onCycleScreensaver?.();
 			} else if (focusRow === 2) {
 				onCycleHomeOrder?.();
-			} else if (focusRow === 3) {
-				onToggleIntro?.();
 			}
 		} else if (cat === 'audio') {
 			if (focusRow === 0) {
@@ -533,22 +526,6 @@
 						<span class="badge-layout">{homeOrderLabel} ▸</span>
 					</button>
 
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 3}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 3;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Animation de démarrage</span>
-							<span class="desc">Logo, chargement de la bibliothèque et « Bonjour » à l'allumage</span>
-						</div>
-						<span class="badge-layout">{introEnabled ? 'Oui ▸' : 'Non ▸'}</span>
-					</button>
 				</div>
 
 			{:else if currentCategory.id === 'audio'}

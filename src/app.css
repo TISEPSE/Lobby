@@ -88,22 +88,6 @@
 	--detail-width: 980px;
 	/* Bouton de la fiche sélectionné (hors JOUER, qui garde son accent). */
 	--detail-button-focus: rgba(255, 255, 255, 0.22);
-	/* Animation de démarrage : fond, halo, pastilles de la manette (Y, B, A,
-	   X), couronne de chargement, nom et accueil personnel. */
-	--intro-bg: #020403;
-	--intro-glow: rgba(34, 211, 102, 0.16);
-	--pad-yellow: #ffcc33;
-	--pad-red: #ff6b6b;
-	--pad-green: var(--accent);
-	--pad-blue: #4d9dff;
-	--intro-ring: 200px;
-	--intro-dots: 120px;
-	--intro-dot: 26px;
-	--intro-spread: 34px;
-	--intro-word: 64px;
-	--intro-avatar: 112px;
-	--intro-avatar-bg: #2b2f36;
-	--intro-hello: 38px;
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;
@@ -186,12 +170,6 @@ button {
 	color: inherit;
 	border: none;
 	background: none;
-}
-
-/* Animation de démarrage : tout le reste est masqué jusqu'à sa sortie — l'accueil
-   ne doit jamais se montrer avant (`booting`, posé par App.svelte). */
-body.booting #app > *:not([data-intro]) {
-	visibility: hidden;
 }
 
 /* Halo de sélection, unique dans toute l'interface. */

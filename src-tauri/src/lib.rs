@@ -274,9 +274,6 @@ pub struct UserSettings {
   /// Retours sonores de l'interface.
   #[serde(default = "default_true")]
   pub sound_enabled: bool,
-  /// Animation de démarrage (logo, chargement, « Bonjour, <pseudo> »).
-  #[serde(default = "default_true")]
-  pub intro_enabled: bool,
   /// Clé SteamGridDB, saisie par l'utilisateur. Elle n'est **jamais** écrite
   /// dans le dépôt : elle ne vit que dans le fichier de réglages local.
   #[serde(default)]
@@ -465,7 +462,6 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     button_layout: "ps5".to_string(),
     game_folders: default_folders,
     sound_enabled: true,
-    intro_enabled: true,
     steamgriddb_key: String::new(),
     screensaver_minutes: 5,
     home_order: default_home_order(),
@@ -1283,12 +1279,6 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
-/// Trace de l'interface dans le journal de l'application (démarrage…).
-#[tauri::command]
-fn ui_log(message: String) {
-  log::info!("Interface : {message}");
-}
-
 /// Taille pour laquelle l'interface est dessinée (une TV 1080p).
 const DESIGN_WIDTH: f64 = 1920.0;
 const DESIGN_HEIGHT: f64 = 1080.0;
@@ -1446,7 +1436,6 @@ pub fn run() {
       launch_game,
       is_running,
       steam_running_app,
-      ui_log,
       power_action,
       steam_details,
       cache_game_art,

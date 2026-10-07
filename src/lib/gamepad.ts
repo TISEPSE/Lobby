@@ -81,8 +81,7 @@ const pressed = new Set<number>();
 /**
  * Manette déjà lue une fois. À la première lecture, son état sert de point de
  * départ, sans rien déclencher : une gâchette qui ne revient pas tout à fait
- * à zéro, ou une touche tenue au branchement, passait aussitôt l'animation de
- * démarrage (« n'importe quelle touche la passe »).
+ * à zéro, ou une touche tenue au branchement, déclenchait une action fantôme.
  */
 let seenPad = '';
 

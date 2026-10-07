@@ -27,7 +27,6 @@ export const settings = $state<UserSettings>({
 	button_layout: 'ps5',
 	game_folders: ['D:/Jeux'],
 	sound_enabled: true,
-	intro_enabled: true,
 	steamgriddb_key: '',
 	screensaver_minutes: 5,
 	home_order: 'recent',
@@ -53,7 +52,6 @@ export async function initSettings() {
 				settings.button_layout = loaded.button_layout || 'ps5';
 				settings.game_folders = loaded.game_folders ?? ['D:/Jeux'];
 				settings.sound_enabled = loaded.sound_enabled ?? true;
-				settings.intro_enabled = loaded.intro_enabled ?? true;
 				settings.steamgriddb_key = loaded.steamgriddb_key ?? '';
 				settings.screensaver_minutes = loaded.screensaver_minutes ?? 5;
 				settings.home_order = loaded.home_order === 'title' ? 'title' : 'recent';
@@ -117,11 +115,6 @@ export function setAvatar(path: string) {
 export function setButtonLayout(layout: string) {
 	if (layout === settings.button_layout) return;
 	settings.button_layout = layout;
-	saveSettings();
-}
-
-export function setIntroEnabled(enabled: boolean) {
-	settings.intro_enabled = enabled;
 	saveSettings();
 }
 

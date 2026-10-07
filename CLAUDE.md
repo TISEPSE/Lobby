@@ -265,7 +265,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 - Après `screensaver_minutes` sans aucune action (5 min par défaut, réglable dans Réglages → Apparence, `0` = jamais), `ScreenSaver.svelte` prend l'écran : artworks de la bibliothèque qui se relaient toutes les 12 s avec un lent panoramique, heure et date en bas à gauche.
 - La première action **réveille seulement** : elle n'est pas transmise à l'écran en dessous, pour ne pas lancer un jeu en voulant rallumer l'écran.
-- Pas de veille pendant l'animation de démarrage, ni s'il n'y a aucun artwork à montrer.
+- Pas de veille s'il n'y a aucun artwork à montrer.
 
 ## Statistiques (`Stats.svelte`, `stats.ts`)
 
@@ -328,20 +328,13 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Comparaison via `normalizeForSearch` : sans accents ni ponctuation, « repo » trouve « R.E.P.O. ».
 - Capture : `?search=1` ouvre la fenêtre.
 
-## Animation de démarrage (`BootIntro.svelte`)
+## Démarrage
 
-- D'après une vidéo Claude Design de l'utilisateur (10,5 s), **rejouée en direct** pour être personnelle : quatre traits de couleur convergent, éclat (onde verte) et les quatre pastilles de la manette en losange (Y jaune, B rouge, A vert, X bleu, `--pad-*`), **LOBBY** / CONSOLE, puis une couronne de 60 graduations qui s'allument au fil du **vrai chargement**, « N / total jeux » et l'étape réelle, puis « Bonjour / Bonsoir, <pseudo> » sous la photo cerclée d'accent ; à la sortie, le fond s'efface sur l'accueil et la photo file vers sa place dans le dock (FLIP sur `.top .profile .avatar`). Son `boot` : accord de quatre notes synthétisé (`playChime`, famille Notifications) à l'éclat.
-- **Chargement réel** (`bootLoad()` dans `App.svelte`), dit tel quel sous le compteur : réglages → bibliothèque installée, statistiques, affiches → **recherche des jeux installés** (`scanAndSync`, comme « Synchroniser » : ajoutés, déplacés, désinstallés ; 15 s au plus, `SCAN_WAIT`, puis fin en arrière-plan ; bilan dans le bandeau s'il y a du changement) → comptes Steam (local + liste chiffrée) et Epic (réseau, attendu 8 s au plus, `EPIC_WAIT`) → jaquette **et** fond de chaque jeu installé, puis jaquettes du premier lot de la bibliothèque (48), décodées (`Image.decode`, 4 s au plus chacune, `IMAGE_WAIT`). Le **total grandit en direct** (`allGames` : installés + possédés) ; le compteur suit les jeux **prêts** (installé : images décodées ; possédé : liste arrivée) et ne dépasse jamais la jauge.
-- La jauge ne fait jamais un tour en moins de `MIN_LOADING` (vitesse bornée) : bibliothèque en cache, le compteur sautait d'un coup au total.
-- **Rien d'autre n'est visible pendant l'animation** : `body.booting` masque tout le reste de l'interface (`#app > *:not([data-intro])`, `visibility: hidden`) jusqu'à la sortie (`onReveal`), où le fond s'efface sur l'accueil. L'accueil apparaissait sinon entre le début de l'animation et le chargement des jeux.
-- Une manette lue pour la première fois sert d'état de départ sans rien déclencher (`seenPad`, `gamepad.ts`), et l'animation ne se passe pas avant 1,5 s (`SKIP_GRACE`) : une gâchette au repos imparfait ou un appui au réveil la passaient aussitôt.
-- Chaque phase est tracée dans le journal (`ui_log` → `Interface : animation : …`, `chargement fini : N installés, M au total`) : c'est ce qui a montré que l'animation se jouait bien en entier.
-- **Aucun trou noir entre les étapes** : le point où les traits se rejoignent reste allumé à l'éclat (`.core`, éclair puis résorption) et les pastilles en sortent ; à la fin du chargement, la couronne et les pastilles se resserrent vers le centre en s'effaçant (`out:scale`), le nom et le compteur se dissolvent, pendant que la photo grandit au même endroit (`in:scale`, sans délai). Fondus de 120 à 320 ms : ils ne doivent quasiment pas se voir. Les traits partent dès la première image (plus de moment sombre au début). Avant, chaque étape disparaissait d'un coup avant que la suivante n'apparaisse.
-- Logo **fixe au centre de l'écran**, textes posés dessous en absolu : en flux, l'apparition du nom faisait remonter les pastilles.
-- Fond sombre **dès la création de la fenêtre** (`backgroundColor` dans `tauri.conf.json`, `index.html`) : plus d'éclair blanc avant l'animation.
-- N'importe quelle touche la passe (sortie courte, sans vol). Réglages → Apparence → « Animation de démarrage » (`intro_enabled`). Pas de veille pendant. `?intro=0` la saute (captures).
-- `coverFor(game)` (`steam.svelte.ts`) : l'image d'une jaquette, partagée par `Cover.svelte` et le préchargement — une seule logique.
-- Les anciennes vidéos d'introduction (pixelisées) restent retirées.
+- **Plus d'animation de démarrage** : `BootIntro.svelte` (animation Claude Design rejouée en direct) a été retirée avec tout son code (chargement affiché, son `boot`, réglage `intro_enabled`, variables `--intro-*`, trace `ui_log`) — un écran noir subsistait entre ses étapes. L'application ouvre directement l'accueil.
+- `startup()` (`App.svelte`) : réglages, bibliothèque installée, puis en arrière-plan la recherche des jeux installés (`scanAndSync`, bilan dans le bandeau s'il y a du changement) et la lecture des comptes Steam et Epic.
+- Fond sombre dès la création de la fenêtre (`backgroundColor` dans `tauri.conf.json`, `index.html`) : pas d'éclair blanc au lancement.
+- `coverFor(game)` (`steam.svelte.ts`) : l'image d'une jaquette, utilisée par `Cover.svelte`.
+- Une manette lue pour la première fois sert d'état de départ sans rien déclencher (`seenPad`, `gamepad.ts`).
 
 ## Feuille de route
 
