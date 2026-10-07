@@ -1283,6 +1283,12 @@ fn is_running(pid: u32) -> bool {
   }
 }
 
+/// Trace de l'interface dans le journal de l'application (démarrage…).
+#[tauri::command]
+fn ui_log(message: String) {
+  log::info!("Interface : {message}");
+}
+
 /// Taille pour laquelle l'interface est dessinée (une TV 1080p).
 const DESIGN_WIDTH: f64 = 1920.0;
 const DESIGN_HEIGHT: f64 = 1080.0;
@@ -1440,6 +1446,7 @@ pub fn run() {
       launch_game,
       is_running,
       steam_running_app,
+      ui_log,
       power_action,
       steam_details,
       cache_game_art,

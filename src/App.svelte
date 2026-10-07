@@ -154,7 +154,22 @@
 	 * puis les images des premiers jeux de l'accueil, préchargées.
 	 */
 	let introPlaying = $state(params.get('intro') !== '0' && params.get('boot') !== '0');
+
+	/** Trace dans le journal de l'application (diagnostic du démarrage). */
+	function trace(message: string) {
+		if (!(window as any).__TAURI_INTERNALS__) return;
+		void import('@tauri-apps/api/core').then(({ invoke }) => invoke('ui_log', { message }).catch(() => {}));
+	}
+	trace(`démarrage, animation ${introPlaying ? 'prévue' : 'désactivée'}`);
 	let introComponent = $state<{ skip: () => void } | null>(null);
+	/** La sortie de l'animation a commencé : l'interface peut se montrer. */
+	let introRevealed = $state(false);
+
+	// Pendant toute l'animation, l'interface derrière elle est masquée : elle
+	// ne se montre qu'à la sortie, quand le fond s'efface.
+	$effect(() => {
+		document.body.classList.toggle('booting', introPlaying && !introRevealed);
+	});
 	/**
 	 * Chargement réel pendant l'animation (`bootLoad`) : étape affichée, comptes
 	 * arrivés, et jeux dont les images sont décodées.
@@ -167,6 +182,8 @@
 		epic: false,
 		imagesDone: 0,
 		imagesTotal: 0,
+		/** Tout est chargé, jaquettes comprises. */
+		done: false,
 	});
 	/** Jeux installés prêts : leurs images (jaquette et fond) décodées. */
 	let bootReadyIds = $state<Record<string, true>>({});
@@ -182,7 +199,10 @@
 			(boot.library ? 0.15 : 0) +
 			(boot.steam ? 0.15 : 0) +
 			(boot.epic ? 0.15 : 0) +
-			(boot.imagesTotal > 0 ? 0.5 * (boot.imagesDone / boot.imagesTotal) : boot.library && boot.steam && boot.epic ? 0.5 : 0)
+			// La dernière part ne se remplit qu'avec les jaquettes réellement
+			// chargées : entre les comptes et les jaquettes, le total d'images
+			// valait 0 et la jauge passait à 100 % — l'accueil arrivait trop tôt.
+			(boot.done ? 0.5 : boot.imagesTotal > 0 ? 0.5 * (boot.imagesDone / boot.imagesTotal) : 0)
 	);
 	let libraryIndex = $state(wanted === 'library' ? wantedIndex : 0);
 	/**
@@ -629,24 +649,36 @@
 	 * dossiers déplacés suivis, jeux disparus retirés. Sans fenêtre de
 	 * validation — c'est un geste rapide, le bilan s'affiche en bas.
 	 */
+	/**
+	 * Rescanne les jeux installés (Steam, Epic, dossiers, raccourcis) et met la
+	 * bibliothèque à jour sans validation : nouveaux ajoutés, déplacés suivis,
+	 * désinstallés retirés. Sert au bouton « Synchroniser » et au démarrage.
+	 * Rend le bilan lisible (« 2 ajoutés · 1 retiré »), vide si rien n'a bougé.
+	 */
+	async function scanAndSync(): Promise<string> {
+		const { invoke } = await import('@tauri-apps/api/core');
+		const scanned = await invoke<Game[]>('scan_installed_games', {
+			customFolders: settings.game_folders,
+		});
+		const report = await syncLibrary(scanned, (paths) => invoke<boolean[]>('paths_exist', { paths }));
+		return [
+			report.added && `${report.added} ajouté${report.added > 1 ? 's' : ''}`,
+			report.updated && `${report.updated} mis à jour`,
+			report.removed && `${report.removed} retiré${report.removed > 1 ? 's' : ''}`,
+		]
+			.filter(Boolean)
+			.join(' · ');
+	}
+
 	async function runSync() {
 		if (syncing) return;
 		const tauri = (window as any).__TAURI_INTERNALS__;
 		if (!tauri) return notify('Hors application : rien à synchroniser.');
 		syncing = true;
 		try {
-			const { invoke } = await import('@tauri-apps/api/core');
-			const scanned = await invoke<Game[]>('scan_installed_games', {
-				customFolders: settings.game_folders,
-			});
-			const report = await syncLibrary(scanned, (paths) => invoke<boolean[]>('paths_exist', { paths }));
+			const changes = await scanAndSync();
 			libraryIndex = 0;
-			const parts = [
-				report.added && `${report.added} ajouté${report.added > 1 ? 's' : ''}`,
-				report.updated && `${report.updated} mis à jour`,
-				report.removed && `${report.removed} retiré${report.removed > 1 ? 's' : ''}`,
-			].filter(Boolean);
-			notify(parts.length ? `Bibliothèque synchronisée : ${parts.join(' · ')}.` : 'Bibliothèque déjà à jour.');
+			notify(changes ? `Bibliothèque synchronisée : ${changes}.` : 'Bibliothèque déjà à jour.');
 		} catch (e) {
 			notify(`Synchronisation impossible : ${e}`, false);
 		} finally {
@@ -729,6 +761,7 @@
 
 		// N'importe quelle touche passe l'animation de démarrage.
 		if (introPlaying) {
+			trace(`touche pendant l'animation : ${action}`);
 			introComponent?.skip();
 			return;
 		}
@@ -875,6 +908,8 @@
 
 	/** Attente maximale d'Epic (réseau) et d'une image, au démarrage. */
 	const EPIC_WAIT = 8000;
+	/** Attente maximale de la recherche des jeux installés. */
+	const SCAN_WAIT = 15000;
 	const IMAGE_WAIT = 4000;
 
 	/**
@@ -887,10 +922,24 @@
 		boot.settings = true;
 		// Désactivée dans Apparence : on va droit à l'accueil (le chargement
 		// continue de la même façon, sans être montré).
+		trace(`réglages lus, animation ${settings.intro_enabled ? 'activée' : 'désactivée'}`);
 		if (!settings.intro_enabled) introPlaying = false;
 
 		boot.step = 'Lecture de la bibliothèque…';
 		await Promise.all([initLibrary(), initArtStore()]);
+
+		// Les jeux installés sont rescannés à chaque démarrage : un jeu installé,
+		// désinstallé ou déplacé depuis un autre launcher est à jour d'office.
+		if ((window as any).__TAURI_INTERNALS__) {
+			boot.step = 'Recherche des jeux installés…';
+			const sync = scanAndSync()
+				.then((changes) => {
+					if (changes) notify(`Bibliothèque mise à jour : ${changes}.`);
+				})
+				.catch((e) => notify(`Recherche des jeux impossible : ${e}`, false));
+			// Un scan très long finit en arrière-plan : le démarrage n'attend pas.
+			await within(sync, SCAN_WAIT);
+		}
 		libraryReady = true;
 		boot.library = true;
 		boot.step = games.length
@@ -950,6 +999,8 @@
 			...firstBatch.map((game) => decodeImage(coverFor(game)).then(tick)),
 		]);
 		boot.step = 'Prêt';
+		trace(`chargement fini : ${games.length} installés, ${allGames.length} au total`);
+		boot.done = true;
 	}
 
 	onMount(() => {
@@ -1206,7 +1257,7 @@
 				loginSteamLibrary().catch((e) => notify(`Connexion Steam impossible : ${e}`, false))}
 			onSteamLibraryForget={async () => {
 				await forgetSteamLibrary();
-				notify('Liste Steam oubliée : seuls les jeux installés restent.');
+				notify('Compte Steam déconnecté : seuls les jeux installés restent.');
 			}}
 			onEditName={() => (nameKeyboardOpen = true)}
 			onChangeAvatar={() => (avatarPickerOpen = true)}
@@ -1321,7 +1372,12 @@
 		ready={bootReady}
 		step={boot.step}
 		progress={bootProgress}
-		onDone={() => (introPlaying = false)}
+		onPhase={(phase) => trace(`animation : ${phase}`)}
+		onReveal={() => (introRevealed = true)}
+		onDone={() => {
+			trace('animation terminée');
+			introPlaying = false;
+		}}
 	/>
 {/if}
 

@@ -33,6 +33,8 @@
 		/** Avancement réel du chargement, de 0 à 1. */
 		progress,
 		onDone,
+		onPhase,
+		onReveal,
 	}: {
 		name: string;
 		avatar?: string;
@@ -41,6 +43,10 @@
 		step: string;
 		progress: number;
 		onDone: () => void;
+		/** Chaque changement de phase (trace de diagnostic). */
+		onPhase?: (phase: string) => void;
+		/** La sortie commence : l'interface derrière peut se montrer. */
+		onReveal?: () => void;
 	} = $props();
 
 	/** Repères de la séquence, en millisecondes depuis le début. */
@@ -58,6 +64,7 @@
 
 	type Phase = 'converge' | 'burst' | 'brand' | 'loading' | 'greet' | 'exit';
 	let phase = $state<Phase>('converge');
+	$effect(() => onPhase?.(phase));
 	let skipped = $state(false);
 
 	/** Avancement affiché : il rattrape le vrai en douceur, jamais à reculons. */
@@ -124,6 +131,9 @@
 
 	function exit() {
 		if (phase === 'exit') return;
+		// L'accueil n'apparaît qu'ici, quand le fond commence à s'effacer :
+		// avant, il est masqué (il se montrait entre le début et le chargement).
+		onReveal?.();
 		// La photo file vers celle du dock (même place, même taille).
 		const target = document.querySelector('.top .profile .avatar');
 		if (avatarEl && target && !skipped) {
@@ -137,9 +147,16 @@
 		at(skipped ? SKIP_EXIT : EXIT, onDone);
 	}
 
+	/** On ne passe pas l'animation pendant ses premiers instants. */
+	const SKIP_GRACE = 1500;
+	const startedAt = performance.now();
+
 	/** Une touche : on passe directement à l'accueil. */
 	export function skip() {
 		if (phase === 'exit') return;
+		// Un appui parasite au lancement (manette qui se réveille) ne doit pas
+		// passer l'animation avant même qu'on l'ait vue.
+		if (performance.now() - startedAt < SKIP_GRACE) return;
 		skipped = true;
 		timers.forEach(clearTimeout);
 		cancelAnimationFrame(frame);
@@ -147,7 +164,7 @@
 	}
 </script>
 
-<div class="intro {phase}" class:skipped style="--exit: {skipped ? SKIP_EXIT : EXIT}ms">
+<div class="intro {phase}" data-intro class:skipped style="--exit: {skipped ? SKIP_EXIT : EXIT}ms">
 	<div class="glow"></div>
 
 	<!-- 1. Les quatre traits qui convergent. -->

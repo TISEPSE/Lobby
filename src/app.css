@@ -188,6 +188,12 @@ button {
 	background: none;
 }
 
+/* Animation de démarrage : tout le reste est masqué jusqu'à sa sortie — l'accueil
+   ne doit jamais se montrer avant (`booting`, posé par App.svelte). */
+body.booting #app > *:not([data-intro]) {
+	visibility: hidden;
+}
+
 /* Halo de sélection, unique dans toute l'interface. */
 .focus-ring {
 	outline: 3px solid var(--accent);

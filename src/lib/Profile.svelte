@@ -126,22 +126,24 @@
 	);
 	/**
 	 * Une seule tuile Steam : le compte et sa bibliothèque. Connectée, elle dit
-	 * combien de jeux et quand la liste a été lue.
+	 * combien de jeux. Rien à « synchroniser » à la main : les jeux installés
+	 * sont rescannés et les comptes relus à chaque démarrage.
 	 */
 	const steamLabel = $derived(
 		steamLibraryPending
 			? 'Connexion…'
 			: steamLibraryCount > 0
-				? `${steamPersona ? steamPersona + ' · ' : ''}${steamLibraryCount} jeux · synchronisée le ${new Date(steamLibraryDate).toLocaleDateString('fr-FR', { day: 'numeric', month: 'long' })}`
+				? `${steamPersona ? steamPersona + ' · ' : ''}${steamLibraryCount} jeux`
 				: steamPersona
-					? `${steamPersona} · bibliothèque non synchronisée`
+					? `${steamPersona} · connecte-toi pour toute ta bibliothèque`
 					: 'Non connecté'
 	);
 
-	/** Ce que fait A sur la tuile Epic, selon l'état du compte. */
-	const epicAction = $derived(
-		epicName ? (epicError ? 'Se reconnecter' : 'Actualiser') : 'Se connecter'
-	);
+	/**
+	 * Ce que fait A sur la tuile Epic : se connecter, ou se reconnecter si la
+	 * session a expiré. Connectée, rien : le compte est relu au démarrage.
+	 */
+	const epicAction = $derived(epicName ? (epicError ? 'Se reconnecter' : '') : 'Se connecter');
 
 	export function selectionKey(): string {
 		return String(index);
@@ -156,11 +158,10 @@
 		else if (action === 'accept') {
 			if (current === 'avatar') onChangeAvatar?.();
 			else if (current === 'name') onEditName?.();
-			else if (current === 'steam') onSteamLibraryLogin?.();
-			else if (current === 'epic') {
-				if (epicName && !epicError) onEpicRefresh?.();
-				else onEpicLogin?.();
-			} else if (current === 'stats') onOpenStats?.();
+			// Connecté, A ne fait rien : comptes et jeux se mettent à jour au démarrage.
+			else if (current === 'steam' && steamLibraryCount === 0) onSteamLibraryLogin?.();
+			else if (current === 'epic' && (!epicName || epicError)) onEpicLogin?.();
+			else if (current === 'stats') onOpenStats?.();
 		}
 	}
 
@@ -213,8 +214,11 @@
 				</span>
 				{#if isOn('steam')}
 					<span class="do">
-						<Glyph button="a" size="26px" />{steamLibraryCount > 0 ? 'Synchroniser' : 'Se connecter'}
-						{#if steamLibraryCount > 0}<Glyph button="x" size="26px" />Oublier{/if}
+						{#if steamLibraryCount > 0}
+							<Glyph button="x" size="26px" />Déconnecter
+						{:else}
+							<Glyph button="a" size="26px" />Se connecter
+						{/if}
 					</span>
 				{/if}
 			</li>
@@ -226,7 +230,7 @@
 				</span>
 				{#if isOn('epic')}
 					<span class="do">
-						<Glyph button="a" size="26px" />{epicAction}
+						{#if epicAction}<Glyph button="a" size="26px" />{epicAction}{/if}
 						{#if epicName}<Glyph button="x" size="26px" />Déconnecter{/if}
 					</span>
 				{/if}

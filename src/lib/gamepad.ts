@@ -78,6 +78,13 @@ let nextRepeat = 0;
 let frame = 0;
 /** Boutons enfoncés à la frame précédente, pour ne déclencher qu'au front montant. */
 const pressed = new Set<number>();
+/**
+ * Manette déjà lue une fois. À la première lecture, son état sert de point de
+ * départ, sans rien déclencher : une gâchette qui ne revient pas tout à fait
+ * à zéro, ou une touche tenue au branchement, passait aussitôt l'animation de
+ * démarrage (« n'importe quelle touche la passe »).
+ */
+let seenPad = '';
 
 function emit(action: Action) {
 	for (const listener of listeners) listener(action);
@@ -96,6 +103,18 @@ function poll(now: number) {
 	const pad = navigator.getGamepads?.().find((p) => p && p.connected) ?? null;
 	if (!pad) {
 		held = null;
+		seenPad = '';
+		return;
+	}
+	const key = `${pad.index}:${pad.id}`;
+	if (key !== seenPad) {
+		seenPad = key;
+		pressed.clear();
+		pad.buttons.forEach((button, i) => {
+			if (button?.pressed) pressed.add(i);
+		});
+		held = direction(pad);
+		nextRepeat = Number.POSITIVE_INFINITY;
 		return;
 	}
 
