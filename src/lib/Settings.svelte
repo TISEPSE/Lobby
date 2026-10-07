@@ -694,7 +694,7 @@
 	.cat-btn:hover,
 	.cat-btn.focused {
 		border-color: var(--accent);
-		background: rgba(34, 211, 102, 0.08);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		transform: translateX(6px);
 		outline: 3px solid var(--accent);
 		box-shadow:
@@ -786,7 +786,7 @@
 	.setting-row:hover,
 	.setting-row.focused {
 		border-color: var(--accent);
-		background: rgba(34, 211, 102, 0.08);
+		background: color-mix(in srgb, var(--accent) 8%, transparent);
 		transform: translateX(6px);
 		outline: 3px solid var(--accent);
 		box-shadow:
@@ -847,7 +847,7 @@
 	}
 
 	.hero-action-card:hover {
-		border-color: rgba(34, 211, 102, 0.5);
+		border-color: color-mix(in srgb, var(--accent) 50%, transparent);
 		box-shadow: 0 0 28px var(--accent-soft);
 	}
 
@@ -901,7 +901,7 @@
 
 	.btn-scan:hover,
 	.btn-scan.focused {
-		background: rgba(34, 211, 102, 0.15);
+		background: color-mix(in srgb, var(--accent) 15%, transparent);
 		color: #ffffff;
 		border-color: var(--accent);
 		outline: 3px solid var(--accent);
@@ -973,7 +973,7 @@
 
 	.btn-sm:hover,
 	.btn-sm:focus-visible {
-		background: rgba(34, 211, 102, 0.15);
+		background: color-mix(in srgb, var(--accent) 15%, transparent);
 		color: #ffffff;
 		border-color: var(--accent);
 		outline: 3px solid var(--accent);

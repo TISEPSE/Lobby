@@ -108,7 +108,7 @@
 		font-weight: 700;
 		letter-spacing: 0.06em;
 		text-transform: uppercase;
-		color: var(--xbox-green-light);
+		color: var(--accent);
 	}
 
 	h2 {
@@ -168,7 +168,7 @@
 		bottom: 10px;
 		width: 4px;
 		border-radius: 0 4px 4px 0;
-		background: var(--xbox-green);
+		background: var(--accent);
 		opacity: 0;
 		transition: opacity var(--fast) var(--ease);
 	}

@@ -29,6 +29,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Code, variables, noms de fichiers en anglais ; commentaires et textes d'interface en français.
 - TypeScript partout, `strict` activé. Svelte 5 avec les runes (`$state`, `$derived`, `$props`, `$effect`).
 - Composants en `PascalCase.svelte`, modules en `camelCase.ts`.
+- **L'accent est le vert Xbox** (`--accent: #107c10`), partout, à la demande de l'utilisateur : une seule couleur. Ses nuances (`--accent-soft`, `--accent-dim`, `--heat-*`) en dérivent par `color-mix` — jamais de `rgba()` recopié à la main. Texte sur aplat d'accent : blanc (`--on-accent`).
 - **Pas de valeurs magiques dans les composants** : couleurs, rayons, durées et marges sont des variables CSS définies dans `src/app.css`. Changer l'accent ou l'espacement se fait à un seul endroit.
 - Marges de sécurité TV : `--safe-x` / `--safe-y` (5 %).
 - Animations courtes (`--fast` 180 ms, `--normal` 260 ms) avec `--ease`, jamais de ralentissement perceptible.
@@ -224,7 +225,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 
 ## Menu d'options d'un jeu (`OptionsMenu.svelte`)
 
-- **X** ouvre **la même fenêtre partout** (accueil, bibliothèque, fiche ; état `menuOptionsOpen`), façon Xbox : en tête la jaquette (`Cover.svelte`), la boutique et le nom du jeu, puis les lignes (icône ronde + libellé) qui entrent l'une après l'autre, en pied, les glyphes A Choisir · B Fermer. **Vraie palette Xbox** (variables `--xbox-*`, à part de l'accent de l'interface, à la demande de l'utilisateur) : panneau gris presque noir et mat (pas de verre), coins de 6 px, vert Xbox `#107c10` ; la ligne sélectionnée passe en **aplat blanc, texte et icône noirs**, liseré vert à gauche. Variables `--options-*` pour les tailles.
+- **X** ouvre **la même fenêtre partout** (accueil, bibliothèque, fiche ; état `menuOptionsOpen`), façon Xbox : en tête la jaquette (`Cover.svelte`), la boutique et le nom du jeu, puis les lignes (icône ronde + libellé) qui entrent l'une après l'autre, en pied, les glyphes A Choisir · B Fermer. **Vraie palette Xbox** (variables `--xbox-*`) : panneau gris presque noir et mat (pas de verre), coins de 6 px, liseré à l'accent ; la ligne sélectionnée passe en **aplat blanc, texte et icône noirs**, liseré vert à gauche. Variables `--options-*` pour les tailles.
 - L'ancien tiroir de l'accueil, qui sortait de la tuile en poussant la rangée, est abandonné (`TileOptions.svelte` n'est plus utilisé).
 - Entrées : favori, changer la jaquette, changer l'image de fond, puis pour un jeu installé changer l'exécutable, mettre à jour, vérifier les fichiers, désinstaller (un jeu non installé : « Installer »).
 - Capture : `?screen=home&index=N&options=1`.

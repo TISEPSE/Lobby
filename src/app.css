@@ -5,12 +5,14 @@
  */
 
 :root {
-	--accent: #22d366;
-	--accent-soft: rgba(34, 211, 102, 0.22);
-	/* Texte posé sur un aplat d'accent. */
-	--on-accent: #06210f;
+	/* Le vert Xbox, seule couleur d'accent : toutes ses nuances (halo,
+	   retrait, calendrier) en dérivent par `color-mix`, rien d'autre à changer. */
+	--accent: #107c10;
+	--accent-soft: color-mix(in srgb, var(--accent) 35%, transparent);
+	/* Texte posé sur un aplat d'accent : blanc, comme sur les boutons Xbox. */
+	--on-accent: #ffffff;
 	/* Barres d'un graphique hors sélection : l'accent, en retrait. */
-	--accent-dim: rgba(34, 211, 102, 0.5);
+	--accent-dim: color-mix(in srgb, var(--accent) 55%, transparent);
 	--bg: #07080b;
 	/* Haut des écrans pleins (recherche, bibliothèque) : à peine plus clair,
 	   pour que la barre du haut ne flotte pas sur du noir plat. */
@@ -94,10 +96,8 @@
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;
 	--options-row: 56px;
-	/* Palette Xbox de la fenêtre d'options : gris presque noirs, vert Xbox,
-	   ligne sélectionnée en aplat blanc et texte noir. */
-	--xbox-green: #107c10;
-	--xbox-green-light: #4fb43d;
+	/* Palette Xbox de la fenêtre d'options : gris presque noirs, ligne
+	   sélectionnée en aplat blanc et texte noir (le vert est l'accent). */
 	--xbox-veil: rgba(0, 0, 0, 0.78);
 	--xbox-panel: #1b1b1b;
 	--xbox-row: #262626;
@@ -120,10 +120,10 @@
 	--stats-side: clamp(380px, 24vw, 460px);
 	--heat-gap: 4px;
 	--heat-0: rgba(255, 255, 255, 0.06);
-	--heat-1: rgba(34, 211, 102, 0.28);
-	--heat-2: rgba(34, 211, 102, 0.5);
-	--heat-3: rgba(34, 211, 102, 0.75);
-	--heat-4: #22d366;
+	--heat-1: color-mix(in srgb, var(--accent) 30%, transparent);
+	--heat-2: color-mix(in srgb, var(--accent) 55%, transparent);
+	--heat-3: color-mix(in srgb, var(--accent) 80%, transparent);
+	--heat-4: var(--accent);
 	/* Colonne d'identité de la page Profil. */
 	--profile-card: clamp(440px, 30vw, 560px);
 	/* Grande photo de la page Profil. */
