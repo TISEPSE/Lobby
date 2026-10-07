@@ -84,6 +84,11 @@ const pressed = new Set<number>();
  * à zéro, ou une touche tenue au branchement, déclenchait une action fantôme.
  */
 let seenPad = '';
+/**
+ * Capture (`?nopad`) : la manette est ignorée. Chrome headless lit la vraie
+ * manette du PC, et une partie en cours faisait changer l'écran capturé.
+ */
+const NO_PAD = typeof location !== 'undefined' && new URLSearchParams(location.search).has('nopad');
 
 function emit(action: Action) {
 	for (const listener of listeners) listener(action);
@@ -103,7 +108,7 @@ function poll(now: number) {
 	// Fenêtre sans le focus (un jeu, une autre application) : la manette ne
 	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
 	// une touche encore tenue ne déclenche rien.
-	if (!pad || !document.hasFocus()) {
+	if (!pad || !document.hasFocus() || NO_PAD) {
 		held = null;
 		seenPad = '';
 		return;

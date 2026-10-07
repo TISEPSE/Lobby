@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
 	import type { Action } from './gamepad';
@@ -112,9 +113,13 @@
 		const current = game?.executable ?? '';
 		let start = dirname(current);
 		if (/steam\.exe$/i.test(current)) start = `${start}/steamapps/common`;
-		path = '';
-		void go(start, 1, current).then(() => {
-			if (error && start) void go('', 1);
+		// `go` lit `path` et `index` : sans `untrack`, l'effet les suivait et
+		// chaque déplacement ramenait l'explorateur à son dossier de départ.
+		untrack(() => {
+			path = '';
+			void go(start, 1, current).then(() => {
+				if (error && start) void go('', 1);
+			});
 		});
 	});
 

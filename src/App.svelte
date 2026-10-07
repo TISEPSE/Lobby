@@ -203,13 +203,12 @@
 	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
 
 	/** Menu d'options de la tuile sélectionnée, sur l'accueil. */
-	let optionsOpen = $state(params.get('options') === '1');
 	/** Même menu, ouvert depuis une fiche : il n'y a pas de tuile à prolonger. */
 	/**
 	 * Menu d'options en fenêtre : sur une fiche, ou dans la bibliothèque (X sur
 	 * une jaquette). `?options=detail` ou `?options=library` l'ouvrent (capture).
 	 */
-	let menuOptionsOpen = $state(params.get('options') === 'detail' || params.get('options') === 'library');
+	let menuOptionsOpen = $state(params.get('options') === '1' || params.get('options') === 'detail' || params.get('options') === 'library');
 	/** Bibliothèque : grille, ou boutons de l'en-tête (0 = Trier, 1 = Synchroniser). */
 	let libraryZone = $state<'grid' | 'header'>(params.get('zone') === 'header' ? 'header' : 'grid');
 	let headerIndex = $state(0);
@@ -386,7 +385,6 @@
 		// Un léger souffle dit qu'on change de section ; au bout du dock, rien.
 		if (next !== section) playSound('section');
 		opened = null;
-		optionsOpen = false;
 		menuOptionsOpen = false;
 		goToSection(next);
 	}
@@ -430,9 +428,10 @@
 		// La carte « Reprendre » lance directement : c'est tout son intérêt.
 		else if (action === 'accept' && homeIndex < 0) launch();
 		else if (action === 'accept') openDetail(homeGames[homeIndex]);
+		// X : les options du jeu, dans une fenêtre (comme la bibliothèque et la fiche).
 		else if (action === 'options') {
-			optionsOpen = true;
 			optionsIndex = 0;
+			menuOptionsOpen = true;
 		}
 	}
 
@@ -770,7 +769,7 @@
 		}
 		if (action === 'menu') return openPower();
 		// Y : la recherche, depuis n'importe quel écran (hors fenêtres).
-		if (action === 'search' && !optionsOpen && !menuOptionsOpen && !viewerOpen) {
+		if (action === 'search' && !menuOptionsOpen && !viewerOpen) {
 			return openSearch();
 		}
 		// L1 / R1 : le dock — sauf dans la visionneuse, où ils passent au média voisin.
@@ -782,14 +781,13 @@
 			if (section === 'profile' && statsOpen && !opened) {
 				return statsComponent?.handleAction(action);
 			}
-			if (section !== 'library' || opened || optionsOpen) return;
+			if (section !== 'library' || opened || menuOptionsOpen) return;
 			const step = action === 'pageNext' ? 1 : -1;
 			const at = FILTERS.indexOf(filter);
 			setLibraryView(FILTERS[(at + step + FILTERS.length) % FILTERS.length], sort);
 			libraryIndex = 0;
 			return;
 		}
-		if (optionsOpen) return handleOptions(action);
 		if (menuOptionsOpen && !opened) return handleOptions(action);
 		if (opened) return handleDetail(action);
 		if (section === 'profile' && statsOpen) return statsComponent?.handleAction(action);
@@ -947,10 +945,7 @@
 	async function handleOptions(action: Action) {
 		if (action === 'up') optionsIndex = Math.max(0, optionsIndex - 1);
 		else if (action === 'down') optionsIndex = Math.min(tileActions.length - 1, optionsIndex + 1);
-		else if (action === 'cancel' || action === 'options') {
-			optionsOpen = false;
-			menuOptionsOpen = false;
-		}
+		else if (action === 'cancel' || action === 'options') menuOptionsOpen = false;
 		else if (action === 'accept') await runTileAction(tileActions[optionsIndex]?.id);
 	}
 
@@ -987,10 +982,7 @@
 				if (selected.appid) notify(await uninstallGame(selected.appid));
 				break;
 		}
-		if (id !== 'favorite') {
-			optionsOpen = false;
-			menuOptionsOpen = false;
-		}
+		if (id !== 'favorite') menuOptionsOpen = false;
 	}
 
 	const keyboardOpen = $derived(
@@ -1016,7 +1008,7 @@
 				? list(['b', 'Annuler'])
 				: list(['a', 'Cocher / Valider'], ['x', 'Tout cocher'], ['b', 'Fermer']);
 		}
-		if (optionsOpen || (menuOptionsOpen && !opened)) return list(['a', 'Choisir'], ['b', 'Fermer']);
+		if (menuOptionsOpen && !opened) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (opened) {
 			if (viewerOpen) {
 				// Le lecteur vidéo affiche ses propres touches.
@@ -1100,9 +1092,6 @@
 			downloads={downloads.list}
 			focusedPanel={homeZone === 'panels' ? panelIndex : -1}
 			steamSyncedAt={steamLibrary.fetchedAt}
-			actions={tileActions}
-			{optionsOpen}
-			{optionsIndex}
 		/>
 	{:else if section === 'library'}
 		<Library
@@ -1289,12 +1278,7 @@
 	onClose={() => (avatarPickerOpen = false)}
 />
 
-<OptionsMenu
-	actions={tileActions}
-	index={optionsIndex}
-	open={menuOptionsOpen}
-	title={opened ? '' : (selected?.title ?? '')}
-/>
+<OptionsMenu actions={tileActions} index={optionsIndex} open={menuOptionsOpen} game={selected} />
 
 <ArtPicker
 	bind:this={artPickerComponent}

@@ -90,6 +90,10 @@
 	--detail-button-focus: rgba(255, 255, 255, 0.22);
 	/* Explorateur de fichiers (choix de l'exécutable) : largeur, lignes visibles,
 	   hauteur et écart d'une ligne. */
+	/* Fenêtre d'options d'un jeu : largeur, jaquette d'en-tête, hauteur d'une ligne. */
+	--options-width: min(560px, 80vw);
+	--options-cover: 96px;
+	--options-row: 60px;
 	--files-width: min(1100px, 80vw);
 	--files-rows: 8;
 	--files-row: 62px;

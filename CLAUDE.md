@@ -208,7 +208,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Bibliothèque : en-tête et options
 
 - L'en-tête porte deux **vrais boutons** : « Trier : <critère> » et « Synchroniser ». On les atteint en montant depuis la première rangée (`libraryZone: 'header'`), gauche / droite entre eux, bas pour revenir. Pendant ce temps, aucune jaquette n'a de contour.
-- **X sur une jaquette ouvre les options du jeu**, comme sur l'accueil, dans la fenêtre `OptionsMenu.svelte` (avec le nom du jeu) — une grille ne peut pas « pousser » ses voisines comme le tiroir de la rangée d'accueil. État partagé avec la fiche : `menuOptionsOpen`.
+- **X sur une jaquette ouvre les options du jeu**, la même fenêtre que partout (`OptionsMenu.svelte`).
 - **Chargement par lots** (`BATCH` = 48, six rangées) : avec les bibliothèques Steam et Epic (plus de 600 jeux), toutes les jaquettes étaient construites et demandées d'un coup et le défilement saccadait. Quand la sélection approche du bas du lot (`PRELOAD_ROWS`), une rangée « Chargement des jeux suivants… » apparaît et le lot suivant arrive après `BATCH_DELAY` ; une touche maintenue qui dépasse le lot le fait rattraper aussitôt. Nouveau filtre ou tri : retour au premier lot. Le minuteur vit **hors de l'effet** : sinon chaque déplacement pendant la pause l'annulait et la grille restait bloquée sur « Chargement… ».
 - Filtres (LT / RT) : **Tous · Installés · Favoris**, encadrés des glyphes LT / RT (L2 / R2) comme les périodes des statistiques : on voit tout de suite comment changer de catégorie. Pas de filtre « Récemment joué » : le tri « Dernière partie » le fait déjà sur « Tous ». Le filtre et le tri sont **mémorisés d'une session à l'autre** (`library_filter`, `library_sort` dans les réglages, `setLibraryView`).
 - Le tri « dernière partie » s'affiche **« Récemment joué »**, plus clair.
@@ -222,12 +222,12 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - Un jeu non détecté dont l'exécutable existe encore est **gardé** : la synchronisation ne doit jamais faire perdre un jeu jouable. Favoris et temps de jeu sont rangés sous l'identifiant : ils survivent à un changement de chemin.
 - La détection détaillée, avec cases à cocher, reste dans Réglages → Jeux. **B l'annule tout de suite**, même pendant le scan : un numéro de scan (`scanTicket`) fait ignorer un résultat qui arrive après la fermeture ; le scan Rust finit dans son coin sans rien afficher.
 
-## Menu d'options d'une tuile
+## Menu d'options d'un jeu (`OptionsMenu.svelte`)
 
-- **X** sur l'accueil ouvre un panneau **dans la rangée**, à droite de la tuile sélectionnée : il pousse les tuiles suivantes au lieu de les recouvrir, en animant sa largeur. On voit donc toujours de quel jeu il s'agit.
-- Entrées : favori, changer l'affiche, mettre à jour, vérifier les fichiers, désinstaller.
-- Le panneau est **un tiroir de la tuile** : il reprend sa hauteur, son contour d'accent et ses coins, et se colle à son bord droit (marges négatives qui annulent l'espacement de la rangée). Tuile et panneau se lisent comme un seul bloc.
-- Sur une **fiche de jeu**, il n'y a pas de tuile à prolonger : un troisième bouton « Options » (et la touche X) ouvre le même jeu d'actions dans `OptionsMenu.svelte`, avec des lignes identiques à celles du tiroir.
+- **X** ouvre **la même fenêtre partout** (accueil, bibliothèque, fiche ; état `menuOptionsOpen`), façon Xbox : en tête la jaquette (`Cover.svelte`), la boutique et le nom du jeu, puis les lignes (icône ronde + libellé) qui entrent l'une après l'autre, la sélection avec contour d'accent, halo et léger décalage ; en pied, les glyphes A Choisir · B Fermer. Variables `--options-*`.
+- L'ancien tiroir de l'accueil, qui sortait de la tuile en poussant la rangée, est abandonné (`TileOptions.svelte` n'est plus utilisé).
+- Entrées : favori, changer la jaquette, changer l'image de fond, puis pour un jeu installé changer l'exécutable, mettre à jour, vérifier les fichiers, désinstaller (un jeu non installé : « Installer »).
+- Capture : `?screen=home&index=N&options=1`.
 - Tout ce qui touche à l'installation est **confié à Steam** (`steam://install|validate|uninstall`) ou au launcher Epic (`com.epicgames.launcher://apps/…`), par la commande Rust `open_url` — qui n'accepte que ces deux protocoles **et seulement les caractères `[A-Za-z0-9:/?=._-]`** (`url_is_safe`, testé) : sous Windows l'adresse passe par `cmd /C start`, qui interprète `&`, `|`, `^`, `%` — `steam://x&calc` lançait une autre commande.
 
 ## PC neuf
@@ -252,6 +252,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 - La détection peut se tromper d'exécutable (MotoGP qui ne se lançait pas). Options d'un jeu installé → **« Changer l'exécutable »** ouvre un explorateur façon Xbox : « Ce PC » (disques, `list_roots`), puis dossiers et exécutables seulement (`list_dir` : sous-dossiers puis `.exe` / `.bat` / `.cmd` — exécutables ou `.sh` / AppImage sous Linux —, cachés et système omis, 2 000 entrées au plus), fil d'Ariane en haut.
 - Haut / bas parcourent (la liste glisse pour garder la sélection au tiers supérieur), A ou droite ouvre un dossier, A sur un exécutable le choisit, B ou gauche remonte (en reprenant le dossier d'où l'on sort), X ferme. Chaque dossier entre en glissant du côté où l'on va (`in:fly`). L'exécutable actuel porte « Actuel ». Départ : le dossier de l'exécutable actuel ; un jeu Steam (client Steam) part de `steamapps/common`.
 - `setGameExecutable` : chemin enregistré, arguments vidés (lancement direct), et **`custom_executable`** (aussi côté Rust, `ScannedGame`) : la recherche automatique au démarrage et « Synchroniser » ne le remplacent plus jamais — sans ça, le mauvais chemin revenait à chaque lancement.
+- L'effet d'ouverture passe par `untrack` : `go()` lit `path` et `index`, et sans ça chaque déplacement ramenait l'explorateur à son dossier de départ (« ça glitche »).
 - Variables `--files-*`. Capture : `?index=N&modal=files` (faux dossier « MotoGP 24 »).
 
 ## Erreurs
@@ -324,7 +325,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
   chrome --headless=new --window-size=1920,1080 --virtual-time-budget=9000 \
     --screenshot=out.png "http://localhost:5177/?screen=detail&index=4"
   ```
-  `?screen=home|detail` et `?index=N` ouvrent directement un état donné.
+  `?screen=home|detail` et `?index=N` ouvrent directement un état donné. Ajouter **`?nopad`** : Chrome headless lit la vraie manette du PC, et une partie en cours faisait changer l'écran capturé.
 
 ## Recherche et clavier à l'écran
 

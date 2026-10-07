@@ -1,7 +1,6 @@
 <script lang="ts">
-	import type { Game, TileAction } from './types';
+	import type { Game } from './types';
 	import Cover from './Cover.svelte';
-	import TileOptions from './TileOptions.svelte';
 	import { heroFor } from './steam.svelte.js';
 	import { lastPlayedText, playtimeOf, playtimeText } from './library.svelte.js';
 	import { platformOf } from './stats';
@@ -20,9 +19,6 @@
 	let {
 		games,
 		index,
-		actions = [],
-		optionsOpen = false,
-		optionsIndex = 0,
 		resume = null,
 		focused = true,
 		installed = [],
@@ -33,9 +29,6 @@
 	}: {
 		games: Game[];
 		index: number;
-		actions?: TileAction[];
-		optionsOpen?: boolean;
-		optionsIndex?: number;
 		/** Dernier jeu lancé ; sans lui, pas de carte. */
 		resume?: Game | null;
 		/**
@@ -98,9 +91,6 @@
 					<span class="name">{resume.title}</span>
 				</span>
 			</button>
-			{#if onResume}
-				<TileOptions {actions} index={optionsIndex} open={optionsOpen} />
-			{/if}
 		{/if}
 		{#each games as game, i (game.id)}
 			<button
@@ -112,9 +102,6 @@
 				<Cover {game} />
 				<span class="caption">{game.title}</span>
 			</button>
-			{#if i === index}
-				<TileOptions {actions} index={optionsIndex} open={optionsOpen} />
-			{/if}
 		{/each}
 	</div>
 
