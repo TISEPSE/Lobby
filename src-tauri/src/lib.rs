@@ -667,6 +667,28 @@ fn foreground_state() -> &'static str {
   }
 }
 
+/// Lobby est-il la fenêtre au premier plan ? La manette ne pilote l'interface
+/// que dans ce cas : `document.hasFocus()` restait vrai pendant une partie.
+/// Hors Windows (session Gamescope), on s'en remet au webview.
+#[tauri::command]
+fn lobby_in_front() -> bool {
+  #[cfg(windows)]
+  unsafe {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
+    let hwnd = GetForegroundWindow();
+    if hwnd.is_null() {
+      return false;
+    }
+    let mut pid = 0u32;
+    GetWindowThreadProcessId(hwnd, &mut pid);
+    pid == std::process::id()
+  }
+  #[cfg(not(windows))]
+  {
+    true
+  }
+}
+
 /// Compte Steam connecté sur cette machine, ses jeux joués et sa photo.
 /// `None` quand Steam n'est pas installé ou qu'aucun compte n'y est connecté.
 #[tauri::command]
@@ -1640,6 +1662,7 @@ pub fn run() {
       set_launch_cover,
       bring_to_front,
       foreground_state,
+      lobby_in_front,
       list_roots,
       list_dir,
       power_action,

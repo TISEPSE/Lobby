@@ -102,6 +102,28 @@ export function allowInBackground(actions: Action[]) {
 	for (const action of actions) background.add(action);
 }
 
+/**
+ * Lobby est-il vraiment au premier plan ? Le webview ne le dit pas de façon
+ * fiable : `document.hasFocus()` restait vrai pendant qu'on jouait, et la
+ * manette pilotait l'interface derrière le jeu. Dans l'application, on
+ * demande donc à Windows si Lobby est au premier plan (`lobby_in_front`),
+ * quatre fois par seconde.
+ */
+let windowActive = true;
+let activeTimer: ReturnType<typeof setInterval> | null = null;
+
+function watchForeground() {
+	if (!(window as any).__TAURI_INTERNALS__ || activeTimer) return;
+	activeTimer = setInterval(async () => {
+		try {
+			const { invoke } = await import('@tauri-apps/api/core');
+			windowActive = await invoke<boolean>('lobby_in_front');
+		} catch {
+			windowActive = true;
+		}
+	}, 250);
+}
+
 function emit(action: Action) {
 	for (const listener of listeners) listener(action);
 }
@@ -120,7 +142,7 @@ function poll(now: number) {
 	// Fenêtre sans le focus (un jeu, une autre application) : la manette ne
 	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
 	// une touche encore tenue ne déclenche rien.
-	const focused = document.hasFocus();
+	const focused = windowActive && document.hasFocus();
 	if (!pad || NO_PAD || (!focused && background.size === 0)) {
 		held = null;
 		seenPad = '';
@@ -191,12 +213,15 @@ export function listen(listener: Listener): () => void {
 	if (listeners.size === 1) {
 		frame = requestAnimationFrame(poll);
 		window.addEventListener('keydown', onKey);
+		watchForeground();
 	}
 	return () => {
 		listeners.delete(listener);
 		if (listeners.size === 0) {
 			cancelAnimationFrame(frame);
 			window.removeEventListener('keydown', onKey);
+			if (activeTimer) clearInterval(activeTimer);
+			activeTimer = null;
 		}
 	};
 }

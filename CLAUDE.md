@@ -55,7 +55,7 @@ Le projet a d'abord été écrit en Godot 4 / GDScript. Tout est conservé dans 
 ## Manette (`src/lib/gamepad.ts`)
 
 - API Gamepad, interrogée à chaque frame ; le clavier est branché en parallèle (flèches, Entrée, Échap).
-- **La manette ne pilote l'interface que si sa fenêtre a le focus** (`document.hasFocus()`) : en jeu ou sur une autre application, chaque appui agissait aussi dans Lobby. Au retour du focus, l'état de la manette sert de nouveau départ (`seenPad`).
+- **La manette ne pilote l'interface que si Lobby est au premier plan** : en jeu ou sur une autre application, chaque appui agissait aussi dans Lobby. `document.hasFocus()` ne suffit pas (il restait vrai sous WebView2 pendant une partie) : quatre fois par seconde, `lobby_in_front` (Rust, `GetForegroundWindow`) dit si la fenêtre au premier plan est la nôtre ; hors Windows, il répond toujours oui. Au retour du focus, l'état de la manette sert de nouveau départ (`seenPad`).
 - Seuils **asymétriques** : engagement à 0,65, relâchement à 0,40. Sans cette hystérésis, un stick qui traîne au repos fait défiler la sélection tout seul — c'est le bug qu'on a eu dans la version Godot.
 - Maintenir une direction répète l'action après 350 ms, puis toutes les 120 ms.
 - Les boutons ne déclenchent qu'au front montant : un appui = une action.
