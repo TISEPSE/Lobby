@@ -4,6 +4,7 @@
  */
 import type { Game, Outcome } from './types';
 import { markLaunched, recordSession } from './library.svelte.js';
+import { endSession, session, startSession } from './session.svelte.js';
 
 const STEAM = 'C:/Program Files (x86)/Steam/steam.exe';
 
@@ -30,6 +31,8 @@ export async function play(game: Game): Promise<Outcome> {
 		});
 		markLaunched(game.id);
 		const steamApp = args[0] === '-applaunch' ? Number(args[1]) : 0;
+		// Un jeu Steam : le processus lancé est le client Steam, à ne jamais arrêter.
+		startSession(game.id, steamApp ? 0 : pid);
 		if (steamApp) watchSteam(steamApp, game.id);
 		else watch(pid, game.id);
 		return { ok: true, message: `${game.title} démarre…` };
@@ -46,8 +49,12 @@ async function watch(pid: number, id: string) {
 	const { invoke } = await import('@tauri-apps/api/core');
 	const start = Date.now();
 	const timer = setInterval(async () => {
-		if (!(await invoke<boolean>('is_running', { pid }))) {
+		// Le processus lancé peut n'être qu'un lanceur : une fois la fenêtre du
+		// jeu repérée, c'est elle qu'on suit.
+		const target = session.id === id && session.pid ? session.pid : pid;
+		if (!(await invoke<boolean>('is_running', { pid: target }))) {
 			clearInterval(timer);
+			endSession(id);
 			// Moins d'une minute, ce n'est pas une partie : c'est le plus souvent
 			// `steam -applaunch`, qui confie le jeu à Steam et rend la main aussitôt.
 			const minutes = (Date.now() - start) / 60_000;
@@ -79,11 +86,15 @@ async function watchSteam(appid: number, id: string) {
 		if (!start) {
 			if (running === appid) start = Date.now();
 			// Le jeu n'a jamais démarré (annulé, erreur Steam) : on abandonne.
-			else if (Date.now() - launched > STEAM_START_TIMEOUT) clearInterval(timer);
+			else if (Date.now() - launched > STEAM_START_TIMEOUT) {
+				clearInterval(timer);
+				endSession(id);
+			}
 			return;
 		}
 		if (running === appid) return;
 		clearInterval(timer);
+		endSession(id);
 		const minutes = (Date.now() - start) / 60_000;
 		if (minutes >= 1) recordSession(id, start, minutes);
 		window.dispatchEvent(new CustomEvent('game-exited'));

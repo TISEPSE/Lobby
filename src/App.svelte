@@ -30,7 +30,8 @@
 	import FilePicker from './lib/FilePicker.svelte';
 	import { remember } from './lib/notices.svelte.js';
 	import type { TileAction, Game, Section, Outcome } from './lib/types';
-	import { allowInBackground, listen, padCount, type Action } from './lib/gamepad';
+	import { allowInBackground, listen, onGameCombo, padCount, type Action } from './lib/gamepad';
+	import { endSession, session, sessionPid, setSessionWindow } from './lib/session.svelte.js';
 	import type { GlyphButton } from './lib/glyphs';
 	import {
 		forgetSteamLibrary,
@@ -208,6 +209,17 @@
 	let launchSlow = $state(params.get('slow') === '1');
 	let launchTimers: ReturnType<typeof setTimeout>[] = [];
 	let launchPoll: ReturnType<typeof setInterval> | null = null;
+	/**
+	 * Menu du jeu en cours, façon guide Xbox : View + Menu maintenus pendant
+	 * la partie, ou X sur sa carte à l'accueil. Capture : `?gamemenu=1`.
+	 */
+	let gameMenuOpen = $state(params.get('gamemenu') === '1');
+	let gameMenuIndex = $state(0);
+	const GAME_MENU: TileAction[] = [
+		{ id: 'resume', label: 'Revenir au jeu', icon: 'play' },
+		{ id: 'quit', label: 'Quitter le jeu', icon: 'exit' },
+		{ id: 'stay', label: "Rester sur l'accueil", icon: 'home' },
+	];
 	let powerIndex = $state(0);
 	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
 
@@ -279,9 +291,16 @@
 		...uninstalledEpicGames(epicAccount.library),
 	]);
 	const libraryGames = $derived(view(filter, sort, allGames));
+	/** Le jeu en cours, lancé depuis Lobby. `?running=demo` fait comme si la carte tournait. */
+	const runningGame = $derived(
+		session.id ? (games.find((game) => game.id === session.id) ?? null) : null
+	);
+	const isRunning = $derived(
+		params.get('gamemenu') === '1' || params.get('running') === 'demo' || runningGame !== null
+	);
 	/** Dernier jeu lancé. `?resume=demo` en invente un, pour juger la carte dans un navigateur. */
 	const resumeGame = $derived(
-		params.get('resume') === 'demo' ? (games[1] ?? null) : lastPlayedGame()
+		params.get('resume') === 'demo' ? (games[1] ?? null) : (runningGame ?? lastPlayedGame())
 	);
 
 	/**
@@ -437,6 +456,8 @@
 		// La carte « Reprendre » lance directement : c'est tout son intérêt.
 		else if (action === 'accept' && homeIndex < 0) launch();
 		else if (action === 'accept') openDetail(homeGames[homeIndex]);
+		// Le jeu tourne : X ouvre le menu du jeu, déjà sur « Quitter ».
+		else if (action === 'options' && homeIndex < 0 && isRunning) openGameMenu(1);
 		// X : les options du jeu, dans une fenêtre (comme la bibliothèque et la fiche).
 		else if (action === 'options') {
 			optionsIndex = 0;
@@ -758,6 +779,8 @@
 			viewerOpen,
 			powerIndex,
 			optionsIndex,
+			gameMenuOpen,
+			gameMenuIndex,
 			opened?.id,
 			section === 'profile' ? (profileComponent?.selectionKey?.() ?? null) : '',
 			statsOpen ? (statsComponent?.selectionKey?.() ?? null) : '',
@@ -771,6 +794,7 @@
 			if (action === 'cancel') endLaunchCover();
 			return;
 		}
+		if (gameMenuOpen) return handleGameMenu(action);
 		if (powerOpen) return handlePower(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
@@ -829,6 +853,8 @@
 
 	async function launch() {
 		if (!selected) return;
+		// Il tourne déjà : on y revient au lieu d'en lancer un second.
+		if (selected.id === session.id) return returnToGame();
 		// Un jeu possédé mais pas installé : on confie l'installation à son launcher.
 		if (selected.installed === false) {
 			playSound('accept');
@@ -855,6 +881,55 @@
 	 * lancement — le jeu — et lui donne le focus, puis l'écran s'efface. Ni
 	 * bureau, ni fenêtre de lancement entre les deux.
 	 */
+	function openGameMenu(index = 0) {
+		menuOptionsOpen = false;
+		gameMenuIndex = index;
+		gameMenuOpen = true;
+	}
+
+	/** Menu du jeu : haut / bas, A choisit, B revient au jeu — comme le guide Xbox. */
+	async function handleGameMenu(action: Action) {
+		if (action === 'up') gameMenuIndex = Math.max(0, gameMenuIndex - 1);
+		else if (action === 'down') gameMenuIndex = Math.min(GAME_MENU.length - 1, gameMenuIndex + 1);
+		else if (action === 'cancel') await returnToGame();
+		else if (action === 'accept') {
+			const id = GAME_MENU[gameMenuIndex].id;
+			if (id === 'resume') await returnToGame();
+			else if (id === 'quit') await quitGame();
+			else gameMenuOpen = false;
+		}
+	}
+
+	/** Revenir au jeu en cours : Lobby lui rend le premier plan. */
+	async function returnToGame() {
+		gameMenuOpen = false;
+		const pid = sessionPid();
+		if (!(window as any).__TAURI_INTERNALS__) return;
+		const { invoke } = await import('@tauri-apps/api/core');
+		const ok = pid > 0 && (await invoke<boolean>('focus_process', { pid }).catch(() => false));
+		if (!ok) notify('Fenêtre du jeu introuvable : reviens-y avec Alt + Tab.', false);
+	}
+
+	/** « Quitter le jeu », comme sur Xbox : son processus est arrêté. */
+	async function quitGame() {
+		gameMenuOpen = false;
+		const game = runningGame;
+		const pid = sessionPid();
+		if (!game || !pid) {
+			notify('Impossible de quitter : Lobby ne sait pas quel processus arrêter.', false);
+			return;
+		}
+		const { invoke } = await import('@tauri-apps/api/core');
+		try {
+			await invoke('kill_process', { pid });
+			endSession(game.id);
+			playSound('cancel');
+			notify(`${game.title} est fermé.`);
+		} catch (error) {
+			notify(`Impossible de quitter ${game.title} : ${error}`, false);
+		}
+	}
+
 	async function startLaunchCover(game: Game) {
 		endLaunchCover();
 		const { invoke } = await import('@tauri-apps/api/core');
@@ -869,7 +944,11 @@
 		launchPoll = setInterval(async () => {
 			if (Date.now() - shown < LAUNCH_MIN) return;
 			// La fenêtre du jeu est là : Rust lui donne le focus, l'écran s'efface.
-			if (await invoke<boolean>('focus_game_window').catch(() => false)) endLaunchCover();
+			const pid = await invoke<number>('focus_game_window').catch(() => 0);
+			if (!pid) return;
+			// 1 : fenêtre prête mais sans processus désigné (Gamescope).
+			if (pid > 1) setSessionWindow(pid);
+			endLaunchCover();
 		}, 500);
 	}
 
@@ -961,9 +1040,26 @@
 		// Fin de partie : Lobby revient au premier plan.
 		const onGameExited = () => {
 			endLaunchCover();
+			gameMenuOpen = false;
 			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
 		};
 		window.addEventListener('game-exited', onGameExited);
+		// View + Menu maintenus en pleine partie : Lobby revient sur l'accueil,
+		// menu du jeu ouvert (Revenir au jeu · Quitter · Rester).
+		onGameCombo(() => {
+			if (!session.id) return;
+			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
+			opened = null;
+			viewerOpen = false;
+			searchOpen = false;
+			filePickerOpen = false;
+			artPickerOpen = false;
+			powerOpen = false;
+			goToSection('home');
+			homeZone = 'row';
+			homeIndex = -1;
+			openGameMenu(0);
+		});
 		// Capture : `?launch=demo` montre l'écran de lancement du jeu sélectionné.
 		if (params.get('launch') === 'demo') launching = selected ?? null;
 		window.addEventListener('error', onError);
@@ -988,6 +1084,7 @@
 			clearInterval(timer);
 			window.removeEventListener('keydown', onF11);
 			window.removeEventListener('game-exited', onGameExited);
+			onGameCombo(null);
 			endLaunchCover();
 			window.removeEventListener('error', onError);
 			window.removeEventListener('unhandledrejection', onRejection);
@@ -1002,6 +1099,7 @@
 						label: isFavorite(selected.id) ? 'Retirer des favoris' : 'Ajouter aux favoris',
 						icon: 'star',
 					},
+					...(selected.id === session.id ? [{ id: 'quit', label: 'Quitter le jeu', icon: 'exit' }] : []),
 					{ id: 'art', label: 'Changer la jaquette', icon: 'image' },
 					{ id: 'art-bg', label: "Changer l'image de fond", icon: 'video' },
 					// Pas installé : rien à mettre à jour ni à désinstaller.
@@ -1043,6 +1141,9 @@
 			case 'install':
 				notify(await installSelected());
 				break;
+			case 'quit':
+				await quitGame();
+				break;
 			case 'executable':
 				// La détection a pu se tromper : on choisit le bon fichier soi-même.
 				filePickerOpen = true;
@@ -1073,6 +1174,8 @@
 
 		if (searchOpen) return list(['a', 'Taper / Ouvrir'], ['y', 'Espace'], ['b', 'Fermer']);
 		if (keyboardOpen) return list(['a', 'Taper'], ['x', 'Effacer'], ['y', 'Espace'], ['b', 'Annuler']);
+		// Le menu du jeu affiche ses propres touches.
+		if (gameMenuOpen) return list();
 		if (powerOpen) return list(['a', 'Valider'], ['b', 'Annuler']);
 		if (avatarPickerOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (artPickerOpen) return list(['a', 'Choisir cette image'], ['b', 'Fermer']);
@@ -1118,8 +1221,8 @@
 			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche']);
 		}
 		return list(
-			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
-			['x', 'Options'],
+			['a', homeIndex < 0 ? (isRunning ? 'Revenir au jeu' : 'Reprendre') : 'Ouvrir'],
+			['x', homeIndex < 0 && isRunning ? 'Quitter le jeu' : 'Options'],
 			['y', 'Recherche'],
 			['dpad', 'Lanceurs et activité']
 		);
@@ -1161,6 +1264,7 @@
 			games={homeGames}
 			index={homeIndex}
 			resume={resumeGame}
+			running={isRunning}
 			focused={homeZone === 'row'}
 			installed={games}
 			{sessions}
@@ -1354,6 +1458,15 @@
 />
 
 <OptionsMenu actions={tileActions} index={optionsIndex} open={menuOptionsOpen} game={selected} />
+
+<OptionsMenu
+	actions={GAME_MENU}
+	index={gameMenuIndex}
+	open={gameMenuOpen}
+	game={runningGame ?? resumeGame}
+	subtitle="En cours"
+	backLabel="Revenir au jeu"
+/>
 
 <ArtPicker
 	bind:this={artPickerComponent}

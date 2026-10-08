@@ -5,6 +5,7 @@
 	import { lastPlayedText, playtimeOf, playtimeText } from './library.svelte.js';
 	import { platformOf } from './stats';
 	import HomePanels from './HomePanels.svelte';
+	import Glyph from './Glyph.svelte';
 	import type { DownloadStatus } from './downloads.svelte.js';
 	import type { SessionRecord } from './types';
 
@@ -20,6 +21,7 @@
 		games,
 		index,
 		resume = null,
+		running = false,
 		focused = true,
 		installed = [],
 		sessions = [],
@@ -31,6 +33,8 @@
 		index: number;
 		/** Dernier jeu lancé ; sans lui, pas de carte. */
 		resume?: Game | null;
+		/** Le jeu de la carte tourne : « En cours », A y revient, X le quitte. */
+		running?: boolean;
 		/**
 		 * La sélection est dans la rangée. Sinon (barre du haut), aucune tuile ne
 		 * porte le contour : un seul élément sélectionné à l'écran.
@@ -54,7 +58,15 @@
 	 */
 	function facts(game: Game): string {
 		const when = lastPlayedText(game.id);
-		const parts = [when ? `Dernière partie ${when}` : onResume ? 'Prêt à reprendre' : 'Jamais joué'];
+		const parts = [
+			onResume && running
+				? 'En cours'
+				: when
+					? `Dernière partie ${when}`
+					: onResume
+						? 'Prêt à reprendre'
+						: 'Jamais joué',
+		];
 		if (playtimeOf(game.id) > 0) parts.push(`${playtimeText(game.id)} de jeu`);
 		parts.push(platformOf(game));
 		return parts.join(' · ');
@@ -87,7 +99,14 @@
 			<button class="resume" class:selected={focused && onResume} aria-current={onResume}>
 				<span class="art" style="background-image: url({heroFor(resume)})"></span>
 				<span class="label">
-					<span class="chip"><img src="/assets/icons/play.svg" alt="" />Reprendre</span>
+					<span class="chips">
+						<span class="chip">
+							<img src="/assets/icons/play.svg" alt="" />{running ? 'En cours' : 'Reprendre'}
+						</span>
+						{#if running}
+							<span class="chip quit"><Glyph button="x" size="22px" />Quitter</span>
+						{/if}
+					</span>
 					<span class="name">{resume.title}</span>
 				</span>
 			</button>
@@ -246,6 +265,19 @@
 		gap: 8px;
 		padding: 40px 18px 16px;
 		background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+	}
+
+	.chips {
+		display: flex;
+		gap: 8px;
+	}
+
+	/* « Quitter » : à côté de la pastille d'accent, en retrait — c'est une
+	   action secondaire, le glyphe X dit comment la déclencher. */
+	.chip.quit {
+		gap: 6px;
+		background: var(--surface-strong);
+		color: var(--text);
 	}
 
 	.chip {

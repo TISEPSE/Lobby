@@ -124,6 +124,38 @@ function watchForeground() {
 	}, 250);
 }
 
+/**
+ * View + Menu (Share + Options) maintenus ensemble pendant une partie :
+ * Lobby revient et ouvre le menu du jeu, comme le bouton Xbox. Lu même quand
+ * Lobby n'est pas au premier plan — c'est tout l'intérêt. Maintenir évite de
+ * le déclencher par mégarde ; les deux boutons, rarement pressés ensemble en
+ * jeu, évitent le bouton Xbox / PS, déjà pris par la Game Bar et Steam.
+ */
+const COMBO = [8, 9];
+const COMBO_HOLD = 400;
+let comboHandler: (() => void) | null = null;
+let comboSince = 0;
+let comboFired = false;
+
+/** Ce que déclenche View + Menu maintenus hors de Lobby (`null` : rien). */
+export function onGameCombo(handler: (() => void) | null) {
+	comboHandler = handler;
+}
+
+function checkCombo(pad: Gamepad, now: number) {
+	const both = COMBO.every((i) => pad.buttons[i]?.pressed);
+	if (!both) {
+		comboSince = 0;
+		comboFired = false;
+		return;
+	}
+	if (!comboSince) comboSince = now;
+	if (!comboFired && now - comboSince >= COMBO_HOLD) {
+		comboFired = true;
+		comboHandler?.();
+	}
+}
+
 function emit(action: Action) {
 	for (const listener of listeners) listener(action);
 }
@@ -143,6 +175,7 @@ function poll(now: number) {
 	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
 	// une touche encore tenue ne déclenche rien.
 	const focused = windowActive && document.hasFocus();
+	if (pad && !NO_PAD && !focused && comboHandler) checkCombo(pad, now);
 	if (!pad || NO_PAD || (!focused && background.size === 0)) {
 		held = null;
 		seenPad = '';

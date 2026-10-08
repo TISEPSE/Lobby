@@ -572,7 +572,7 @@ fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
 fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
   #[cfg(windows)]
   if on {
-    *LAUNCH_BASELINE.lock().unwrap() = big_windows().into_iter().map(|(hwnd, _)| hwnd).collect();
+    *LAUNCH_BASELINE.lock().unwrap() = big_windows().into_iter().map(|(hwnd, _, _)| hwnd).collect();
   }
   window.set_always_on_top(on).map_err(|e| e.to_string())
 }
@@ -580,11 +580,35 @@ fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String
 /// Fin de partie : Lobby revient au premier plan. Windows refuse souvent de
 /// donner le focus à une fenêtre en arrière-plan ; passer un instant
 /// « au-dessus de tout » contourne ce verrou.
+///
+/// Depuis une partie (View + Menu), Windows refuse aussi `set_focus` : Lobby
+/// se rattache un instant à la file d'entrée de la fenêtre au premier plan
+/// (`AttachThreadInput`), ce qui l'autorise à prendre le focus.
 #[tauri::command]
 fn bring_to_front(window: tauri::WebviewWindow) {
   let _ = window.unminimize();
   let _ = window.show();
   let _ = window.set_always_on_top(true);
+  #[cfg(windows)]
+  if let Ok(hwnd) = window.hwnd() {
+    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+      BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+    };
+    unsafe {
+      let ours = hwnd.0 as _;
+      let front = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+      let me = GetCurrentThreadId();
+      let attached = front != 0 && front != me && AttachThreadInput(me, front, 1) != 0;
+      BringWindowToTop(ours);
+      SetForegroundWindow(ours);
+      SetFocus(ours);
+      if attached {
+        AttachThreadInput(me, front, 0);
+      }
+    }
+  }
   let _ = window.set_focus();
   let _ = window.set_always_on_top(false);
 }
@@ -632,9 +656,9 @@ static LAUNCH_BASELINE: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec
 /// Grandes fenêtres visibles d'autres programmes que Lobby et les launchers :
 /// au moins 60 % de leur écran (les fenêtres de lancement — logo de
 /// l'éditeur — sont bien plus petites), ni réduites ni masquées. Rend la
-/// fenêtre et sa surface.
+/// fenêtre, sa surface et son processus.
 #[cfg(windows)]
-fn big_windows() -> Vec<(isize, i64)> {
+fn big_windows() -> Vec<(isize, i64, u32)> {
   use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
   use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
   use windows_sys::Win32::Graphics::Gdi::{
@@ -645,7 +669,7 @@ fn big_windows() -> Vec<(isize, i64)> {
   };
 
   unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
-    let found = &mut *(data as *mut Vec<(isize, i64)>);
+    let found = &mut *(data as *mut Vec<(isize, i64, u32)>);
     if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
       return 1;
     }
@@ -673,12 +697,12 @@ fn big_windows() -> Vec<(isize, i64)> {
     let area = |r: &RECT| i64::from(r.right - r.left).max(0) * i64::from(r.bottom - r.top).max(0);
     let size = area(&rect);
     if size * 10 >= area(&info.rcMonitor) * 6 {
-      found.push((hwnd as isize, size));
+      found.push((hwnd as isize, size, pid));
     }
     1
   }
 
-  let mut found: Vec<(isize, i64)> = Vec::new();
+  let mut found: Vec<(isize, i64, u32)> = Vec::new();
   unsafe {
     EnumWindows(Some(visit), &mut found as *mut _ as LPARAM);
   }
@@ -689,21 +713,50 @@ fn big_windows() -> Vec<(isize, i64)> {
 /// apparue depuis le début du lancement. Si oui, Lobby redescend et **donne
 /// lui-même le focus au jeu** — Windows ne laisse pas une nouvelle fenêtre
 /// prendre le premier plan à une fenêtre « au-dessus de tout » ; Lobby, qui a
-/// le focus, a le droit de le céder. Hors Windows (Gamescope), oui d'office.
+/// le focus, a le droit de le céder. Rend le processus de cette fenêtre (c'est
+/// lui que « Quitter le jeu » arrête), 0 tant qu'elle n'est pas là. Hors
+/// Windows (Gamescope), on ne sait pas la désigner : 1, « prête » d'office.
 #[tauri::command]
-fn focus_game_window(window: tauri::WebviewWindow) -> bool {
+fn focus_game_window(window: tauri::WebviewWindow) -> u32 {
   #[cfg(windows)]
   {
     use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
     let baseline = LAUNCH_BASELINE.lock().unwrap().clone();
     let game = big_windows()
       .into_iter()
-      .filter(|(hwnd, _)| !baseline.contains(hwnd))
-      .max_by_key(|(_, size)| *size);
-    let Some((hwnd, _)) = game else {
-      return false;
+      .filter(|(hwnd, _, _)| !baseline.contains(hwnd))
+      .max_by_key(|(_, size, _)| *size);
+    let Some((hwnd, _, pid)) = game else {
+      return 0;
     };
     let _ = window.set_always_on_top(false);
+    unsafe {
+      BringWindowToTop(hwnd as _);
+      SetForegroundWindow(hwnd as _);
+    }
+    pid
+  }
+  #[cfg(not(windows))]
+  {
+    let _ = window.set_always_on_top(false);
+    1
+  }
+}
+
+/// « Revenir au jeu » : Lobby rend le premier plan à la plus grande fenêtre
+/// du jeu en cours (processus `pid`). Faux si elle n'existe plus.
+#[tauri::command]
+fn focus_process(pid: u32) -> bool {
+  #[cfg(windows)]
+  {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
+    let Some((hwnd, _, _)) = big_windows()
+      .into_iter()
+      .filter(|(_, _, owner)| *owner == pid)
+      .max_by_key(|(_, size, _)| *size)
+    else {
+      return false;
+    };
     unsafe {
       BringWindowToTop(hwnd as _);
       SetForegroundWindow(hwnd as _);
@@ -712,8 +765,33 @@ fn focus_game_window(window: tauri::WebviewWindow) -> bool {
   }
   #[cfg(not(windows))]
   {
-    let _ = window.set_always_on_top(false);
-    true
+    let _ = pid;
+    false
+  }
+}
+
+/// « Quitter le jeu », comme sur Xbox : le processus du jeu (et ses enfants)
+/// est arrêté. Jamais Lobby lui-même.
+#[tauri::command]
+fn kill_process(pid: u32) -> Result<(), String> {
+  if pid == 0 || pid == std::process::id() {
+    return Err("aucun jeu à quitter".into());
+  }
+  #[cfg(windows)]
+  let status = {
+    use std::os::windows::process::CommandExt;
+    // CREATE_NO_WINDOW : pas de console qui clignote par-dessus l'interface.
+    Command::new("taskkill")
+      .args(["/PID", &pid.to_string(), "/T", "/F"])
+      .creation_flags(0x0800_0000)
+      .status()
+  };
+  #[cfg(not(windows))]
+  let status = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
+  match status {
+    Ok(code) if code.success() => Ok(()),
+    Ok(_) => Err("le jeu ne s'est pas arrêté".into()),
+    Err(e) => Err(e.to_string()),
   }
 }
 
@@ -1712,6 +1790,8 @@ pub fn run() {
       set_launch_cover,
       bring_to_front,
       focus_game_window,
+      focus_process,
+      kill_process,
       lobby_in_front,
       list_roots,
       list_dir,

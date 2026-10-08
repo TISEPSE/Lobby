@@ -15,7 +15,18 @@
 		index = 0,
 		open = false,
 		game = null,
-	}: { actions: TileAction[]; index?: number; open?: boolean; game?: Game | null } = $props();
+		subtitle = 'Options du jeu',
+		backLabel = 'Fermer',
+	}: {
+		actions: TileAction[];
+		index?: number;
+		open?: boolean;
+		game?: Game | null;
+		/** Sous le nom du jeu (« En cours » pour le menu du jeu). */
+		subtitle?: string;
+		/** Ce que fait B (« Revenir au jeu » pour le menu du jeu). */
+		backLabel?: string;
+	} = $props();
 </script>
 
 {#if open}
@@ -27,7 +38,7 @@
 					<div class="titles">
 						<span class="store">{platformOf(game)}</span>
 						<h2>{game.title}</h2>
-						<span class="sub">Options du jeu</span>
+						<span class="sub">{subtitle}</span>
 					</div>
 				</header>
 			{/if}
@@ -45,7 +56,7 @@
 
 			<footer class="hints">
 				<span class="hint"><Glyph button="a" size="28px" />Choisir</span>
-				<span class="hint"><Glyph button="b" size="28px" />Fermer</span>
+				<span class="hint"><Glyph button="b" size="28px" />{backLabel}</span>
 			</footer>
 		</section>
 	</div>
