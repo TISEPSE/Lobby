@@ -850,10 +850,10 @@
 
 	/**
 	 * Écran de lancement : Lobby passe au-dessus de tout (`set_launch_cover`)
-	 * et montre le jeu qui démarre ; on interroge Windows toutes les demi-
-	 * secondes (`foreground_state`) et l'écran s'efface dès qu'une grande
-	 * fenêtre d'un autre programme — le jeu — est au premier plan. Ni bureau,
-	 * ni fenêtre de lancement entre les deux.
+	 * et montre le jeu qui démarre ; toutes les demi-secondes,
+	 * `focus_game_window` cherche une grande fenêtre apparue depuis le
+	 * lancement — le jeu — et lui donne le focus, puis l'écran s'efface. Ni
+	 * bureau, ni fenêtre de lancement entre les deux.
 	 */
 	async function startLaunchCover(game: Game) {
 		endLaunchCover();
@@ -867,8 +867,9 @@
 		launchTimers.push(setTimeout(() => (launchSlow = true), LAUNCH_SLOW));
 		launchTimers.push(setTimeout(endLaunchCover, LAUNCH_MAX));
 		launchPoll = setInterval(async () => {
-			const state = await invoke<string>('foreground_state').catch(() => 'other');
-			if (state === 'game' && Date.now() - shown >= LAUNCH_MIN) endLaunchCover();
+			if (Date.now() - shown < LAUNCH_MIN) return;
+			// La fenêtre du jeu est là : Rust lui donne le focus, l'écran s'efface.
+			if (await invoke<boolean>('focus_game_window').catch(() => false)) endLaunchCover();
 		}, 500);
 	}
 

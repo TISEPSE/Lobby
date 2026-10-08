@@ -565,9 +565,15 @@ fn toggle_fullscreen(window: tauri::WebviewWindow) -> Result<bool, String> {
 
 /// Écran de lancement : pendant qu'un jeu démarre, Lobby reste **au-dessus de
 /// tout** (`on`) pour cacher le bureau, les fenêtres de lancement et les
-/// écrans noirs ; il redescend (`off`) dès que la fenêtre du jeu est là.
+/// écrans noirs ; il redescend (`off`) une fois le jeu au premier plan.
+/// À l'allumage, on note les fenêtres déjà ouvertes : un navigateur agrandi
+/// n'est pas le jeu qu'on attend.
 #[tauri::command]
 fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String> {
+  #[cfg(windows)]
+  if on {
+    *LAUNCH_BASELINE.lock().unwrap() = big_windows().into_iter().map(|(hwnd, _)| hwnd).collect();
+  }
   window.set_always_on_top(on).map_err(|e| e.to_string())
 }
 
@@ -619,32 +625,45 @@ fn process_name(pid: u32) -> String {
   }
 }
 
-/// Qui occupe l'écran pendant un lancement : `lobby` (toujours nous), `game`
-/// (une grande fenêtre d'un autre programme — le jeu est prêt), ou `other`
-/// (fenêtre de lancement, boîte de dialogue, launcher).
-#[tauri::command]
-fn foreground_state() -> &'static str {
-  #[cfg(windows)]
-  unsafe {
-    use windows_sys::Win32::Foundation::RECT;
-    use windows_sys::Win32::Graphics::Gdi::{
-      GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
-    };
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-      GetForegroundWindow, GetWindowRect, GetWindowThreadProcessId, IsWindowVisible,
-    };
+/// Fenêtres déjà ouvertes quand le lancement a commencé (`set_launch_cover`).
+#[cfg(windows)]
+static LAUNCH_BASELINE: std::sync::Mutex<Vec<isize>> = std::sync::Mutex::new(Vec::new());
 
-    let hwnd = GetForegroundWindow();
-    if hwnd.is_null() {
-      return "other";
+/// Grandes fenêtres visibles d'autres programmes que Lobby et les launchers :
+/// au moins 60 % de leur écran (les fenêtres de lancement — logo de
+/// l'éditeur — sont bien plus petites), ni réduites ni masquées. Rend la
+/// fenêtre et sa surface.
+#[cfg(windows)]
+fn big_windows() -> Vec<(isize, i64)> {
+  use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM, RECT};
+  use windows_sys::Win32::Graphics::Dwm::{DwmGetWindowAttribute, DWMWA_CLOAKED};
+  use windows_sys::Win32::Graphics::Gdi::{
+    GetMonitorInfoW, MonitorFromWindow, MONITORINFO, MONITOR_DEFAULTTONEAREST,
+  };
+  use windows_sys::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowRect, GetWindowThreadProcessId, IsIconic, IsWindowVisible,
+  };
+
+  unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
+    let found = &mut *(data as *mut Vec<(isize, i64)>);
+    if IsWindowVisible(hwnd) == 0 || IsIconic(hwnd) != 0 {
+      return 1;
+    }
+    // Fenêtre « masquée » par Windows (applications du Store en sommeil).
+    let mut cloaked = 0u32;
+    DwmGetWindowAttribute(
+      hwnd,
+      DWMWA_CLOAKED as u32,
+      &mut cloaked as *mut u32 as *mut _,
+      std::mem::size_of::<u32>() as u32,
+    );
+    if cloaked != 0 {
+      return 1;
     }
     let mut pid = 0u32;
     GetWindowThreadProcessId(hwnd, &mut pid);
-    if pid == std::process::id() {
-      return "lobby";
-    }
-    if IsWindowVisible(hwnd) == 0 || NOT_A_GAME.contains(&process_name(pid).as_str()) {
-      return "other";
+    if pid == std::process::id() || NOT_A_GAME.contains(&process_name(pid).as_str()) {
+      return 1;
     }
     let mut rect: RECT = std::mem::zeroed();
     GetWindowRect(hwnd, &mut rect);
@@ -652,18 +671,49 @@ fn foreground_state() -> &'static str {
     info.cbSize = std::mem::size_of::<MONITORINFO>() as u32;
     GetMonitorInfoW(MonitorFromWindow(hwnd, MONITOR_DEFAULTTONEAREST), &mut info);
     let area = |r: &RECT| i64::from(r.right - r.left).max(0) * i64::from(r.bottom - r.top).max(0);
-    // Une fenêtre qui couvre au moins 60 % de son écran : c'est le jeu. Les
-    // fenêtres de lancement (logo de l'éditeur) sont bien plus petites.
-    if area(&rect) * 10 >= area(&info.rcMonitor) * 6 {
-      "game"
-    } else {
-      "other"
+    let size = area(&rect);
+    if size * 10 >= area(&info.rcMonitor) * 6 {
+      found.push((hwnd as isize, size));
     }
+    1
   }
-  // Session Gamescope : le jeu prend l'écran de lui-même.
+
+  let mut found: Vec<(isize, i64)> = Vec::new();
+  unsafe {
+    EnumWindows(Some(visit), &mut found as *mut _ as LPARAM);
+  }
+  found
+}
+
+/// Écran de lancement : la fenêtre du jeu est-elle là ? Une grande fenêtre
+/// apparue depuis le début du lancement. Si oui, Lobby redescend et **donne
+/// lui-même le focus au jeu** — Windows ne laisse pas une nouvelle fenêtre
+/// prendre le premier plan à une fenêtre « au-dessus de tout » ; Lobby, qui a
+/// le focus, a le droit de le céder. Hors Windows (Gamescope), oui d'office.
+#[tauri::command]
+fn focus_game_window(window: tauri::WebviewWindow) -> bool {
+  #[cfg(windows)]
+  {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
+    let baseline = LAUNCH_BASELINE.lock().unwrap().clone();
+    let game = big_windows()
+      .into_iter()
+      .filter(|(hwnd, _)| !baseline.contains(hwnd))
+      .max_by_key(|(_, size)| *size);
+    let Some((hwnd, _)) = game else {
+      return false;
+    };
+    let _ = window.set_always_on_top(false);
+    unsafe {
+      BringWindowToTop(hwnd as _);
+      SetForegroundWindow(hwnd as _);
+    }
+    true
+  }
   #[cfg(not(windows))]
   {
-    "game"
+    let _ = window.set_always_on_top(false);
+    true
   }
 }
 
@@ -1661,7 +1711,7 @@ pub fn run() {
       steam_running_app,
       set_launch_cover,
       bring_to_front,
-      foreground_state,
+      focus_game_window,
       lobby_in_front,
       list_roots,
       list_dir,
