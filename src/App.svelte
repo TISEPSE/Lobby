@@ -871,8 +871,12 @@
 	const LAUNCH_MIN = 1500;
 	/** Au-delà, le jeu tarde (mise à jour, launcher) : B est proposé. */
 	const LAUNCH_SLOW = 20_000;
-	/** Au-delà, on rend la main, quoi qu'il arrive. */
-	const LAUNCH_MAX = 90_000;
+	/**
+	 * La fenêtre du jeu doit être là à autant de relevés d'affilée (une demi-
+	 * seconde d'écart) : une fenêtre de chargement qui s'ouvre et se referme,
+	 * ou un écran noir passager, ne coupent plus l'animation trop tôt.
+	 */
+	const LAUNCH_STABLE = 3;
 
 	/**
 	 * Écran de lancement : Lobby passe au-dessus de tout (`set_launch_cover`)
@@ -958,10 +962,25 @@
 		await invoke('set_launch_cover', { on: true }).catch(() => {});
 		const shown = Date.now();
 		launchTimers.push(setTimeout(() => (launchSlow = true), LAUNCH_SLOW));
-		launchTimers.push(setTimeout(endLaunchCover, LAUNCH_MAX));
+		// Pas de limite de temps : l'animation tourne tant que le jeu n'est pas
+		// là (B permet toujours de revenir à Lobby).
+		let seen = 0;
+		let seenPid = 0;
 		launchPoll = setInterval(async () => {
 			if (Date.now() - shown < LAUNCH_MIN) return;
-			// La fenêtre du jeu est là : Rust lui donne le focus, l'écran s'efface.
+			const found = await invoke<number>('find_game_window').catch(() => 0);
+			// Un jeu Steam ne compte que quand Steam l'annonce en cours.
+			const steamReady =
+				!session.steamAppid ||
+				(await invoke<number>('steam_running_app').catch(() => 0)) === session.steamAppid;
+			if (!found || !steamReady) {
+				seen = 0;
+				return;
+			}
+			seen = found === seenPid ? seen + 1 : 1;
+			seenPid = found;
+			if (seen < LAUNCH_STABLE) return;
+			// La fenêtre du jeu est là et stable : Rust lui donne le focus.
 			const pid = await invoke<number>('focus_game_window').catch(() => 0);
 			if (!pid) return;
 			// 1 : fenêtre prête mais sans processus désigné (Gamescope).

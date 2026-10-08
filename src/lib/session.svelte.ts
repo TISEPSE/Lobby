@@ -8,16 +8,24 @@
  * - `pid` : le processus de la fenêtre du jeu, repérée par l'écran de
  *   lancement (`focus_game_window`) — le plus sûr à arrêter.
  */
-export const session = $state<{ id: string | null; pid: number; launchPid: number }>({
+export const session = $state<{
+	id: string | null;
+	pid: number;
+	launchPid: number;
+	/** Jeu Steam : son appid (0 sinon). Steam dit quand il tourne vraiment. */
+	steamAppid: number;
+}>({
 	id: null,
 	pid: 0,
 	launchPid: 0,
+	steamAppid: 0,
 });
 
-export function startSession(id: string, launchPid: number) {
+export function startSession(id: string, launchPid: number, steamAppid = 0) {
 	session.id = id;
 	session.pid = 0;
 	session.launchPid = launchPid;
+	session.steamAppid = steamAppid;
 }
 
 /** La fenêtre du jeu est trouvée : c'est son processus qu'on suivra. */
@@ -31,6 +39,7 @@ export function endSession(id?: string) {
 	session.id = null;
 	session.pid = 0;
 	session.launchPid = 0;
+	session.steamAppid = 0;
 }
 
 /** Le processus à viser pour revenir au jeu ou le quitter (0 : inconnu). */

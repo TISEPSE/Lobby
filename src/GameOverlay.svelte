@@ -13,7 +13,7 @@
 	import OptionsMenu from './lib/OptionsMenu.svelte';
 	import { listen, type Action } from './lib/gamepad';
 	import { games, initLibrary } from './lib/library.svelte.js';
-	import { initArtStore } from './lib/steam.svelte.js';
+	import { heroFor, initArtStore } from './lib/steam.svelte.js';
 	import { initSettings, settings } from './lib/settings.svelte.js';
 	import { play as playSound, preloadSounds, setSoundEnabled, setVolumes } from './lib/sound';
 	import type { TileAction } from './lib/types';
@@ -28,7 +28,9 @@
 	let index = $state(0);
 	/** Remonte le menu à chaque ouverture, pour rejouer son entrée. */
 	let opening = $state(0);
-	const game = $derived(games.find((g) => g.id === gameId) ?? null);
+	/** Capture : `?overlay=demo` pose le menu sur l'artwork d'un jeu, comme sur une partie. */
+	const DEMO = new URLSearchParams(location.search).get('overlay') === 'demo';
+	const game = $derived(DEMO ? (games[1] ?? null) : (games.find((g) => g.id === gameId) ?? null));
 
 	async function choose(id: string) {
 		const { emitTo } = await import('@tauri-apps/api/event');
@@ -55,7 +57,11 @@
 	onMount(() => {
 		// Fenêtre transparente : on doit voir le jeu derrière le voile.
 		document.documentElement.style.background = 'transparent';
+		// `html`, `body` et `#app` ont tous le fond sombre de l'interface.
 		document.body.style.background = 'transparent';
+		const root = document.getElementById('app');
+		if (root) root.style.background = 'transparent';
+		if (DEMO && games[1]) document.body.style.background = `center / cover url(${heroFor(games[1])})`;
 		void (async () => {
 			await initSettings();
 			setSoundEnabled(settings.sound_enabled);
@@ -76,7 +82,7 @@
 				index = 0;
 				opening += 1;
 			}).then((fn) => (unlisten = fn))
-		);
+		).catch(() => {});
 		return () => {
 			stop();
 			unlisten?.();
@@ -92,5 +98,6 @@
 		{game}
 		subtitle="En cours"
 		backLabel="Revenir au jeu"
+		floating
 	/>
 {/key}

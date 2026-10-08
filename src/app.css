@@ -102,6 +102,14 @@
 	--launch-run: 1.3s;
 	--launch-veil-center: rgba(7, 8, 11, 0.55);
 	--launch-veil-edge: rgba(7, 8, 11, 0.92);
+	/* Menu du jeu posé sur la partie : voile léger et panneau translucide
+	   (le jeu reste visible derrière), liseré clair. */
+	--overlay-veil: rgba(0, 0, 0, 0.42);
+	--overlay-panel-top: rgba(36, 36, 36, 0.78);
+	--overlay-panel-bottom: rgba(16, 16, 16, 0.86);
+	--overlay-line: rgba(255, 255, 255, 0.14);
+	--overlay-row: rgba(255, 255, 255, 0.07);
+	--overlay-row-selected: rgba(255, 255, 255, 0.16);
 	/* Fenêtre d'options d'un jeu : largeur, jaquette d'en-tête, hauteur d'une ligne. */
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;

@@ -32,7 +32,7 @@ export async function play(game: Game): Promise<Outcome> {
 		markLaunched(game.id);
 		const steamApp = args[0] === '-applaunch' ? Number(args[1]) : 0;
 		// Un jeu Steam : le processus lancé est le client Steam, à ne jamais arrêter.
-		startSession(game.id, steamApp ? 0 : pid);
+		startSession(game.id, steamApp ? 0 : pid, steamApp);
 		if (steamApp) watchSteam(steamApp, game.id);
 		else watch(pid, game.id);
 		return { ok: true, message: `${game.title} démarre…` };

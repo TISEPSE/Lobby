@@ -593,16 +593,29 @@ fn force_foreground(window: &tauri::WebviewWindow, keep_on_top: bool) {
     use windows_sys::Win32::UI::WindowsAndMessaging::{
       BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
     };
+    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_KEYUP, VK_MENU};
     unsafe {
-      let ours = hwnd.0 as _;
-      let front = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
-      let me = GetCurrentThreadId();
-      let attached = front != 0 && front != me && AttachThreadInput(me, front, 1) != 0;
-      BringWindowToTop(ours);
-      SetForegroundWindow(ours);
-      SetFocus(ours);
-      if attached {
-        AttachThreadInput(me, front, 0);
+      let ours: windows_sys::Win32::Foundation::HWND = hwnd.0 as _;
+      // Plusieurs tentatives : un jeu en plein écran garde parfois la main
+      // au premier essai.
+      for _ in 0..5 {
+        let front = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+        let me = GetCurrentThreadId();
+        let attached = front != 0 && front != me && AttachThreadInput(me, front, 1) != 0;
+        // Un appui d'Alt simulé lève le verrou de premier plan de Windows :
+        // c'est ce qui permet de prendre le focus à un jeu.
+        keybd_event(VK_MENU as u8, 0, 0, 0);
+        BringWindowToTop(ours);
+        SetForegroundWindow(ours);
+        SetFocus(ours);
+        keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+        if attached {
+          AttachThreadInput(me, front, 0);
+        }
+        if GetForegroundWindow() == ours {
+          break;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(60));
       }
     }
   }
@@ -769,6 +782,27 @@ fn big_windows() -> Vec<(isize, i64, u32)> {
     EnumWindows(Some(visit), &mut found as *mut _ as LPARAM);
   }
   found
+}
+
+/// La fenêtre du jeu, sans y toucher : la plus grande fenêtre apparue depuis
+/// le début du lancement, et son processus (0 : pas encore là). L'écran de
+/// lancement attend qu'elle soit **stable** avant de lui donner le focus.
+#[tauri::command]
+fn find_game_window() -> u32 {
+  #[cfg(windows)]
+  {
+    let baseline = LAUNCH_BASELINE.lock().unwrap().clone();
+    big_windows()
+      .into_iter()
+      .filter(|(hwnd, _, _)| !baseline.contains(hwnd))
+      .max_by_key(|(_, size, _)| *size)
+      .map(|(_, _, pid)| pid)
+      .unwrap_or(0)
+  }
+  #[cfg(not(windows))]
+  {
+    1
+  }
 }
 
 /// Écran de lancement : la fenêtre du jeu est-elle là ? Une grande fenêtre
@@ -1852,6 +1886,7 @@ pub fn run() {
       set_launch_cover,
       bring_to_front,
       focus_game_window,
+      find_game_window,
       focus_process,
       kill_process,
       lobby_in_front,

@@ -17,6 +17,7 @@
 		game = null,
 		subtitle = 'Options du jeu',
 		backLabel = 'Fermer',
+		floating = false,
 	}: {
 		actions: TileAction[];
 		index?: number;
@@ -26,11 +27,16 @@
 		subtitle?: string;
 		/** Ce que fait B (« Revenir au jeu » pour le menu du jeu). */
 		backLabel?: string;
+		/**
+		 * Posé sur une partie (fenêtre transparente) : voile léger et panneau
+		 * translucide, le jeu reste visible derrière.
+		 */
+		floating?: boolean;
 	} = $props();
 </script>
 
 {#if open}
-	<div class="veil">
+	<div class="veil" class:floating>
 		<section class="menu">
 			{#if game}
 				<header>
@@ -209,6 +215,42 @@
 		display: flex;
 		align-items: center;
 		gap: 10px;
+	}
+
+	/* Sur le jeu : on le devine derrière un voile léger, à travers un panneau
+	   translucide au liseré clair, qui entre en glissant un peu plus. */
+	.veil.floating {
+		background: var(--overlay-veil);
+		backdrop-filter: none;
+	}
+
+	.floating .menu {
+		background: linear-gradient(160deg, var(--overlay-panel-top), var(--overlay-panel-bottom));
+		border-color: var(--overlay-line);
+		box-shadow:
+			0 30px 90px rgba(0, 0, 0, 0.6),
+			inset 0 1px 0 var(--overlay-line);
+		animation: float-in var(--normal) var(--ease) both;
+	}
+
+	.floating header,
+	.floating .hints {
+		border-color: var(--overlay-line);
+	}
+
+	.floating .row {
+		background: var(--overlay-row);
+	}
+
+	.floating .row.selected {
+		background: var(--overlay-row-selected);
+	}
+
+	@keyframes float-in {
+		from {
+			opacity: 0;
+			transform: translateY(24px) scale(0.96);
+		}
 	}
 
 	@keyframes fade-in {
