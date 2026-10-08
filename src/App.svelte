@@ -1236,7 +1236,7 @@
 		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['b', 'Accueil']);
 		if (section === 'settings') return list(['a', 'Valider'], ['b', 'Accueil']);
 		if (homeZone === 'row' && homeGames.length === 0 && !resumeGame) {
-			return list(['a', 'Détecter mes jeux'], ['dpad', 'Lanceurs et activité'], ['y', 'Recherche']);
+			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche']);
 		}
 		if (homeZone === 'panels') {
 			const what = panelIndex === 0 ? 'Bibliothèque' : panelIndex === 1 ? 'Statistiques' : 'Voir le jeu';
@@ -1245,8 +1245,7 @@
 		return list(
 			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
 			['x', homeIndex < 0 && isRunning ? 'Quitter le jeu' : 'Options'],
-			['y', 'Recherche'],
-			['dpad', 'Lanceurs et activité']
+			['y', 'Recherche']
 		);
 	});
 </script>
