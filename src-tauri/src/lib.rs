@@ -577,15 +577,12 @@ fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String
   window.set_always_on_top(on).map_err(|e| e.to_string())
 }
 
-/// Fin de partie : Lobby revient au premier plan. Windows refuse souvent de
-/// donner le focus à une fenêtre en arrière-plan ; passer un instant
-/// « au-dessus de tout » contourne ce verrou.
-///
-/// Depuis une partie (View + Menu), Windows refuse aussi `set_focus` : Lobby
-/// se rattache un instant à la file d'entrée de la fenêtre au premier plan
-/// (`AttachThreadInput`), ce qui l'autorise à prendre le focus.
-#[tauri::command]
-fn bring_to_front(window: tauri::WebviewWindow) {
+/// Donne le premier plan à une fenêtre de Lobby alors qu'un autre programme
+/// (le jeu) l'a. Windows le refuse à une fenêtre en arrière-plan : on se
+/// rattache un instant à la file d'entrée de la fenêtre au premier plan
+/// (`AttachThreadInput`), ce qui l'autorise, et on passe un instant
+/// « au-dessus de tout ».
+fn force_foreground(window: &tauri::WebviewWindow, keep_on_top: bool) {
   let _ = window.unminimize();
   let _ = window.show();
   let _ = window.set_always_on_top(true);
@@ -610,7 +607,72 @@ fn bring_to_front(window: tauri::WebviewWindow) {
     }
   }
   let _ = window.set_focus();
-  let _ = window.set_always_on_top(false);
+  if !keep_on_top {
+    let _ = window.set_always_on_top(false);
+  }
+}
+
+/// Fin de partie, ou « Accueil » depuis le menu du jeu : Lobby revient au
+/// premier plan.
+#[tauri::command]
+fn bring_to_front(window: tauri::WebviewWindow) {
+  force_foreground(&window, false);
+}
+
+/// Fenêtre du menu du jeu : transparente, sans bordure, au-dessus de tout,
+/// posée **sur la partie** — comme le guide Xbox, on ne quitte pas le jeu
+/// pour l'ouvrir. Elle est créée une fois puis montrée / cachée.
+const OVERLAY: &str = "overlay";
+
+/// View + Menu maintenus en pleine partie : le menu du jeu `game_id` s'ouvre
+/// par-dessus. Asynchrone : sous Windows, créer une fenêtre depuis une
+/// commande synchrone (fil principal) peut bloquer l'application.
+#[tauri::command]
+async fn open_game_overlay(app: tauri::AppHandle, game_id: String) -> Result<(), String> {
+  let overlay = match app.get_webview_window(OVERLAY) {
+    Some(window) => {
+      let _ = tauri::Emitter::emit_to(&app, OVERLAY, "overlay-open", &game_id);
+      window
+    }
+    None => {
+      let script = format!(
+        "window.__LOBBY_OVERLAY__ = {};",
+        serde_json::to_string(&game_id).map_err(|e| e.to_string())?
+      );
+      tauri::WebviewWindowBuilder::new(&app, OVERLAY, tauri::WebviewUrl::App("index.html".into()))
+        .title("Lobby")
+        .initialization_script(&script)
+        .transparent(true)
+        .decorations(false)
+        .shadow(false)
+        .resizable(false)
+        .skip_taskbar(true)
+        .always_on_top(true)
+        .visible(false)
+        .build()
+        .map_err(|e| e.to_string())?
+    }
+  };
+  // L'écran du jeu : celui de la fenêtre principale de Lobby.
+  if let Some(monitor) = app
+    .get_webview_window("main")
+    .and_then(|main| main.current_monitor().ok().flatten())
+  {
+    let _ = overlay.set_position(*monitor.position());
+    let _ = overlay.set_size(*monitor.size());
+  }
+  fit_to_screen(&overlay);
+  let _ = overlay.set_cursor_visible(false);
+  force_foreground(&overlay, true);
+  Ok(())
+}
+
+/// Le menu du jeu se referme (il reste prêt pour la prochaine fois).
+#[tauri::command]
+fn close_game_overlay(app: tauri::AppHandle) {
+  if let Some(window) = app.get_webview_window(OVERLAY) {
+    let _ = window.hide();
+  }
 }
 
 /// Processus dont une grande fenêtre n'est **pas** le jeu : le bureau, les
@@ -799,20 +861,20 @@ fn kill_process(pid: u32) -> Result<(), String> {
 /// que dans ce cas : `document.hasFocus()` restait vrai pendant une partie.
 /// Hors Windows (session Gamescope), on s'en remet au webview.
 #[tauri::command]
-fn lobby_in_front() -> bool {
+fn lobby_in_front(window: tauri::WebviewWindow) -> bool {
+  // Chaque fenêtre se demande si c'est **elle** qui est devant : quand le
+  // menu du jeu a le focus, la fenêtre principale ne doit pas réagir.
   #[cfg(windows)]
-  unsafe {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{GetForegroundWindow, GetWindowThreadProcessId};
-    let hwnd = GetForegroundWindow();
-    if hwnd.is_null() {
-      return false;
-    }
-    let mut pid = 0u32;
-    GetWindowThreadProcessId(hwnd, &mut pid);
-    pid == std::process::id()
+  {
+    use windows_sys::Win32::UI::WindowsAndMessaging::GetForegroundWindow;
+    let Ok(hwnd) = window.hwnd() else {
+      return true;
+    };
+    unsafe { GetForegroundWindow() as isize == hwnd.0 as isize }
   }
   #[cfg(not(windows))]
   {
+    let _ = window;
     true
   }
 }
@@ -1793,6 +1855,8 @@ pub fn run() {
       focus_process,
       kill_process,
       lobby_in_front,
+      open_game_overlay,
+      close_game_overlay,
       list_roots,
       list_dir,
       power_action,

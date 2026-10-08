@@ -100,11 +100,12 @@
 				<span class="art" style="background-image: url({heroFor(resume)})"></span>
 				<span class="label">
 					<span class="chips">
-						<span class="chip">
-							<img src="/assets/icons/play.svg" alt="" />{running ? 'En cours' : 'Reprendre'}
-						</span>
 						{#if running}
+							<!-- Le jeu tourne : les deux choix, avec leur bouton. -->
+							<span class="chip"><Glyph button="a" size="22px" />Reprendre</span>
 							<span class="chip quit"><Glyph button="x" size="22px" />Quitter</span>
+						{:else}
+							<span class="chip"><img src="/assets/icons/play.svg" alt="" />Reprendre</span>
 						{/if}
 					</span>
 					<span class="name">{resume.title}</span>

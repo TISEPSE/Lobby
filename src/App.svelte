@@ -900,6 +900,24 @@
 		}
 	}
 
+	/**
+	 * Choix fait dans le menu posé sur le jeu : y revenir, le quitter (Lobby
+	 * revient alors, sur l'accueil), ou aller sur l'accueil sans le quitter.
+	 */
+	async function onGameMenuChoice(id: string) {
+		if (id === 'resume') return returnToGame();
+		if (id === 'quit') await quitGame();
+		const { invoke } = await import('@tauri-apps/api/core');
+		await invoke('bring_to_front').catch(() => {});
+		opened = null;
+		menuOptionsOpen = false;
+		gameMenuOpen = false;
+		goToSection('home');
+		homeZone = 'row';
+		// Sur la carte du jeu en cours (ou du dernier joué) : A y revient.
+		homeIndex = -1;
+	}
+
 	/** Revenir au jeu en cours : Lobby lui rend le premier plan. */
 	async function returnToGame() {
 		gameMenuOpen = false;
@@ -1044,22 +1062,25 @@
 			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
 		};
 		window.addEventListener('game-exited', onGameExited);
-		// View + Menu maintenus en pleine partie : Lobby revient sur l'accueil,
-		// menu du jeu ouvert (Revenir au jeu · Quitter · Rester).
+		// View + Menu maintenus en pleine partie : le menu du jeu s'ouvre **par-
+		// dessus le jeu** (fenêtre `overlay`, `GameOverlay.svelte`) ; ses choix
+		// reviennent ici (`game-menu`).
 		onGameCombo(() => {
 			if (!session.id) return;
-			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
-			opened = null;
-			viewerOpen = false;
-			searchOpen = false;
-			filePickerOpen = false;
-			artPickerOpen = false;
-			powerOpen = false;
-			goToSection('home');
-			homeZone = 'row';
-			homeIndex = -1;
-			openGameMenu(0);
+			void import('@tauri-apps/api/core').then(({ invoke }) =>
+				invoke('open_game_overlay', { gameId: session.id }).catch((e) =>
+					notify(`Menu du jeu impossible : ${e}`, false)
+				)
+			);
 		});
+		let stopGameMenu: (() => void) | null = null;
+		if ((window as any).__TAURI_INTERNALS__) {
+			void import('@tauri-apps/api/event').then(({ listen: on }) =>
+				on<string>('game-menu', (event) => void onGameMenuChoice(event.payload)).then(
+					(fn) => (stopGameMenu = fn)
+				)
+			);
+		}
 		// Capture : `?launch=demo` montre l'écran de lancement du jeu sélectionné.
 		if (params.get('launch') === 'demo') launching = selected ?? null;
 		window.addEventListener('error', onError);
@@ -1085,6 +1106,7 @@
 			window.removeEventListener('keydown', onF11);
 			window.removeEventListener('game-exited', onGameExited);
 			onGameCombo(null);
+			stopGameMenu?.();
 			endLaunchCover();
 			window.removeEventListener('error', onError);
 			window.removeEventListener('unhandledrejection', onRejection);
@@ -1221,7 +1243,7 @@
 			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche']);
 		}
 		return list(
-			['a', homeIndex < 0 ? (isRunning ? 'Revenir au jeu' : 'Reprendre') : 'Ouvrir'],
+			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
 			['x', homeIndex < 0 && isRunning ? 'Quitter le jeu' : 'Options'],
 			['y', 'Recherche'],
 			['dpad', 'Lanceurs et activité']
