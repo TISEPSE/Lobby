@@ -23,8 +23,13 @@ interface RawAccount {
 export const epicAccount = $state<{
 	/** Lecture terminée, compte trouvé ou non. */
 	ready: boolean;
-	/** Connexion en cours (fenêtre d'Epic ouverte). */
+	/** Connexion en cours : fenêtre d'Epic ouverte, puis première lecture du compte. */
 	pending: boolean;
+	/**
+	 * Une session existe. Le pseudo ne le dit pas : un compte créé par un
+	 * fournisseur (Steam, Google…) peut ne pas en avoir.
+	 */
+	connected: boolean;
 	displayName: string;
 	/** Minutes de jeu, par nom interne de jeu Epic (en minuscules). */
 	playtime: Record<string, number>;
@@ -32,7 +37,7 @@ export const epicAccount = $state<{
 	error: string;
 	/** Toute la bibliothèque Epic (jeux seulement), installée ou non. */
 	library: EpicGame[];
-}>({ ready: false, pending: false, displayName: '', playtime: {}, error: '', library: [] });
+}>({ ready: false, pending: false, connected: false, displayName: '', playtime: {}, error: '', library: [] });
 
 async function tauri() {
 	if (!(window as any).__TAURI_INTERNALS__) return null;
@@ -47,6 +52,7 @@ export async function refreshEpicAccount() {
 	}
 	try {
 		const raw = await api.invoke<RawAccount | null>('epic_account');
+		epicAccount.connected = raw !== null;
 		epicAccount.displayName = raw?.display_name ?? '';
 		epicAccount.playtime = Object.fromEntries(
 			(raw?.playtime ?? []).map((play) => [play.app_name, play.minutes])
@@ -55,7 +61,9 @@ export async function refreshEpicAccount() {
 		epicAccount.error = '';
 	} catch (e) {
 		// Session expirée ou Epic injoignable : on garde ce qu'on avait, et on
-		// le dit dans les réglages plutôt que par un bandeau à chaque démarrage.
+		// le dit dans le Profil plutôt que par un bandeau à chaque démarrage.
+		// Sans session, Rust répond `null` : une erreur veut dire qu'il y en a une.
+		epicAccount.connected = true;
 		epicAccount.error = String(e);
 	} finally {
 		epicAccount.ready = true;
@@ -71,8 +79,11 @@ export async function initEpicAccount(onLogin?: (ok: boolean, message: string) =
 	if (!(window as any).__TAURI_INTERNALS__) return;
 	const { listen } = await import('@tauri-apps/api/event');
 	await listen<{ ok: boolean; message: string }>('epic-login', async (event) => {
-		epicAccount.pending = false;
+		// La première lecture prend une quarantaine de secondes (toute la
+		// bibliothèque) : « Connexion… » reste affiché jusque-là. La tuile
+		// redisait sinon « Non connecté », et la connexion semblait avoir échoué.
 		if (event.payload.ok) await refreshEpicAccount();
+		epicAccount.pending = false;
 		onLogin?.(event.payload.ok, event.payload.message);
 	});
 }
@@ -93,6 +104,7 @@ export async function logoutEpic() {
 	const api = await tauri();
 	if (!api) return;
 	await api.invoke('epic_logout');
+	epicAccount.connected = false;
 	epicAccount.displayName = '';
 	epicAccount.playtime = {};
 	epicAccount.library = [];

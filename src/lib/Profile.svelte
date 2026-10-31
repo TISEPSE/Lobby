@@ -26,6 +26,7 @@
 		epicPending = false,
 		epicError = '',
 		epicGamesCount = 0,
+		epicConnected = false,
 		steamLibraryCount = 0,
 		steamLibraryDate = 0,
 		steamLibraryPending = false,
@@ -46,7 +47,9 @@
 		/** Compte Steam de la machine ; vide s'il n'y en a pas. */
 		steamPersona?: string;
 		steamAvatar?: string;
-		/** Compte Epic Games connecté ; vide sinon. */
+		/** Une session Epic existe. */
+		epicConnected?: boolean;
+		/** Pseudo du compte Epic ; vide sans connexion, ou pour un compte sans pseudo. */
 		epicName?: string;
 		epicPending?: boolean;
 		epicError?: string;
@@ -115,13 +118,16 @@
 	const current = $derived(entries[Math.min(index, entries.length - 1)]);
 	const isOn = (entry: Entry) => focused && current === entry;
 
+	const epicWho = $derived(epicName || 'Connecté');
+	/** Epic refuse la session, ou ne répond pas : deux problèmes, deux messages. */
+	const epicProblem = $derived(epicError.includes('refusé') ? 'session expirée' : 'Epic injoignable');
 	const epicLabel = $derived(
 		epicPending
 			? 'Connexion…'
-			: epicName
+			: epicConnected
 				? epicError
-					? `${epicName} · session expirée`
-					: `${epicName} · ${epicGamesCount} jeu${epicGamesCount > 1 ? 'x' : ''}`
+					? `${epicWho} · ${epicProblem}`
+					: `${epicWho} · ${epicGamesCount} jeu${epicGamesCount > 1 ? 'x' : ''}`
 				: 'Non connecté'
 	);
 	/**
@@ -143,7 +149,9 @@
 	 * Ce que fait A sur la tuile Epic : se connecter, ou se reconnecter si la
 	 * session a expiré. Connectée, rien : le compte est relu au démarrage.
 	 */
-	const epicAction = $derived(epicName ? (epicError ? 'Se reconnecter' : '') : 'Se connecter');
+	const epicAction = $derived(
+		epicPending ? '' : epicConnected ? (epicError ? 'Se reconnecter' : '') : 'Se connecter'
+	);
 
 	export function selectionKey(): string {
 		return String(index);
@@ -153,14 +161,14 @@
 		if (action === 'up') index = Math.max(0, index - 1);
 		else if (action === 'down') index = Math.min(entries.length - 1, index + 1);
 		else if (action === 'cancel') onBack?.();
-		else if (action === 'options' && current === 'epic' && epicName) onEpicLogout?.();
+		else if (action === 'options' && current === 'epic' && epicConnected && !epicPending) onEpicLogout?.();
 		else if (action === 'options' && current === 'steam' && steamLibraryCount > 0) onSteamLibraryForget?.();
 		else if (action === 'accept') {
 			if (current === 'avatar') onChangeAvatar?.();
 			else if (current === 'name') onEditName?.();
 			// Connecté, A ne fait rien : comptes et jeux se mettent à jour au démarrage.
 			else if (current === 'steam' && steamLibraryCount === 0) onSteamLibraryLogin?.();
-			else if (current === 'epic' && (!epicName || epicError)) onEpicLogin?.();
+			else if (current === 'epic' && epicAction) onEpicLogin?.();
 			else if (current === 'stats') onOpenStats?.();
 		}
 	}
@@ -185,8 +193,8 @@
 
 		<p class="status">
 			<span class="online">En ligne</span>
-			{#if steamPersona || epicName}
-				<span class="network"> · {[steamPersona && 'Steam', epicName && 'Epic Games'].filter(Boolean).join(' · ')}</span>
+			{#if steamPersona || epicConnected}
+				<span class="network"> · {[steamPersona && 'Steam', epicConnected && 'Epic Games'].filter(Boolean).join(' · ')}</span>
 			{/if}
 		</p>
 
@@ -231,7 +239,7 @@
 				{#if isOn('epic')}
 					<span class="do">
 						{#if epicAction}<Glyph button="a" size="26px" />{epicAction}{/if}
-						{#if epicName}<Glyph button="x" size="26px" />Déconnecter{/if}
+						{#if epicConnected && !epicPending}<Glyph button="x" size="26px" />Déconnecter{/if}
 					</span>
 				{/if}
 			</li>

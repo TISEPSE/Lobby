@@ -72,8 +72,44 @@
 	/* Visionneuse : marge en haut et en bas de l'image (la légende tient dans
 	   celle du haut). */
 	--viewer-inset: calc(var(--safe-y) + 50px);
+	/* Menu rapide : panneau à gauche, écart aux bords de l'écran, onglets, photo,
+	   titre, et voile sur l'écran du dessous. Ses lignes sont celles des options. */
+	--quick-width: 480px;
+	--quick-inset: 24px;
+	--quick-tab: 52px;
+	--quick-icon: 24px;
+	--quick-avatar: 64px;
+	--quick-title: 28px;
+	--quick-veil: rgba(0, 0, 0, 0.55);
+	/* Page Réglages : une seule hauteur de ligne et une seule échelle de texte,
+	   quel que soit le réglage. `--settings-header` aligne la première catégorie
+	   sur la première ligne ; `--settings-bottom` laisse la place à la barre d'aide. */
+	--settings-nav: 340px;
+	--settings-columns: 64px;
+	--settings-header: 92px;
+	--settings-heading-top: 9px;
+	--settings-bottom: 78px;
+	--settings-nav-row: 60px;
+	--settings-row: 88px;
+	--settings-row-gap: 10px;
+	--settings-row-pad: 28px;
+	/* Assez clair pour ressortir sur une TV, qui écrase les noirs. */
+	--settings-row-bg: rgba(34, 38, 46, 0.82);
+	--settings-row-hover: rgba(58, 63, 73, 0.9);
+	--settings-radius: 12px;
+	--settings-focus-scale: 1.012;
+	--settings-icon: 26px;
+	--settings-chevron: 20px;
+	--settings-title: 40px;
+	--settings-heading: 30px;
+	--settings-label: 20px;
+	--settings-value: 19px;
+	--settings-text: 17px;
+	--settings-switch: 60px;
+	--settings-switch-height: 32px;
+	--settings-switch-pad: 4px;
 	/* Jauge de volume (Réglages → Audio). */
-	--volume-bar: 220px;
+	--volume-bar: 260px;
 	--volume-bar-height: 8px;
 	/* Lecteur des bandes-annonces : ombre des bandeaux, barre de progression,
 	   curseur, jauge de volume et icône d'action au centre. */
@@ -114,6 +150,8 @@
 	--options-width: min(560px, 80vw);
 	--options-cover: 96px;
 	--options-row: 60px;
+	--options-gap: 10px;
+	--options-pad: 20px;
 	/* Palette Xbox de la fenêtre d'options : gris presque noirs ; la
 	   sélection garde le contour d'accent des autres boutons. */
 	--xbox-veil: rgba(0, 0, 0, 0.78);
@@ -217,4 +255,21 @@ button {
 		0 0 0 1px rgba(0, 0, 0, 0.6),
 		0 0 32px 6px var(--accent-soft),
 		0 20px 50px rgba(0, 0, 0, 0.55);
+}
+
+/* Sélection qui glisse d'une ligne à l'autre au lieu de sauter : un seul cadre,
+   déplacé par `--glide-y`, posé sur le fond des lignes et sous leur texte. Sa
+   liste l'isole (`isolation: isolate`) et le texte passe au-dessus
+   (`position: relative; z-index: 1`), sans `opacity` ni `transform` sur la
+   ligne elle-même : ils la feraient repasser sous le cadre. */
+.glider {
+	position: absolute;
+	z-index: 0;
+	pointer-events: none;
+	/* Sa propre couche : il se déplace sans faire redessiner le flou du voile. */
+	will-change: transform;
+	transform: translateY(var(--glide-y, 0)) scale(var(--glide-scale, 1));
+	transition:
+		transform var(--normal) var(--ease),
+		opacity var(--fast) var(--ease);
 }

@@ -49,7 +49,8 @@
 				</header>
 			{/if}
 
-			<div class="rows">
+			<div class="rows" style="--index: {index}">
+				<span class="glider"></span>
 				{#each actions as action, i (action.id)}
 					<div class="row" class:selected={i === index} style="--i: {i}">
 						<span class="mark">
@@ -75,8 +76,9 @@
 		z-index: 7;
 		display: grid;
 		place-items: center;
+		/* Pas de flou derrière une liste animée : sans carte graphique, il divise
+		   par quatre le nombre d'images de chaque déplacement. */
 		background: var(--xbox-veil);
-		backdrop-filter: blur(6px);
 		animation: fade-in var(--fast) var(--ease) both;
 	}
 
@@ -145,14 +147,31 @@
 	}
 
 	.rows {
+		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
-		padding: 20px 20px;
+		gap: var(--options-gap);
+		padding: var(--options-pad);
+		isolation: isolate;
+	}
+
+	/* Sélection : contour vert et halo, comme tous les autres boutons ; le
+	   cadre glisse d'une ligne à l'autre, plus clair, et grossit à peine. */
+	.glider {
+		top: var(--options-pad);
+		left: var(--options-pad);
+		right: var(--options-pad);
+		height: var(--options-row);
+		--glide-y: calc(var(--index) * (var(--options-row) + var(--options-gap)));
+		--glide-scale: 1.02;
+		border-radius: var(--xbox-radius);
+		background: var(--surface-strong);
+		box-shadow:
+			0 0 0 3px var(--accent),
+			0 0 28px 4px var(--accent-soft);
 	}
 
 	.row {
-		position: relative;
 		display: flex;
 		align-items: center;
 		gap: 16px;
@@ -162,20 +181,17 @@
 		background: var(--xbox-row);
 		animation: row-in var(--normal) var(--ease) backwards;
 		animation-delay: calc(var(--i) * 30ms);
-		transition:
-			transform var(--fast) var(--ease),
-			background var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease);
+		transition: background var(--fast) var(--ease);
 	}
 
-	/* Sélection : contour vert et halo, comme tous les autres boutons ; la
-	   ligne s'éclaircit et grossit à peine. */
 	.row.selected {
-		background: var(--surface-strong);
-		box-shadow:
-			0 0 0 3px var(--accent),
-			0 0 28px 4px var(--accent-soft);
-		transform: scale(1.02);
+		background: transparent;
+	}
+
+	.mark,
+	.label {
+		position: relative;
+		z-index: 1;
 	}
 
 	.mark {
@@ -221,7 +237,6 @@
 	   translucide au liseré clair, qui entre en glissant un peu plus. */
 	.veil.floating {
 		background: var(--overlay-veil);
-		backdrop-filter: none;
 	}
 
 	.floating .menu {
@@ -243,6 +258,10 @@
 	}
 
 	.floating .row.selected {
+		background: transparent;
+	}
+
+	.floating .glider {
 		background: var(--overlay-row-selected);
 	}
 

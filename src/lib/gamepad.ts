@@ -16,9 +16,9 @@ export type Action =
 	| 'cancel'
 	| 'options'
 	| 'search'
-	/** Bouton Options (PlayStation) / Menu (Xbox) : l'alimentation. */
+	/** Bouton Options (PlayStation) / Menu (Xbox), ou Home : le menu rapide. */
 	| 'menu'
-	/** L1/LB et R1/RB : section précédente / suivante du dock — leur seul rôle. */
+	/** L1/LB et R1/RB : section précédente / suivante du dock, onglets du menu rapide. */
 	| 'prev'
 	| 'next'
 	/** L2/LT et R2/RT : catégorie précédente / suivante (filtres, périodes). */
@@ -48,6 +48,8 @@ const BUTTONS: Record<number, Action> = {
 	13: 'down',
 	14: 'left',
 	15: 'right',
+	// Xbox / PS : souvent pris par la Game Bar ou Steam, d'où le bouton Menu.
+	16: 'menu',
 };
 
 const KEYS: Record<string, Action> = {
@@ -62,6 +64,8 @@ const KEYS: Record<string, Action> = {
 	x: 'options',
 	y: 'search',
 	m: 'menu',
+	g: 'menu',
+	Home: 'menu',
 	// Dock : A / E, comme L1 / R1. Catégories : Page précédente / suivante.
 	a: 'prev',
 	e: 'next',
@@ -234,7 +238,8 @@ function onKey(event: KeyboardEvent) {
 		return;
 	}
 
-	const action = KEYS[event.key];
+	// Verr. Maj. ne doit pas désactiver les raccourcis.
+	const action = KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
 	if (!action) return;
 	event.preventDefault();
 	emit(action);
@@ -262,11 +267,19 @@ export function listen(listener: Listener): () => void {
 /** Marqueurs des manettes Sony dans l'identifiant renvoyé par le navigateur. */
 const SONY = ['dualsense', 'dualshock', 'playstation', 'wireless controller', '054c'];
 
+/** Choix de Réglages → Apparence : `auto` suit la manette branchée. */
+let layoutChoice = 'auto';
+
+export function setLayoutChoice(choice: string) {
+	layoutChoice = choice;
+}
+
 /**
  * Famille de glyphes à afficher. Les index des boutons ne changent pas d'une
  * manette à l'autre : seule la façon de les nommer change.
  */
 export function padLayout(): 'xbox' | 'ps5' {
+	if (layoutChoice === 'xbox' || layoutChoice === 'ps5') return layoutChoice;
 	const pad = navigator.getGamepads?.().find((p) => p && p.connected);
 	if (!pad) return 'xbox';
 	const id = pad.id.toLowerCase();
@@ -289,6 +302,12 @@ export function padName(id: string): string {
 	// Sinon, le nom avant les détails techniques entre parenthèses.
 	const name = id.replace(/\(.*$/, '').trim();
 	return name || 'Manette';
+}
+
+/** Nom de la manette branchée, vide s'il n'y en a pas. */
+export function currentPadName(): string {
+	const pad = navigator.getGamepads?.().find((p) => p && p.connected);
+	return pad ? padName(pad.id) : '';
 }
 
 /** Nombre de manettes branchées, affiché dans la barre du haut. */

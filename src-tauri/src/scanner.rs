@@ -124,18 +124,40 @@ pub fn find_local_cover(folder: &Path) -> Option<String> {
 // STEAM
 // ============================================================================
 
+/// Dossier de Steam déclaré dans le registre : le seul moyen de le trouver
+/// quel que soit le disque choisi à l'installation.
+#[cfg(windows)]
+fn registered_steam_root() -> Option<PathBuf> {
+  use winreg::enums::*;
+  use winreg::RegKey;
+
+  let keys = [
+    (HKEY_CURRENT_USER, "Software\\Valve\\Steam", "SteamPath"),
+    (HKEY_LOCAL_MACHINE, "SOFTWARE\\WOW6432Node\\Valve\\Steam", "InstallPath"),
+    (HKEY_LOCAL_MACHINE, "SOFTWARE\\Valve\\Steam", "InstallPath"),
+  ];
+  keys.into_iter().find_map(|(hive, key, value)| {
+    let path: String = RegKey::predef(hive).open_subkey(key).ok()?.get_value(value).ok()?;
+    let path = PathBuf::from(path);
+    path.join("steamapps").exists().then_some(path)
+  })
+}
+
 /// Trouve le dossier principal de Steam.
 pub fn steam_root() -> Option<PathBuf> {
   #[cfg(windows)]
   {
-    let candidates = [
-      PathBuf::from("C:\\Program Files (x86)\\Steam"),
-      PathBuf::from("C:\\Program Files\\Steam"),
-      PathBuf::from("D:\\Steam"),
-    ];
-    for c in candidates {
-      if c.join("steamapps").exists() {
-        return Some(c);
+    if let Some(root) = registered_steam_root() {
+      return Some(root);
+    }
+    // Rien dans le registre (Steam recopié à la main) : les emplacements
+    // habituels, sur chaque disque.
+    for drive in drive_roots() {
+      for folder in ["Program Files (x86)\\Steam", "Program Files\\Steam", "Steam"] {
+        let candidate = drive.join(folder);
+        if candidate.join("steamapps").exists() {
+          return Some(candidate);
+        }
       }
     }
   }
@@ -379,8 +401,9 @@ pub fn scan_steam_common() -> Vec<ScannedGame> {
 }
 
 /// Noms de dossiers où l'on range ses jeux, quelle que soit la langue.
-const GAME_FOLDER_NAMES: [&str; 8] = [
+const GAME_FOLDER_NAMES: [&str; 12] = [
   "jeux", "jeu", "games", "game", "epic games", "gog games", "ubisoft games", "my games",
+  "juegos", "spiele", "giochi", "jogos",
 ];
 
 /// Dossiers système à ne jamais explorer : rien d'intéressant, et c'est long.
@@ -582,7 +605,9 @@ pub fn scan_epic() -> Vec<ScannedGame> {
   let mut games = Vec::new();
   #[cfg(windows)]
   {
-    let manifests = PathBuf::from("C:\\ProgramData\\Epic\\EpicGamesLauncher\\Data\\Manifests");
+    // `ProgramData` peut avoir été déplacé : on demande à Windows où il est.
+    let program_data = std::env::var("ProgramData").unwrap_or_else(|_| "C:\\ProgramData".to_string());
+    let manifests = PathBuf::from(program_data).join("Epic\\EpicGamesLauncher\\Data\\Manifests");
     if let Ok(entries) = fs::read_dir(manifests) {
       for entry in entries.flatten() {
         let path = entry.path();

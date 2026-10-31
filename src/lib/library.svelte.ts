@@ -16,6 +16,7 @@ import { persist, restore } from './persist';
 const STORAGE_KEY = 'interface-console.stats';
 const LIBRARY_KEY = 'interface-console.library';
 const SESSIONS_KEY = 'interface-console.sessions';
+const HIDDEN_KEY = 'interface-console.hidden-games';
 
 export function cleanTitle(title: string): string {
 	return title
@@ -94,6 +95,14 @@ export const stats = $state<Record<string, GameStats>>(load());
 export const sessions = $state<SessionRecord[]>(loadSessions());
 
 /**
+ * Entrées retirées à la main : la détection prend aussi des applications pour
+ * des jeux (Android Studio, par son raccourci du Bureau). Elles sont gardées à
+ * part, sinon la recherche du démarrage les rajouterait aussitôt ; Réglages →
+ * Jeux permet de les rétablir.
+ */
+export const hiddenGames = $state<Game[]>([]);
+
+/**
  * Charge la bibliothèque, puis les statistiques et le journal depuis le disque
  * (`persist.ts`) : sans ça, l'exécutable compilé — qui n'a pas le stockage de
  * navigateur de `tauri dev` — n'avait ni dernières parties, ni temps de jeu.
@@ -104,6 +113,8 @@ export async function initLibrary() {
 	if (savedStats && typeof savedStats === 'object') Object.assign(stats, savedStats);
 	const savedSessions = await restore<SessionRecord[]>('sessions', SESSIONS_KEY);
 	if (Array.isArray(savedSessions)) sessions.splice(0, sessions.length, ...savedSessions);
+	const savedHidden = await restore<Game[]>('hidden-games', HIDDEN_KEY);
+	if (Array.isArray(savedHidden)) hiddenGames.splice(0, hiddenGames.length, ...savedHidden);
 }
 
 async function loadGames() {
@@ -194,6 +205,7 @@ export async function syncLibrary(
 	const matched = new Set<string>();
 
 	for (const found of scanned) {
+		if (isHidden(found)) continue;
 		const key = cleanTitle(found.title);
 		const known = games.find(
 			(g) =>
@@ -265,6 +277,30 @@ export function removeGame(id: string) {
 		games.splice(idx, 1);
 		saveLibrary();
 	}
+}
+
+/** Retirée à la main : même identifiant, ou même titre sous un autre identifiant. */
+export function isHidden(game: Game): boolean {
+	const key = cleanTitle(game.title);
+	return hiddenGames.some((h) => h.id === game.id || (!!key && cleanTitle(h.title) === key));
+}
+
+/** Retire une entrée de la bibliothèque, sans rien désinstaller. */
+export function hideGame(id: string) {
+	const game = games.find((g) => g.id === id);
+	if (!game) return;
+	hiddenGames.push({ ...game });
+	persist('hidden-games', HIDDEN_KEY, hiddenGames);
+	removeGame(id);
+}
+
+/** Remet dans la bibliothèque une entrée retirée. */
+export function restoreGame(id: string) {
+	const index = hiddenGames.findIndex((g) => g.id === id);
+	if (index === -1) return;
+	const [game] = hiddenGames.splice(index, 1);
+	persist('hidden-games', HIDDEN_KEY, hiddenGames);
+	addGames([{ ...game }]);
 }
 
 function load(): Record<string, GameStats> {
@@ -447,7 +483,8 @@ export function uninstalledSteamGames(owned: Record<string, string>): Game[] {
 			logo: '',
 			source: 'steam',
 			installed: false,
-		}));
+		}))
+		.filter((game) => !isHidden(game));
 }
 
 /**
@@ -471,7 +508,8 @@ export function uninstalledEpicGames(
 			logo: '',
 			source: 'epic',
 			installed: false,
-		}));
+		}))
+		.filter((game) => !isHidden(game));
 }
 
 /** Liste filtrée et triée, telle que la grille doit l'afficher. */

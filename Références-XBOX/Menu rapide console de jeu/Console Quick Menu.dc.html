@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html>
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<script src="./support.js"></script>
+</head>
+<body>
+<x-dc>
+<helmet>
+<link rel="stylesheet" href="_ds/industry-60329b44-c79f-42a3-8905-d564f393d83d/styles.css">
+<script src="_ds/industry-60329b44-c79f-42a3-8905-d564f393d83d/_ds_bundle.js"></script>
+<style>html,body{margin:0;height:100%;background:var(--color-bg);color:var(--color-text);font-family:var(--font-body)}a{color:var(--color-accent-700)}a:hover{color:var(--color-accent-900)}</style>
+</helmet>
+<div style="position:relative;min-height:100vh;overflow:hidden;display:flex;flex-direction:column;padding:var(--space-6);box-sizing:border-box;gap:var(--space-4)">
+  <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3)">
+    <div style="font-family:var(--font-heading);font-size:28px;letter-spacing:0.04em;text-transform:uppercase">Accueil</div>
+    <div style="display:flex;align-items:center;gap:var(--space-3);font-size:15px">
+      <span>{{ clock }}</span>
+      <span class="tag tag-accent">Manette · {{ battery }} %</span>
+    </div>
+  </div>
+  <div style="flex:1;display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));grid-auto-rows:150px;gap:var(--space-3)">
+    <sc-for list="{{ games }}" as="g" hint-placeholder-count="8">
+      <div class="blueprint" style="display:flex;align-items:flex-end;padding:var(--space-3)"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i><span style="font-family:var(--font-heading);font-size:20px">{{ g }}</span></div>
+    </sc-for>
+  </div>
+  <div style="display:flex;gap:var(--space-2);align-items:center;font-size:14px;color:var(--color-neutral-700)">
+    <span style="display:inline-grid;place-items:center;min-width:26px;height:26px;border:1px solid var(--color-divider);font-family:var(--font-heading);font-size:13px">⌂</span>
+    <span>Bouton Home de la manette, ou touche G, pour ouvrir le menu rapide</span>
+  </div>
+
+  <sc-if value="{{ open }}" hint-placeholder-val="{{ true }}">
+    <div class="dialog-backdrop" onClick="{{ close }}" style="position:absolute">
+      <div class="blueprint" onClick="{{ stop }}" style="width:min(760px,100%);background:var(--color-bg);box-shadow:var(--shadow-lg);display:flex;flex-direction:column">
+        <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+        <div style="display:flex;justify-content:space-between;align-items:center;gap:var(--space-3);padding:var(--space-4);border-bottom:1px solid var(--color-divider)">
+          <div style="display:flex;align-items:center;gap:var(--space-3)">
+            <div style="width:48px;height:48px;display:grid;place-items:center;background:var(--color-accent-100);color:var(--color-accent-800);font-family:var(--font-heading);font-size:20px">N7</div>
+            <div style="display:flex;flex-direction:column;gap:2px">
+              <span style="font-family:var(--font-heading);font-size:22px">NOVA_77</span>
+              <span style="font-size:13px;color:var(--color-accent-700)">● En ligne</span>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;gap:var(--space-3);font-size:15px">
+            <span>{{ clock }}</span>
+            <span class="tag tag-outline">{{ battery }} %</span>
+          </div>
+        </div>
+
+        <sc-if value="{{ isMenu }}" hint-placeholder-val="{{ true }}">
+          <div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:var(--space-3);padding:var(--space-4) var(--space-4) var(--space-3)">
+            <div class="blueprint" onClick="{{ t0.pick }}" onMouseEnter="{{ t0.hover }}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);cursor:pointer;background:{{ t0.bg }};color:{{ t0.fg }};border-color:{{ t0.bd }};transition:background .12s">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12.22 2h-.44a2 2 0 0 0-2 2v.18a2 2 0 0 1-1 1.73l-.43.25a2 2 0 0 1-2 0l-.15-.08a2 2 0 0 0-2.73.73l-.22.38a2 2 0 0 0 .73 2.73l.15.1a2 2 0 0 1 1 1.72v.51a2 2 0 0 1-1 1.74l-.15.09a2 2 0 0 0-.73 2.73l.22.38a2 2 0 0 0 2.73.73l.15-.08a2 2 0 0 1 2 0l.43.25a2 2 0 0 1 1 1.73V20a2 2 0 0 0 2 2h.44a2 2 0 0 0 2-2v-.18a2 2 0 0 1 1-1.73l.43-.25a2 2 0 0 1 2 0l.15.08a2 2 0 0 0 2.73-.73l.22-.39a2 2 0 0 0-.73-2.73l-.15-.08a2 2 0 0 1-1-1.74v-.5a2 2 0 0 1 1-1.74l.15-.09a2 2 0 0 0 .73-2.73l-.22-.38a2 2 0 0 0-2.73-.73l-.15.08a2 2 0 0 1-2 0l-.43-.25a2 2 0 0 1-1-1.73V4a2 2 0 0 0-2-2z"></path><circle cx="12" cy="12" r="3"></circle></svg>
+              <span style="font-family:var(--font-heading);font-size:17px">Paramètres</span>
+            </div>
+            <div class="blueprint" onClick="{{ t1.pick }}" onMouseEnter="{{ t1.hover }}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);cursor:pointer;background:{{ t1.bg }};color:{{ t1.fg }};border-color:{{ t1.bd }};transition:background .12s">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M19 21v-2a4 4 0 0 0-4-4H9a4 4 0 0 0-4 4v2"></path><circle cx="12" cy="7" r="4"></circle></svg>
+              <span style="font-family:var(--font-heading);font-size:17px">Profil</span>
+            </div>
+            <div class="blueprint" onClick="{{ t2.pick }}" onMouseEnter="{{ t2.hover }}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);cursor:pointer;background:{{ t2.bg }};color:{{ t2.fg }};border-color:{{ t2.bd }};transition:background .12s">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><line x1="6" x2="10" y1="11" y2="11"></line><line x1="8" x2="8" y1="9" y2="13"></line><line x1="15" x2="15.01" y1="12" y2="12"></line><line x1="18" x2="18.01" y1="10" y2="10"></line><path d="M17.32 5H6.68a4 4 0 0 0-3.978 3.59c-.006.052-.01.101-.017.152C2.604 9.416 2 14.456 2 16a3 3 0 0 0 3 3c1 0 1.5-.5 2-1l1.414-1.414A2 2 0 0 1 9.828 16h4.344a2 2 0 0 1 1.414.586L17 18c.5.5 1 1 2 1a3 3 0 0 0 3-3c0-1.545-.604-6.584-.685-7.258-.007-.05-.011-.1-.017-.151A4 4 0 0 0 17.32 5z"></path></svg>
+              <span style="font-family:var(--font-heading);font-size:17px">Manette</span>
+            </div>
+            <div class="blueprint" onClick="{{ t3.pick }}" onMouseEnter="{{ t3.hover }}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);cursor:pointer;background:{{ t3.bg }};color:{{ t3.fg }};border-color:{{ t3.bd }};transition:background .12s">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M3 12a9 9 0 1 0 9-9 9.75 9.75 0 0 0-6.74 2.74L3 8"></path><path d="M3 3v5h5"></path></svg>
+              <span style="font-family:var(--font-heading);font-size:17px">Redémarrer</span>
+            </div>
+            <div class="blueprint" onClick="{{ t4.pick }}" onMouseEnter="{{ t4.hover }}" style="aspect-ratio:1;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:var(--space-2);cursor:pointer;background:{{ t4.bg }};color:{{ t4.fg }};border-color:{{ t4.bd }};transition:background .12s">
+              <i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>
+              <svg width="34" height="34" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5" stroke-linecap="round" stroke-linejoin="round"><path d="M12 2v10"></path><path d="M18.4 6.6a9 9 0 1 1-12.77.04"></path></svg>
+              <span style="font-family:var(--font-heading);font-size:17px">Éteindre</span>
+            </div>
+          </div>
+          <div style="padding:0 var(--space-4) var(--space-4);display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:var(--space-3)">
+            <sc-for list="{{ info }}" as="row" hint-placeholder-count="3">
+              <div style="display:flex;flex-direction:column;gap:4px;padding-top:var(--space-2);border-top:1px solid var(--color-divider)">
+                <span style="font-size:11px;letter-spacing:0.1em;text-transform:uppercase;color:var(--color-accent-700)">{{ row.k }}</span>
+                <span style="font-size:15px">{{ row.v }}</span>
+              </div>
+            </sc-for>
+          </div>
+        </sc-if>
+
+        <sc-if value="{{ isConfirm }}" hint-placeholder-val="{{ false }}">
+          <div style="padding:var(--space-6) var(--space-4);display:flex;flex-direction:column;gap:var(--space-3)">
+            <div style="font-family:var(--font-heading);font-size:30px">{{ confirmTitle }}</div>
+            <div style="font-size:15px;color:var(--color-neutral-700);text-wrap:pretty">{{ confirmBody }}</div>
+            <div style="display:flex;gap:var(--space-3);margin-top:var(--space-2)">
+              <button class="btn btn-secondary" onClick="{{ cancel }}" onMouseEnter="{{ c0hover }}" style="min-height:48px;min-width:160px;font-size:16px;outline:{{ c0outline }};outline-offset:3px">Annuler</button>
+              <button class="btn btn-primary blueprint" onClick="{{ doPower }}" onMouseEnter="{{ c1hover }}" style="min-height:48px;min-width:160px;font-size:16px;outline:{{ c1outline }};outline-offset:3px"><i class="corner tl"></i><i class="corner tr"></i><i class="corner bl"></i><i class="corner br"></i>{{ confirmCta }}</button>
+            </div>
+          </div>
+        </sc-if>
+
+        <div style="display:flex;justify-content:flex-end;gap:var(--space-4);padding:var(--space-3) var(--space-4);border-top:1px solid var(--color-divider);font-size:14px">
+          <div style="display:flex;align-items:center;gap:var(--space-2)"><span style="display:inline-grid;place-items:center;width:24px;height:24px;border:1px solid var(--color-text);border-radius:50%;font-family:var(--font-heading);font-size:13px">A</span><span>Sélectionner</span></div>
+          <div style="display:flex;align-items:center;gap:var(--space-2)"><span style="display:inline-grid;place-items:center;width:24px;height:24px;border:1px solid var(--color-text);border-radius:50%;font-family:var(--font-heading);font-size:13px">B</span><span>{{ backLabel }}</span></div>
+        </div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ isOff }}" hint-placeholder-val="{{ false }}">
+    <div style="position:absolute;inset:0;background:var(--color-neutral-900);color:var(--color-bg);display:grid;place-items:center">
+      <div style="display:flex;flex-direction:column;align-items:center;gap:var(--space-2)">
+        <div style="font-family:var(--font-heading);font-size:34px;letter-spacing:0.06em;text-transform:uppercase">{{ offLabel }}</div>
+        <div style="font-size:14px;color:var(--color-neutral-300)">Ne débranchez pas la console</div>
+      </div>
+    </div>
+  </sc-if>
+
+  <sc-if value="{{ hasToast }}" hint-placeholder-val="{{ false }}">
+    <div class="tag tag-accent" style="position:absolute;left:50%;bottom:var(--space-6);transform:translateX(-50%);font-size:14px;padding:10px 18px">{{ toast }}</div>
+  </sc-if>
+</div>
+</x-dc>
+<script type="text/x-dc" data-dc-script data-props="{&quot;startOpen&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;},&quot;confirmPower&quot;:{&quot;editor&quot;:&quot;boolean&quot;,&quot;default&quot;:true,&quot;tsType&quot;:&quot;boolean&quot;,&quot;section&quot;:&quot;Comportement&quot;}}">
+class Component extends DCLogic {
+  state = { open: this.props.startOpen ?? true, focus: 0, mode: 'menu', cf: 1, toast: '', now: new Date() };
+  items = ['Paramètres', 'Profil', 'Manette', 'Redémarrer', 'Éteindre'];
+  componentDidMount() {
+    this.onKey = e => {
+      const k = e.key;
+      if (k === 'g' || k === 'G' || k === 'Home') return this.press('home');
+      const map = { ArrowLeft: 'left', ArrowRight: 'right', ArrowUp: 'left', ArrowDown: 'right', Enter: 'a', ' ': 'a', Escape: 'b', Backspace: 'b' };
+      if (map[k]) { e.preventDefault(); this.press(map[k]); }
+    };
+    window.addEventListener('keydown', this.onKey);
+    this.tick = setInterval(() => this.setState({ now: new Date() }), 15000);
+    const prev = {};
+    const loop = () => {
+      const pads = navigator.getGamepads ? navigator.getGamepads() : [];
+      for (const p of pads) {
+        if (!p) continue;
+        const b = i => p.buttons[i] && p.buttons[i].pressed;
+        const ax = p.axes[0] || 0;
+        const now = { a: b(0), b: b(1), home: b(16) || b(9), left: b(14) || ax < -0.6, right: b(15) || ax > 0.6 };
+        for (const key in now) { if (now[key] && !prev[key]) this.press(key); prev[key] = now[key]; }
+      }
+      this.raf = requestAnimationFrame(loop);
+    };
+    this.raf = requestAnimationFrame(loop);
+  }
+  componentWillUnmount() { window.removeEventListener('keydown', this.onKey); clearInterval(this.tick); cancelAnimationFrame(this.raf); clearTimeout(this.t1); clearTimeout(this.t2); }
+  press(btn) {
+    const s = this.state;
+    if (s.mode === 'off') return;
+    if (btn === 'home') return this.setState({ open: !s.open, mode: 'menu' });
+    if (!s.open) return;
+    if (s.mode === 'menu') {
+      if (btn === 'left') this.setState({ focus: (s.focus + 4) % 5 });
+      if (btn === 'right') this.setState({ focus: (s.focus + 1) % 5 });
+      if (btn === 'a') this.pick(s.focus);
+      if (btn === 'b') this.setState({ open: false });
+    } else if (s.mode === 'confirm') {
+      if (btn === 'left' || btn === 'right') this.setState({ cf: 1 - s.cf });
+      if (btn === 'a') s.cf ? this.doPower() : this.setState({ mode: 'menu' });
+      if (btn === 'b') this.setState({ mode: 'menu' });
+    }
+  }
+  pick(i) {
+    if (i >= 3) {
+      if (this.props.confirmPower ?? true) return this.setState({ focus: i, mode: 'confirm', cf: 1 });
+      return this.setState({ focus: i }, () => this.doPower());
+    }
+    this.showToast('Ouverture : ' + this.items[i]);
+    this.setState({ open: false, focus: i });
+  }
+  doPower() {
+    this.setState({ mode: 'off', open: false });
+    this.t1 = setTimeout(() => this.setState({ mode: 'menu', open: false }), 2600);
+  }
+  showToast(t) { clearTimeout(this.t2); this.setState({ toast: t }); this.t2 = setTimeout(() => this.setState({ toast: '' }), 1800); }
+  renderVals() {
+    const s = this.state;
+    const battery = 72;
+    const tile = i => ({
+      bg: s.focus === i ? 'var(--color-accent)' : 'transparent',
+      fg: s.focus === i ? 'var(--color-bg)' : 'var(--color-text)',
+      bd: s.focus === i ? 'var(--color-accent)' : 'var(--color-divider)',
+      pick: () => this.pick(i),
+      hover: () => s.mode === 'menu' && this.setState({ focus: i })
+    });
+    const infos = [
+      [{ k: 'Réseau', v: 'Wi-Fi · 5 GHz' }, { k: 'Stockage', v: '412 Go libres' }, { k: 'Système', v: 'À jour' }],
+      [{ k: 'Statut', v: 'En ligne' }, { k: 'Niveau', v: '34' }, { k: "Temps de jeu aujourd'hui", v: '1 h 42' }],
+      [{ k: 'Batterie', v: battery + ' %' }, { k: 'Connexion', v: 'Sans fil' }, { k: 'Vibrations', v: 'Activées' }],
+      [{ k: 'Durée estimée', v: '≈ 40 s' }, { k: 'Jeu en cours', v: 'Sera suspendu' }, { k: 'Téléchargements', v: 'Reprendront ensuite' }],
+      [{ k: 'Jeu en cours', v: 'Sera fermé' }, { k: 'Téléchargements', v: 'Continuent en veille' }, { k: 'Manette', v: 'Sera déconnectée' }]
+    ];
+    const restart = s.focus === 3;
+    const ring = on => on ? '2px solid var(--color-accent)' : 'none';
+    return {
+      games: ['Jeu en cours', 'Bibliothèque', 'Boutique', 'Amis', 'Captures', 'Téléchargements', 'Multijoueur', 'Médias'],
+      clock: s.now.toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' }),
+      battery,
+      open: s.open, isMenu: s.mode === 'menu', isConfirm: s.mode === 'confirm', isOff: s.mode === 'off',
+      t0: tile(0), t1: tile(1), t2: tile(2), t3: tile(3), t4: tile(4),
+      info: infos[s.focus],
+      confirmTitle: restart ? 'Redémarrer la console ?' : 'Éteindre la console ?',
+      confirmBody: restart ? 'Le jeu en cours sera suspendu. Les données non sauvegardées peuvent être perdues.' : 'Le jeu en cours sera fermé. Les données non sauvegardées seront perdues.',
+      confirmCta: restart ? 'Redémarrer' : 'Éteindre',
+      offLabel: restart ? 'Redémarrage…' : 'Extinction…',
+      c0outline: ring(s.cf === 0), c1outline: ring(s.cf === 1),
+      c0hover: () => this.setState({ cf: 0 }), c1hover: () => this.setState({ cf: 1 }),
+      cancel: () => this.setState({ mode: 'menu' }),
+      doPower: () => this.doPower(),
+      backLabel: s.mode === 'confirm' ? 'Retour' : 'Fermer',
+      close: () => this.setState({ open: false, mode: 'menu' }),
+      stop: e => e.stopPropagation(),
+      hasToast: !!s.toast, toast: s.toast
+    };
+  }
+}
+</script>
+</body>
+</html>

@@ -8,7 +8,7 @@
 	import VirtualKeyboard from './lib/VirtualKeyboard.svelte';
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
-	import PowerMenu from './lib/PowerMenu.svelte';
+	import QuickMenu from './lib/QuickMenu.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads, downloads } from './lib/downloads.svelte.js';
@@ -21,7 +21,7 @@
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
 	import ArtPicker from './lib/ArtPicker.svelte';
 	import OptionsMenu from './lib/OptionsMenu.svelte';
-	import { runPower, POWER_ENTRIES, type PowerAction } from './lib/power';
+	import { runPower, type PowerAction } from './lib/power';
 	import { updateGame, verifyGame, uninstallGame, installGame, installEpicGame } from './lib/steamActions';
 	import { artwork, details, heroFor, mediaOf, initArtStore, DEMO_MEDIA } from './lib/steam.svelte.js';
 	import MediaViewer from './lib/MediaViewer.svelte';
@@ -48,7 +48,7 @@
 		logoutEpic,
 		refreshEpicAccount,
 	} from './lib/epicAccount.svelte.js';
-	import { play } from './lib/launcher';
+	import { play, watchRunningGames } from './lib/launcher';
 	import {
 		games,
 		view,
@@ -61,6 +61,10 @@
 		playtimeOf,
 		HOME_ORDER_LABELS,
 		addGames,
+		hiddenGames,
+		hideGame,
+		isHidden,
+		restoreGame,
 		syncLibrary,
 		setGameExecutable,
 		FILTERS,
@@ -86,9 +90,11 @@
 		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
+		nextLayout,
 	} from './lib/settings.svelte.js';
 
-	const SECTIONS: Section[] = ['home', 'library', 'settings', 'profile'];
+	/** Sections du dock. Réglages et Profil s'ouvrent par le menu rapide. */
+	const SECTIONS: Section[] = ['home', 'library'];
 	const COLUMNS = 8;
 
 	/* Outil de développement, comme le `--capture` de la version Godot :
@@ -200,7 +206,13 @@
 	/** Bouton sélectionné sur une fiche : 0 = Jouer, 1 = Favori. */
 	let detailButton = $state(0);
 	/** Fenêtre d'alimentation : index sélectionné, et action en attente de confirmation. */
-	let powerOpen = $state(params.get('power') === '1');
+	/** Menu rapide. `?quick=N` l'ouvre sur l'onglet N, `&confirm=` sur une confirmation. */
+	let quickOpen = $state(params.has('quick'));
+	let quickComponent: {
+		handleAction: (action: Action) => void;
+		selectionKey: () => string;
+		show: () => void;
+	} | null = $state(null);
 	/**
 	 * Écran de lancement : le jeu qui démarre, tant que sa fenêtre n'est pas
 	 * là. Capture : `?launch=demo` (jeu sélectionné), `&slow=1`.
@@ -220,8 +232,6 @@
 		{ id: 'quit', label: 'Quitter le jeu', icon: 'exit' },
 		{ id: 'stay', label: "Rester sur l'accueil", icon: 'home' },
 	];
-	let powerIndex = $state(0);
-	let powerPending = $state<PowerAction | null>((params.get('confirm') as PowerAction) ?? null);
 
 	/** Menu d'options de la tuile sélectionnée, sur l'accueil. */
 	/** Même menu, ouvert depuis une fiche : il n'y a pas de tuile à prolonger. */
@@ -250,9 +260,9 @@
 	let settingsComponent: {
 		handleAction: (action: Action) => void;
 		isKeyboardActive?: () => boolean;
-		focusProfile?: () => void;
 		checkSteamGridKey?: (key: string) => Promise<string>;
 		selectionKey?: () => string | null;
+		hints?: () => [GlyphButton, string][];
 	} | null = $state(null);
 	let profileComponent: {
 		handleAction: (action: Action) => void;
@@ -272,8 +282,9 @@
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let artPickerComponent: { handleAction: (action: Action) => void } | null = $state(null);
-	/** Explorateur de fichiers : choisir l'exécutable d'un jeu à la main. */
-	let filePickerOpen = $state(params.get('modal') === 'files');
+	/** Explorateur de fichiers : l'exécutable d'un jeu, ou un dossier de jeux (Réglages). */
+	let filePickerOpen = $state(params.get('modal') === 'files' || params.get('modal') === 'folders');
+	let filePickerMode = $state<'exe' | 'folder'>(params.get('modal') === 'folders' ? 'folder' : 'exe');
 	let filePickerComponent: { handleAction: (action: Action) => void; selectionKey: () => string } | null =
 		$state(null);
 
@@ -409,12 +420,33 @@
 	 */
 	function stepSection(step: number) {
 		const at = SECTIONS.indexOf(section);
+		// Réglages et Profil ne sont pas dans le dock : B en ramène.
+		if (at < 0) return;
 		const next = SECTIONS[Math.min(SECTIONS.length - 1, Math.max(0, at + step))];
 		// Un léger souffle dit qu'on change de section ; au bout du dock, rien.
 		if (next !== section) playSound('section');
 		opened = null;
 		menuOptionsOpen = false;
 		goToSection(next);
+	}
+
+	/** Menu rapide vers une page : on quitte aussi la fiche ou les options ouvertes. */
+	function leaveFor(next: Section) {
+		quickOpen = false;
+		opened = null;
+		menuOptionsOpen = false;
+		statsOpen = false;
+		goToSection(next);
+	}
+
+	function toggleSound() {
+		const next = !settings.sound_enabled;
+		saveSoundEnabled(next);
+		applySound(next);
+		// Le contexte audio est refermé quand on coupe le son : en le
+		// rallumant, il faut redécoder les fichiers.
+		if (next) preloadSounds();
+		notify(next ? 'Sons activés.' : 'Sons coupés.');
 	}
 
 	/**
@@ -448,7 +480,7 @@
 		}
 		// Aucun jeu (PC neuf) : A ouvre Réglages → Jeux, où se lance la détection.
 		if (homeGames.length === 0 && !resumeGame) {
-			if (action === 'accept') goToSection('settings');
+			if (action === 'accept') leaveFor('settings');
 			return;
 		}
 		if (action === 'left') homeIndex = Math.max(resumeGame ? -1 : 0, homeIndex - 1);
@@ -582,39 +614,16 @@
 		notify(isFavorite(opened.id) ? 'Ajouté aux favoris.' : 'Retiré des favoris.');
 	}
 
-	async function handlePower(action: Action) {
-		const count = powerPending ? 2 : POWER_ENTRIES.length;
-		if (action === 'left' || action === 'up') powerIndex = Math.max(0, powerIndex - 1);
-		else if (action === 'right' || action === 'down') powerIndex = Math.min(count - 1, powerIndex + 1);
-		else if (action === 'cancel') {
-			if (powerPending) {
-				powerPending = null;
-				powerIndex = 0;
-			} else powerOpen = false;
-		} else if (action === 'accept') {
-			if (powerPending) {
-				const chosen = powerPending;
-				powerPending = null;
-				powerIndex = 0;
-				powerOpen = false;
-				if (chosen) notify(await runPower(chosen));
-				return;
-			}
-			const entry = POWER_ENTRIES[powerIndex];
-			if (entry.confirm) {
-				powerPending = entry.action;
-				powerIndex = 0;
-			} else {
-				powerOpen = false;
-				notify(await runPower(entry.action));
-			}
-		}
+	function openQuickMenu() {
+		quickComponent?.show();
+		quickOpen = true;
+		playSound('section');
 	}
 
-	function openPower() {
-		powerOpen = true;
-		powerIndex = 0;
-		powerPending = null;
+	async function powerAction(action: PowerAction) {
+		const outcome = await runPower(action);
+		notify(outcome);
+		return outcome;
 	}
 
 	/** Synchronisation en cours (bouton X de la bibliothèque). */
@@ -644,6 +653,14 @@
 		]
 			.filter(Boolean)
 			.join(' · ');
+	}
+
+	/** Dossier choisi dans les Réglages : retenu, puis analysé tout de suite. */
+	async function addFolder(path: string) {
+		filePickerOpen = false;
+		if (!addGameFolder(path)) return notify('Ce dossier est déjà surveillé.');
+		notify('Dossier ajouté : recherche des jeux…');
+		await runSync();
 	}
 
 	async function runSync() {
@@ -689,7 +706,8 @@
 					customFolders: settings.game_folders,
 				});
 				if (ticket !== scanTicket) return;
-				scannedCandidates = results;
+				// Une entrée retirée à la main se rétablit dans les Réglages.
+				scannedCandidates = results.filter((game) => !isHidden(game));
 			} catch (e) {
 				if (ticket === scanTicket) notify(`Erreur pendant le scan : ${e}`, false);
 			} finally {
@@ -758,6 +776,7 @@
 	 */
 	function selectionKey(): string | null {
 		if (avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
+		if (quickOpen) return quickComponent?.selectionKey() ?? null;
 		if (filePickerOpen) return filePickerComponent?.selectionKey() ?? null;
 		if (searchOpen) return searchComponent?.selectionKey?.() ?? null;
 		if (nameKeyboardOpen) return null;
@@ -777,7 +796,6 @@
 			detailZone,
 			mediaIndex,
 			viewerOpen,
-			powerIndex,
 			optionsIndex,
 			gameMenuOpen,
 			gameMenuIndex,
@@ -795,7 +813,7 @@
 			return;
 		}
 		if (gameMenuOpen) return handleGameMenu(action);
-		if (powerOpen) return handlePower(action);
+		if (quickOpen) return quickComponent?.handleAction(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
 		if (artPickerOpen) return artPickerComponent?.handleAction(action);
@@ -805,7 +823,7 @@
 		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
 			return settingsComponent.handleAction(action);
 		}
-		if (action === 'menu') return openPower();
+		if (action === 'menu') return openQuickMenu();
 		// Y : la recherche, depuis n'importe quel écran (hors fenêtres).
 		if (action === 'search' && !menuOptionsOpen && !viewerOpen) {
 			return openSearch();
@@ -1046,7 +1064,7 @@
 			})
 		);
 		void initEpicAccount((ok, message) => {
-			if (ok) notify(`Epic Games connecté : ${message}.`);
+			if (ok) notify(message ? `Epic Games connecté : ${message}.` : 'Epic Games connecté.');
 			// Fenêtre fermée à la main : ce n'est pas une erreur.
 			else if (message === 'connexion annulée') notify('Connexion Epic annulée.');
 			else notify(`Connexion Epic impossible : ${message}`, false);
@@ -1061,7 +1079,7 @@
 		// Les sons sont décodés d'avance : le premier appui doit déjà sonner
 		// juste, pas retomber sur le bip de secours.
 		if (settings.sound_enabled) preloadSounds();
-		void startup();
+		const started = startup();
 		const stop = listen(handle);
 		// Filet de sécurité : sans cela, une erreur non rattrapée laissait une
 		// interface figée sans rien dire. On préfère un bandeau explicite.
@@ -1074,13 +1092,18 @@
 			toggleFullscreen();
 		};
 		window.addEventListener('keydown', onF11);
-		// Fin de partie : Lobby revient au premier plan.
-		const onGameExited = () => {
+		// Fin de partie : Lobby revient au premier plan, sauf pour un jeu lancé
+		// ailleurs (`quiet`).
+		const onGameExited = (event: Event) => {
 			endLaunchCover();
 			gameMenuOpen = false;
+			if ((event as CustomEvent<{ quiet: boolean }>).detail?.quiet) return;
 			void import('@tauri-apps/api/core').then(({ invoke }) => invoke('bring_to_front').catch(() => {}));
 		};
 		window.addEventListener('game-exited', onGameExited);
+		// Après `startup` : il faut la bibliothèque pour reconnaître un jeu.
+		let stopRunningGames: (() => void) | null = null;
+		void started.then(() => (stopRunningGames = watchRunningGames()));
 		// View + Menu maintenus en pleine partie : le menu du jeu s'ouvre **par-
 		// dessus le jeu** (fenêtre `overlay`, `GameOverlay.svelte`) ; ses choix
 		// reviennent ici (`game-menu`).
@@ -1124,6 +1147,7 @@
 			clearInterval(timer);
 			window.removeEventListener('keydown', onF11);
 			window.removeEventListener('game-exited', onGameExited);
+			stopRunningGames?.();
 			onGameCombo(null);
 			stopGameMenu?.();
 			endLaunchCover();
@@ -1148,9 +1172,17 @@
 						? [{ id: 'install', label: 'Installer', icon: 'download' }]
 						: [
 								{ id: 'executable', label: "Changer l'exécutable", icon: 'app' },
-								{ id: 'update', label: 'Mettre à jour', icon: 'download' },
-								{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
-								{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
+								// Ces trois actions sont confiées à Steam.
+								...(selected.appid
+									? [
+											{ id: 'update', label: 'Mettre à jour', icon: 'download' },
+											{ id: 'verify', label: 'Vérifier les fichiers', icon: 'restart' },
+											{ id: 'uninstall', label: 'Désinstaller', icon: 'trash' },
+										]
+									: []),
+								...(selected.id !== session.id
+									? [{ id: 'hide', label: 'Retirer de la bibliothèque', icon: 'exit' }]
+									: []),
 							]),
 				]
 			: []
@@ -1187,6 +1219,7 @@
 				break;
 			case 'executable':
 				// La détection a pu se tromper : on choisit le bon fichier soi-même.
+				filePickerMode = 'exe';
 				filePickerOpen = true;
 				break;
 			case 'update':
@@ -1198,6 +1231,15 @@
 			case 'uninstall':
 				if (selected.appid) notify(await uninstallGame(selected.appid));
 				break;
+			case 'hide': {
+				const { id: gameId, title } = selected;
+				if (opened?.id === gameId) opened = null;
+				hideGame(gameId);
+				homeIndex = Math.min(homeIndex, homeGames.length - 1);
+				libraryIndex = Math.min(libraryIndex, Math.max(0, libraryGames.length - 1));
+				notify(`${title} retiré de la bibliothèque. Réglages → Jeux pour le rétablir.`);
+				break;
+			}
 		}
 		if (id !== 'favorite') menuOptionsOpen = false;
 	}
@@ -1217,7 +1259,8 @@
 		if (keyboardOpen) return list(['a', 'Taper'], ['x', 'Effacer'], ['y', 'Espace'], ['b', 'Annuler']);
 		// Le menu du jeu affiche ses propres touches.
 		if (gameMenuOpen) return list();
-		if (powerOpen) return list(['a', 'Valider'], ['b', 'Annuler']);
+		// Le menu rapide affiche ses propres touches.
+		if (quickOpen) return list();
 		if (avatarPickerOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (artPickerOpen) return list(['a', 'Choisir cette image'], ['b', 'Fermer']);
 		// L'explorateur affiche ses propres touches.
@@ -1248,23 +1291,25 @@
 				['a', 'Ouvrir'],
 				['x', 'Options'],
 				['y', 'Recherche'],
+				['menu', 'Menu'],
 				['b', 'Accueil']
 			);
 		}
 		if (section === 'profile' && statsOpen) return list(['a', 'Ouvrir'], ['r2', 'Période'], ['b', 'Retour']);
-		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['b', 'Accueil']);
-		if (section === 'settings') return list(['a', 'Valider'], ['b', 'Accueil']);
+		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['menu', 'Menu'], ['b', 'Accueil']);
+		if (section === 'settings') return list(...(settingsComponent?.hints?.() ?? []), ['menu', 'Menu']);
 		if (homeZone === 'row' && homeGames.length === 0 && !resumeGame) {
-			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche']);
+			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche'], ['menu', 'Menu']);
 		}
 		if (homeZone === 'panels') {
 			const what = panelIndex === 0 ? 'Bibliothèque' : panelIndex === 1 ? 'Statistiques' : 'Voir le jeu';
-			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche']);
+			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche'], ['menu', 'Menu']);
 		}
 		return list(
 			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
 			['x', homeIndex < 0 && isRunning ? 'Quitter le jeu' : 'Options'],
-			['y', 'Recherche']
+			['y', 'Recherche'],
+			['menu', 'Menu']
 		);
 	});
 </script>
@@ -1280,8 +1325,6 @@
 	{clock}
 	{pads}
 	gamesCount={allGames.length}
-	profileName={settings.profile_name}
-	avatar={settings.avatar_path}
 	onSelectSection={goToSection}
 	searching={searchOpen}
 	onOpenSearch={openSearch}
@@ -1332,10 +1375,11 @@
 			avatar={settings.avatar_path}
 			steamPersona={steamAccount.persona}
 			steamAvatar={steamAccount.avatar}
+			epicConnected={epicAccount.connected}
 			epicName={epicAccount.displayName}
 			epicPending={epicAccount.pending}
 			epicError={epicAccount.error}
-			epicGamesCount={Object.keys(epicAccount.playtime).length}
+			epicGamesCount={epicAccount.library.length || Object.keys(epicAccount.playtime).length}
 			steamLibraryCount={Object.keys(steamAccount.owned).length}
 			steamLibraryDate={steamLibrary.fetchedAt}
 			steamLibraryPending={steamLibrary.pending}
@@ -1379,8 +1423,13 @@
 			onBack={() => goToSection('home')}
 			onReturnToHub={() => goToSection('home')}
 			onOpenScan={runGameScan}
-			onAddFolder={addGameFolder}
+			onPickFolder={() => {
+				filePickerMode = 'folder';
+				filePickerOpen = true;
+			}}
 			onRemoveFolder={removeGameFolder}
+			{hiddenGames}
+			onRestoreGame={restoreGame}
 			onChangeLayout={setButtonLayout}
 			soundEnabled={settings.sound_enabled}
 			volumes={{
@@ -1406,6 +1455,7 @@
 			screensaverMinutes={settings.screensaver_minutes}
 			steamGridKey={settings.steamgriddb_key}
 			initialCategory={params.get('cat') ?? 'games'}
+			initialRow={Number(params.get('row') ?? -1)}
 			{fullscreen}
 			onToggleFullscreen={toggleFullscreen}
 			initialKeyboard={params.get('modal') === 'keyboard'}
@@ -1429,15 +1479,7 @@
 				lastInput = Date.now();
 				notify(next ? `Veille après ${next} min.` : 'Veille désactivée.');
 			}}
-			onToggleSound={() => {
-				const next = !settings.sound_enabled;
-				saveSoundEnabled(next);
-				applySound(next);
-				// Le contexte audio est refermé quand on coupe le son : en le
-				// rallumant, il faut redécoder les fichiers.
-				if (next) preloadSounds();
-				notify(next ? 'Sons activés.' : 'Sons coupés.');
-			}}
+			onToggleSound={toggleSound}
 		/>
 	{/if}
 	</div>
@@ -1484,9 +1526,42 @@
 	/>
 {/if}
 
-{#if powerOpen}
-	<PowerMenu index={powerIndex} pending={powerPending} />
-{/if}
+<QuickMenu
+	bind:this={quickComponent}
+	open={quickOpen}
+	initialTab={Number(params.get('quick') ?? 0)}
+	initialConfirm={(params.get('confirm') as PowerAction) ?? null}
+	profileName={settings.profile_name}
+	avatar={settings.avatar_path}
+	accounts={[steamAccount.persona && 'Steam', epicAccount.connected && 'Epic Games'].filter((name) => !!name) as string[]}
+	{clock}
+	buttonLayout={settings.button_layout}
+	soundEnabled={settings.sound_enabled}
+	{fullscreen}
+	onClose={() => (quickOpen = false)}
+	onOpenProfile={() => leaveFor('profile')}
+	onEditName={() => {
+		quickOpen = false;
+		nameKeyboardOpen = true;
+	}}
+	onChangeAvatar={() => {
+		quickOpen = false;
+		avatarPickerOpen = true;
+	}}
+	onOpenStats={() => {
+		leaveFor('profile');
+		statsOpen = true;
+	}}
+	onOpenSettings={() => leaveFor('settings')}
+	onDetectGames={() => {
+		quickOpen = false;
+		void runGameScan();
+	}}
+	onToggleSound={toggleSound}
+	onToggleFullscreen={toggleFullscreen}
+	onCycleLayout={() => setButtonLayout(nextLayout(settings.button_layout))}
+	onPower={powerAction}
+/>
 
 <AvatarPicker
 	bind:this={avatarPickerComponent}
@@ -1521,8 +1596,10 @@
 	bind:this={filePickerComponent}
 	open={filePickerOpen}
 	game={selected}
+	mode={filePickerMode}
 	onClose={() => (filePickerOpen = false)}
 	onPick={(path) => {
+		if (filePickerMode === 'folder') return void addFolder(path);
 		if (!selected) return;
 		setGameExecutable(selected.id, path);
 		filePickerOpen = false;

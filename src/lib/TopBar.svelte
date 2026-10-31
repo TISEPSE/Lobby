@@ -10,16 +10,15 @@
 	 * dont les glyphes encadrent le dock : la sélection reste toujours dans le
 	 * contenu, le dock dit seulement où l'on se trouve.
 	 *
-	 * La section courante est une pilule claire qui porte son nom ; les autres
-	 * ne montrent que leur icône. Le profil est la dernière section, à droite.
+	 * La section courante est une pilule claire. Le dock ne porte que l'accueil,
+	 * la bibliothèque et la recherche : Réglages et Profil sont dans le menu
+	 * rapide (bouton Menu).
 	 */
 	let {
 		section,
 		gamesCount,
 		clock,
 		pads = 0,
-		profileName = 'Joueur',
-		avatar = '',
 		searching = false,
 		onSelectSection,
 		onOpenSearch,
@@ -28,8 +27,6 @@
 		gamesCount: number;
 		clock: string;
 		pads?: number;
-		profileName?: string;
-		avatar?: string;
 		/** Fenêtre de recherche ouverte. */
 		searching?: boolean;
 		onSelectSection?: (section: Section) => void;
@@ -39,11 +36,8 @@
 
 	type Entry = { id: Section; label: string; icon: string };
 
-	const LEFT: Entry[] = [
-		{ id: 'home', label: 'Accueil', icon: 'home' },
-		{ id: 'library', label: 'Bibliothèque', icon: 'library' },
-	];
-	const RIGHT: Entry[] = [{ id: 'settings', label: 'Réglages', icon: 'settings' }];
+	const HOME: Entry = { id: 'home', label: 'Accueil', icon: 'home' };
+	const LIBRARY: Entry = { id: 'library', label: 'Bibliothèque', icon: 'library' };
 
 	/** Glyphes LB / RB ou L1 / R1, selon la manette branchée. */
 	let layout = $state<'xbox' | 'ps5'>('xbox');
@@ -72,9 +66,7 @@
 	<div class="dock">
 		<div class="group">
 			<img class="bumper" src={glyphSrc(layout, 'l1')} alt="L1" />
-			{#each LEFT as entry (entry.id)}
-				{@render button(entry)}
-			{/each}
+			{@render button(HOME)}
 		</div>
 
 		<!-- La recherche n'est pas une étape de L1 / R1 : c'est une fenêtre,
@@ -91,27 +83,7 @@
 		</button>
 
 		<div class="group">
-			{#each RIGHT as entry (entry.id)}
-				{@render button(entry)}
-			{/each}
-
-			<button
-				type="button"
-				class="profile"
-				class:active={section === 'profile'}
-				onclick={() => onSelectSection?.('profile')}
-				aria-label="Profil"
-				aria-current={section === 'profile'}
-			>
-				<span class="avatar">
-					{#if avatar}
-						<img src={avatar} alt="" />
-					{:else}
-						{profileName.charAt(0).toUpperCase()}
-					{/if}
-				</span>
-				<span class="label"><span class="text">{profileName}</span></span>
-			</button>
+			{@render button(LIBRARY)}
 			<img class="bumper" src={glyphSrc(layout, 'r1')} alt="R1" />
 		</div>
 	</div>
@@ -180,8 +152,7 @@
 	   de marge qui changent en même temps. */
 	/* Chaque bouton montre **toujours** son icône et son nom : rien ne s'ouvre
 	   ni ne se ferme, le dock garde la même taille et se lit d'un coup d'œil. */
-	.item,
-	.profile {
+	.item {
 		display: flex;
 		align-items: center;
 		gap: 10px;
@@ -198,7 +169,6 @@
 
 	/* Survol : la pilule s'éclaire et se soulève à peine. */
 	.item:hover,
-	.profile:hover,
 	.search:hover {
 		background: var(--dock-hover);
 		color: var(--text);
@@ -212,7 +182,6 @@
 	}
 
 	.item:active,
-	.profile:active,
 	.search:active {
 		transform: translateY(0) scale(0.97);
 	}
@@ -244,7 +213,6 @@
 	   contour d'accent — ce n'est pas une sélection, la sélection est dans le
 	   contenu. */
 	.item.active,
-	.profile.active,
 	.search.active {
 		background: var(--dock-active);
 		color: var(--text);
@@ -316,33 +284,5 @@
 		font-weight: 600;
 		text-shadow: 0 2px 12px rgba(0, 0, 0, 0.6);
 		font-variant-numeric: tabular-nums;
-	}
-
-	/* Le profil : la photo, cerclée d'accent comme sur une Xbox ; le pseudo
-	   apparaît quand c'est la section courante. */
-	/* La photo occupe le début de la pilule, le pseudo suit. */
-	.profile {
-		padding: 0 16px 0 3px;
-	}
-
-	.avatar {
-		display: grid;
-		flex: none;
-		place-items: center;
-		width: calc(var(--dock-button) - 6px);
-		height: calc(var(--dock-button) - 6px);
-		overflow: hidden;
-		border-radius: 50%;
-		background: var(--accent);
-		color: var(--on-accent);
-		font-size: 17px;
-		font-weight: 700;
-		box-shadow: 0 0 0 2px var(--accent);
-	}
-
-	.avatar img {
-		width: 100%;
-		height: 100%;
-		object-fit: cover;
 	}
 </style>

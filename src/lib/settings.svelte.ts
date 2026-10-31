@@ -4,6 +4,7 @@
  * Persisté via Tauri (disque) et localStorage (secours).
  */
 import type { UserSettings, VolumeKey } from './types';
+import { setLayoutChoice } from './gamepad';
 
 export const VOLUME_KEYS: VolumeKey[] = ['volume_master', 'volume_menu', 'volume_alerts', 'volume_launch', 'volume_video'];
 
@@ -24,8 +25,8 @@ const STORAGE_KEY = 'interface-console.settings';
 export const settings = $state<UserSettings>({
 	profile_name: 'Joueur',
 	avatar_path: '/assets/avatars/a11_face.svg',
-	button_layout: 'ps5',
-	game_folders: ['D:/Jeux'],
+	button_layout: 'auto',
+	game_folders: [],
 	sound_enabled: true,
 	steamgriddb_key: '',
 	screensaver_minutes: 5,
@@ -49,8 +50,9 @@ export async function initSettings() {
 			if (loaded) {
 				settings.profile_name = loaded.profile_name || 'Joueur';
 				settings.avatar_path = loaded.avatar_path || '/assets/avatars/a11_face.svg';
-				settings.button_layout = loaded.button_layout || 'ps5';
-				settings.game_folders = loaded.game_folders ?? ['D:/Jeux'];
+				settings.button_layout = loaded.button_layout || 'auto';
+				setLayoutChoice(settings.button_layout);
+				settings.game_folders = loaded.game_folders ?? [];
 				settings.sound_enabled = loaded.sound_enabled ?? true;
 				settings.steamgriddb_key = loaded.steamgriddb_key ?? '';
 				settings.screensaver_minutes = loaded.screensaver_minutes ?? 5;
@@ -73,6 +75,7 @@ export async function initSettings() {
 			settings.profile_name = parsed.profile_name ?? settings.profile_name;
 			settings.avatar_path = parsed.avatar_path ?? settings.avatar_path;
 			settings.button_layout = parsed.button_layout ?? settings.button_layout;
+			setLayoutChoice(settings.button_layout);
 			settings.game_folders = parsed.game_folders ?? settings.game_folders;
 		}
 	} catch {}
@@ -112,9 +115,17 @@ export function setAvatar(path: string) {
 	saveSettings();
 }
 
+export const LAYOUT_LABELS: Record<string, string> = { ps5: 'PlayStation', xbox: 'Xbox', auto: 'Automatique' };
+
+/** Disposition suivante : PlayStation, Xbox, puis automatique. */
+export function nextLayout(layout: string): string {
+	return layout === 'ps5' ? 'xbox' : layout === 'xbox' ? 'auto' : 'ps5';
+}
+
 export function setButtonLayout(layout: string) {
 	if (layout === settings.button_layout) return;
 	settings.button_layout = layout;
+	setLayoutChoice(layout);
 	saveSettings();
 }
 
@@ -150,11 +161,15 @@ export function setSteamGridKey(key: string) {
 	saveSettings();
 }
 
-export function addGameFolder(path: string) {
-	const clean = path.trim().replace(/\\/g, '/').replace(/\/$/, '');
-	if (!clean || settings.game_folders.includes(clean)) return;
+/** Rend `false` si le dossier était déjà suivi. */
+export function addGameFolder(path: string): boolean {
+	// La racine d'un disque garde sa barre : `D:` seul désignerait le dossier
+	// courant de ce disque.
+	const clean = path.trim().replace(/\\/g, '/').replace(/(?<!:)\/$/, '');
+	if (!clean || settings.game_folders.includes(clean)) return false;
 	settings.game_folders = [...settings.game_folders, clean];
 	saveSettings();
+	return true;
 }
 
 export function removeGameFolder(path: string) {

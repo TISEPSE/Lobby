@@ -1,8 +1,9 @@
 <script lang="ts">
-	import { onMount } from 'svelte';
 	import type { Action } from './gamepad';
-	import type { VolumeKey } from './types';
+	import type { GlyphButton } from './glyphs';
+	import type { Game, VolumeKey } from './types';
 	import { notices } from './notices.svelte.js';
+	import { LAYOUT_LABELS, nextLayout } from './settings.svelte.js';
 	import VirtualKeyboard from './VirtualKeyboard.svelte';
 
 	let {
@@ -15,6 +16,7 @@
 		screensaverMinutes = 5,
 		steamGridKey = '',
 		initialCategory = 'games',
+		initialRow = -1,
 		initialKeyboard = false,
 		fullscreen = true,
 		onToggleFullscreen,
@@ -23,8 +25,10 @@
 		onBack,
 		onReturnToHub = onBack,
 		onOpenScan,
-		onAddFolder,
+		onPickFolder,
 		onRemoveFolder,
+		hiddenGames = [],
+		onRestoreGame,
 		onChangeLayout,
 		onToggleSound,
 		onCycleScreensaver,
@@ -42,6 +46,8 @@
 		steamGridKey?: string;
 		/** Catégorie ouverte au premier affichage (outil de capture). */
 		initialCategory?: string;
+		/** Ligne sélectionnée au premier affichage, -1 pour les catégories (outil de capture). */
+		initialRow?: number;
 		/** Ouvre le clavier au premier affichage (outil de capture). */
 		initialKeyboard?: boolean;
 		/** Plein écran sans bordure, ou fenêtre classique. */
@@ -53,8 +59,12 @@
 		onBack: () => void;
 		onReturnToHub?: () => void;
 		onOpenScan: () => void;
-		onAddFolder: (path: string) => void;
+		/** Ouvre l'explorateur pour choisir un dossier de jeux. */
+		onPickFolder: () => void;
 		onRemoveFolder: (path: string) => void;
+		/** Entrées retirées de la bibliothèque, qu'on peut rétablir ici. */
+		hiddenGames?: Game[];
+		onRestoreGame?: (id: string) => void;
 		onChangeLayout: (layout: string) => void;
 		onToggleSound?: () => void;
 		onCycleScreensaver?: () => void;
@@ -97,18 +107,37 @@
 		},
 	];
 
+	/** Ce que montre le côté droit d'une ligne : une présentation par type de réglage. */
+	type Control =
+		| { kind: 'open' }
+		| { kind: 'value'; text: string }
+		| { kind: 'switch'; on: boolean }
+		| { kind: 'volume'; key: VolumeKey }
+		| { kind: 'remove' }
+		| { kind: 'restore' };
+
+	interface Row {
+		title: string;
+		desc: string;
+		control: Control;
+		/** Ce que fait A, pour la barre d'aide. */
+		accept: string;
+		run: () => void;
+		/** Titre de groupe, affiché au-dessus de la ligne. */
+		section?: string;
+		/** Réglage sans effet pour l'instant : volumes quand les sons sont coupés. */
+		muted?: boolean;
+	}
+
 	let activeCatIndex = $state(Math.max(0, CATEGORIES.findIndex((c) => c.id === initialCategory)));
-	let focusCol = $state<'categories' | 'content'>('categories');
-	let focusRow = $state(0);
+	let focusCol = $state<'categories' | 'content'>(initialRow >= 0 ? 'content' : 'categories');
+	let focusRow = $state(Math.max(0, initialRow));
 
 	let isKeyboardOpen = $state(initialKeyboard);
-	/** Ce que le clavier est en train de saisir : le pseudo ou la clé d'API. */
-	/** La seule saisie des réglages : la clé SteamGridDB (le pseudo est dans le Profil). */
-	let keyboardTarget = $state<'steamgrid'>('steamgrid');
 	let keyboardComponent = $state<any>(null);
-
-	let isAddingFolder = $state(false);
-	let newFolderInput = $state('');
+	let scroller = $state<HTMLElement | null>(null);
+	/** Position de la ligne sélectionnée dans la liste : le cadre y glisse. */
+	let rowTop = $state(0);
 
 	const currentCategory = $derived(CATEGORIES[activeCatIndex]);
 
@@ -121,11 +150,6 @@
 		{ key: 'volume_video', title: 'Vidéos', desc: 'Bandes-annonces des fiches de jeu' },
 	];
 
-	/** Ligne de volume sélectionnée, ou null. */
-	const focusedVolume = $derived(
-		currentCategory.id === 'audio' && focusCol === 'content' && focusRow >= 1 ? VOLUMES[focusRow - 1] : null
-	);
-	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
 	const screensaverLabel = $derived(
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
 	);
@@ -136,6 +160,7 @@
 	 */
 	let steamGridStatus = $state<'unknown' | 'testing' | 'ok' | 'bad' | 'offline'>('unknown');
 
+	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
 	const steamGridKeyLabel = $derived.by(() => {
 		if (!steamGridKey) return 'Non configurée';
 		const masked = `Configurée ····${steamGridKey.slice(-4)}`;
@@ -179,26 +204,133 @@
 		}
 	}
 
-	// Nombre d'éléments interactifs dans le panneau de droite selon la catégorie
-	const contentRowsCount = $derived.by(() => {
+	/** La ligne sélectionnée disparaît : la sélection reste dans la liste. */
+	function dropRow(action: () => void) {
+		action();
+		focusRow = Math.min(focusRow, rows.length - 1);
+	}
+
+	/**
+	 * Les lignes de la catégorie ouverte. Tout en découle (rendu, navigation,
+	 * action de A, barre d'aide) : rien à garder aligné par des numéros de ligne.
+	 */
+	const rows = $derived.by((): Row[] => {
 		switch (currentCategory.id) {
 			case 'games':
-				// [0: scanner, 1: clé SteamGridDB, 2: ajouter dossier, 3..N: dossiers]
-				return 3 + gameFolders.length;
+				return [
+					{
+						title: 'Détecter mes jeux',
+						desc: 'Cherche dans Steam, Epic Games, les raccourcis du Bureau et tes dossiers.',
+						control: { kind: 'open' },
+						accept: 'Lancer',
+						run: () => onOpenScan(),
+					},
+					{
+						section: 'Jaquettes',
+						title: 'Clé SteamGridDB',
+						desc: 'Pour les jeux absents de Steam. Clé gratuite sur steamgriddb.com, gardée sur ce PC.',
+						control: { kind: 'value', text: steamGridKeyLabel },
+						accept: 'Modifier',
+						run: () => (isKeyboardOpen = true),
+					},
+					{
+						section: 'Dossiers surveillés',
+						title: 'Ajouter un dossier',
+						desc: 'Les sous-dossiers qui contiennent un jeu seront détectés.',
+						control: { kind: 'open' },
+						accept: 'Parcourir',
+						run: () => onPickFolder(),
+					},
+					...gameFolders.map((folder): Row => ({
+						title: folder,
+						desc: 'Analysé à chaque détection',
+						control: { kind: 'remove' },
+						accept: 'Retirer',
+						run: () => dropRow(() => onRemoveFolder(folder)),
+					})),
+					...hiddenGames.map((game, i): Row => ({
+						section: i === 0 ? 'Jeux retirés' : undefined,
+						title: game.title,
+						desc: 'Ignoré par la détection. Rien n’a été désinstallé.',
+						control: { kind: 'restore' },
+						accept: 'Rétablir',
+						run: () => dropRow(() => onRestoreGame?.(game.id)),
+					})),
+				];
 			case 'appearance':
-				return 3; // [0: touches, 1: veille, 2: ordre de l'accueil]
+				return [
+					{
+						title: 'Disposition des touches',
+						desc: 'Style des icônes de la manette dans l’interface et la barre d’aide',
+						control: { kind: 'value', text: LAYOUT_LABELS[buttonLayout] ?? LAYOUT_LABELS.auto },
+						accept: 'Changer',
+						run: () => onChangeLayout(nextLayout(buttonLayout)),
+					},
+					{
+						title: 'Écran de veille',
+						desc: 'Artworks de la bibliothèque après un moment sans rien toucher',
+						control: { kind: 'value', text: screensaverLabel },
+						accept: 'Changer',
+						run: () => onCycleScreensaver?.(),
+					},
+					{
+						title: 'Ordre de l’accueil',
+						desc: 'Les jeux auxquels tu as joué en dernier d’abord, ou par titre',
+						control: { kind: 'value', text: homeOrderLabel },
+						accept: 'Changer',
+						run: () => onCycleHomeOrder?.(),
+					},
+				];
 			case 'audio':
-				return 1 + VOLUMES.length; // [0: sons activés, 1..: volumes]
+				return [
+					{
+						title: 'Sons de l’interface',
+						desc: 'Petits sons de navigation, de validation et de lancement',
+						control: { kind: 'switch', on: soundEnabled },
+						accept: soundEnabled ? 'Désactiver' : 'Activer',
+						run: () => onToggleSound?.(),
+					},
+					...VOLUMES.map((entry): Row => ({
+						title: entry.title,
+						desc: entry.desc,
+						control: { kind: 'volume', key: entry.key },
+						accept: 'Régler',
+						muted: !soundEnabled && entry.key !== 'volume_video',
+						// A fait le tour : +10 %, puis retour à 0 après 100 %.
+						run: () => onStepVolume?.(entry.key, volumes[entry.key] >= 100 ? -100 : 10),
+					})),
+				];
 			case 'system':
-				return 1; // [0: plein écran]
-			default:
-				return 0;
+				return [
+					{
+						title: 'Affichage',
+						desc: 'Plein écran sans bordure, ou fenêtre avec sa barre de titre (F11)',
+						control: { kind: 'value', text: fullscreen ? 'Plein écran' : 'Fenêtre' },
+						accept: 'Changer',
+						run: () => onToggleFullscreen?.(),
+					},
+				];
 		}
+	});
+
+	const focusedRow = $derived(focusCol === 'content' ? (rows[focusRow] ?? null) : null);
+	/** Volume sélectionné, ou null : gauche / droite le règlent. */
+	const focusedVolume = $derived(focusedRow?.control.kind === 'volume' ? focusedRow.control.key : null);
+
+	// La ligne sélectionnée reste au centre de la liste, jamais hors de l'écran.
+	// Les titres de groupe décalent les lignes : le cadre lit leur vraie position.
+	$effect(() => {
+		void rows.length;
+		const row = scroller?.querySelector<HTMLElement>(`[data-row="${focusRow}"]`);
+		if (!scroller || !row) return;
+		rowTop = row.offsetTop;
+		const top = focusCol === 'content' ? row.offsetTop - (scroller.clientHeight - row.offsetHeight) / 2 : 0;
+		scroller.scrollTo({ top, behavior: 'smooth' });
 	});
 
 	/** Empreinte de la sélection, pour ne sonner que si elle bouge. Inconnue sous le clavier. */
 	export function selectionKey(): string | null {
-		if (isKeyboardOpen || isAddingFolder) return null;
+		if (isKeyboardOpen) return null;
 		return `${focusCol}|${activeCatIndex}|${focusRow}`;
 	}
 
@@ -206,24 +338,16 @@
 		return isKeyboardOpen;
 	}
 
-	export function focusProfile() {
-		focusCol = 'categories';
-		activeCatIndex = 0;
-		focusRow = 0;
+	/** Touches de la barre d'aide pour la sélection du moment. */
+	export function hints(): [GlyphButton, string][] {
+		if (!focusedRow) return [['a', 'Ouvrir'], ['b', 'Accueil']];
+		if (focusedVolume) return [['dpad', 'Régler'], ['b', 'Retour']];
+		return [['a', focusedRow.accept], ['b', 'Retour']];
 	}
 
 	export function handleAction(action: Action) {
 		if (isKeyboardOpen) {
 			keyboardComponent?.handleAction(action);
-			return;
-		}
-
-		if (isAddingFolder) {
-			if (action === 'accept') {
-				confirmAddFolder();
-			} else if (action === 'cancel') {
-				isAddingFolder = false;
-			}
 			return;
 		}
 
@@ -239,386 +363,132 @@
 				activeCatIndex = Math.min(CATEGORIES.length - 1, activeCatIndex + 1);
 				focusRow = 0;
 			} else if (action === 'right' || action === 'accept') {
-				if (contentRowsCount > 0) {
-					focusCol = 'content';
-					focusRow = 0;
-				}
+				focusCol = 'content';
+				focusRow = 0;
 			} else if (action === 'cancel') {
 				onReturnToHub?.();
 			}
-		} else {
-			// focusCol === 'content'
-			if (action === 'up') {
-				if (focusRow > 0) {
-					focusRow--;
-				} else {
-					focusCol = 'categories';
-				}
-			} else if (action === 'down') {
-				if (focusRow < contentRowsCount - 1) {
-					focusRow++;
-				}
-			} else if (focusedVolume && (action === 'left' || action === 'right')) {
-				// Sur un volume, gauche / droite le règlent ; B revient aux catégories.
-				onStepVolume?.(focusedVolume.key, action === 'left' ? -10 : 10);
-			} else if (action === 'left' || action === 'cancel') {
-				focusCol = 'categories';
-			} else if (action === 'accept') {
-				executeContentAction();
-			}
+			return;
 		}
-	}
 
-	function executeContentAction() {
-		const cat = currentCategory.id;
-		if (cat === 'games') {
-			if (focusRow === 0) {
-				onOpenScan();
-			} else if (focusRow === 1) {
-				keyboardTarget = 'steamgrid';
-				isKeyboardOpen = true;
-			} else if (focusRow === 2) {
-				newFolderInput = 'D:/Jeux';
-				isAddingFolder = true;
-			} else {
-				// Supprimer le dossier
-				const folderIdx = focusRow - 3;
-				if (folderIdx >= 0 && folderIdx < gameFolders.length) {
-					onRemoveFolder(gameFolders[folderIdx]);
-					focusRow = Math.max(1, focusRow - 1);
-				}
-			}
-		} else if (cat === 'system') {
-			if (focusRow === 0) onToggleFullscreen?.();
-		} else if (cat === 'appearance') {
-			if (focusRow === 0) {
-				const next = buttonLayout === 'ps5' ? 'xbox' : buttonLayout === 'xbox' ? 'auto' : 'ps5';
-				onChangeLayout(next);
-			} else if (focusRow === 1) {
-				onCycleScreensaver?.();
-			} else if (focusRow === 2) {
-				onCycleHomeOrder?.();
-			}
-		} else if (cat === 'audio') {
-			if (focusRow === 0) {
-				onToggleSound?.();
-			} else if (focusedVolume) {
-				// A fait le tour : +10 %, puis retour à 0 après 100 %.
-				const value = volumes[focusedVolume.key];
-				onStepVolume?.(focusedVolume.key, value >= 100 ? -100 : 10);
-			}
+		if (action === 'up') {
+			focusRow = Math.max(0, focusRow - 1);
+		} else if (action === 'down') {
+			focusRow = Math.min(rows.length - 1, focusRow + 1);
+		} else if (focusedVolume && (action === 'left' || action === 'right')) {
+			// Sur un volume, gauche / droite le règlent ; B revient aux catégories.
+			onStepVolume?.(focusedVolume, action === 'left' ? -10 : 10);
+		} else if (action === 'left' || action === 'cancel') {
+			focusCol = 'categories';
+		} else if (action === 'accept') {
+			focusedRow?.run();
 		}
-	}
-
-	function confirmAddFolder() {
-		const clean = newFolderInput.trim();
-		if (clean) {
-			onAddFolder(clean);
-		}
-		isAddingFolder = false;
 	}
 </script>
 
 <div class="settings-screen">
-	<!-- Colonne de gauche : Catégories -->
 	<aside class="sidebar">
-		<h1 class="page-title">Réglages</h1>
-		<nav class="categories">
-			{#each CATEGORIES as cat, i}
+		<h1>Réglages</h1>
+		<nav class="categories" style="--cat: {activeCatIndex}">
+			<span class="glider pill" class:focus-ring={focused && focusCol === 'categories'}></span>
+			{#each CATEGORIES as cat, i (cat.id)}
 				<button
 					type="button"
-					class="cat-btn"
+					class="category"
 					class:active={activeCatIndex === i}
-					class:focused={focused && focusCol === 'categories' && activeCatIndex === i}
 					onclick={() => {
 						activeCatIndex = i;
 						focusCol = 'categories';
 						focusRow = 0;
 					}}
 				>
-					<span class="cat-icon">
-						<img src="/assets/icons/{cat.icon}.svg" alt="" />
-					</span>
-					<span class="cat-label">{cat.label}</span>
+					<img src="/assets/icons/{cat.icon}.svg" alt="" />
+					{cat.label}
 				</button>
 			{/each}
 		</nav>
 	</aside>
 
-	<!-- Volet de droite : Contenu dynamique -->
-	<main class="panel">
-		<header class="panel-header">
+	<section class="page">
+		<header>
 			<h2>{currentCategory.label}</h2>
-			<p class="panel-hint">{currentCategory.hint}</p>
+			<p>{currentCategory.hint}</p>
 		</header>
 
-		<div class="panel-body">
-			{#if currentCategory.id === 'games'}
-				<!-- Gestion des jeux et du scan -->
-				<div class="hero-action-card">
-					<div class="hero-info">
-						<div class="hero-title-row">
-							<img src="/assets/icons/library.svg" alt="" class="hero-icon" />
-							<span class="hero-title">Détection des jeux PC</span>
-						</div>
-						<span class="hero-desc">
-							Analyse automatique de Steam, Epic Games, des raccourcis du Bureau et de tes dossiers de jeux.
+		<div class="rows" bind:this={scroller}>
+			<span
+				class="glider cursor focus-ring"
+				class:off={!focused || focusCol !== 'content'}
+				style="--glide-y: {rowTop}px"
+			></span>
+			{#each rows as row, i (row.title)}
+				{#if row.section}
+					<h3>{row.section}</h3>
+				{/if}
+				<button
+					type="button"
+					class="row"
+					class:muted={row.muted}
+					class:selected={focused && focusCol === 'content' && focusRow === i}
+					data-row={i}
+					onclick={() => {
+						focusCol = 'content';
+						focusRow = i;
+						row.run();
+					}}
+				>
+					<span class="text">
+						<span class="title">{row.title}</span>
+						<span class="desc">{row.desc}</span>
+					</span>
+
+					{#if row.control.kind === 'value'}
+						<span class="value">{row.control.text}</span>
+						<img class="chevron" src="/assets/icons/chevron.svg" alt="" />
+					{:else if row.control.kind === 'open'}
+						<img class="chevron" src="/assets/icons/chevron.svg" alt="" />
+					{:else if row.control.kind === 'switch'}
+						<span class="value">{row.control.on ? 'Activés' : 'Désactivés'}</span>
+						<span class="switch" class:on={row.control.on}></span>
+					{:else if row.control.kind === 'volume'}
+						{@const value = volumes[row.control.key]}
+						<span class="volume">
+							<span class="arrow">◂</span>
+							<span class="bar"><span class="fill" style="width: {value}%"></span></span>
+							<span class="percent">{value} %</span>
+							<span class="arrow">▸</span>
 						</span>
-					</div>
-					<button
-						type="button"
-						class="btn-scan"
-						class:focused={focused && focusCol === 'content' && focusRow === 0}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 0;
-							onOpenScan();
-						}}
-					>
-						Lancer la détection
-					</button>
-				</div>
-
-				<div class="section-divider">
-					<h3>Jaquettes</h3>
-				</div>
-
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 1}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 1;
-							keyboardTarget = 'steamgrid';
-							isKeyboardOpen = true;
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Clé SteamGridDB</span>
-							<span class="desc">
-								Jaquettes des jeux absents de Steam. Clé gratuite sur steamgriddb.com
-								(Preferences → API) ; elle reste sur cette machine.
-							</span>
-						</div>
-						<span class="badge-layout">{steamGridKeyLabel} ▸</span>
-					</button>
-				</div>
-
-				<div class="section-divider">
-					<h3>Dossiers surveillés</h3>
-				</div>
-
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 2}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 2;
-							newFolderInput = 'D:/Jeux';
-							isAddingFolder = true;
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Ajouter un dossier de jeux</span>
-							<span class="desc">Scanne les sous-dossiers contenant un exécutable ou une installation</span>
-						</div>
-						<span class="action-tag">+ Ajouter</span>
-					</button>
-
-					{#if isAddingFolder}
-						<div class="folder-input-box">
-							<input
-								type="text"
-								bind:value={newFolderInput}
-								class="folder-input"
-								placeholder="Ex : D:/Jeux ou C:/Games"
-								onkeydown={(e) => {
-									if (e.key === 'Enter') confirmAddFolder();
-									if (e.key === 'Escape') isAddingFolder = false;
-								}}
-							/>
-							<button type="button" class="btn-sm" onclick={confirmAddFolder}>Ajouter</button>
-							<button type="button" class="btn-sm secondary" onclick={() => (isAddingFolder = false)}>
-								Annuler
-							</button>
-						</div>
+					{:else if row.control.kind === 'restore'}
+						<span class="value restore">Rétablir</span>
+					{:else}
+						<span class="value remove">Retirer</span>
 					{/if}
+				</button>
+			{/each}
 
-					{#each gameFolders as folder, i}
-						<!-- La clé SteamGridDB occupe la ligne 1, les dossiers commencent à 3. -->
-						{@const rowIdx = 3 + i}
-						<div
-							class="setting-row folder-row"
-							class:focused={focused && focusCol === 'content' && focusRow === rowIdx}
-						>
-							<div class="row-label">
-								<span class="title">{folder}</span>
-								<span class="desc">Dossier personnalisé actif</span>
-							</div>
-							<button
-								type="button"
-								class="btn-delete"
-								onclick={() => onRemoveFolder(folder)}
-							>
-								Retirer
-							</button>
-						</div>
-					{/each}
-				</div>
-
-			{:else if currentCategory.id === 'appearance'}
-				<!-- Réglages d'apparence -->
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 0}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 0;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Disposition des touches</span>
-							<span class="desc">Style des icônes de la manette dans l’interface et la barre d’aide</span>
-						</div>
-						<span class="badge-layout">
-							{buttonLayout === 'ps5' ? 'PlayStation ▸' : buttonLayout === 'xbox' ? 'Xbox ▸' : 'Auto ▸'}
-						</span>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 1}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 1;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Écran de veille</span>
-							<span class="desc">Artworks de la bibliothèque après un moment sans rien toucher</span>
-						</div>
-						<span class="badge-layout">{screensaverLabel} ▸</span>
-					</button>
-
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 2}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 2;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Ordre de l'accueil</span>
-							<span class="desc">Les jeux auxquels tu as joué en dernier d'abord, ou par titre</span>
-						</div>
-						<span class="badge-layout">{homeOrderLabel} ▸</span>
-					</button>
-
-				</div>
-
-			{:else if currentCategory.id === 'audio'}
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 0}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 0;
-							executeContentAction();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Sons de l'interface</span>
-							<span class="desc">Petits sons de navigation, de validation et de lancement</span>
-						</div>
-						<span class="badge-layout">{soundEnabled ? 'Oui ▸' : 'Non ▸'}</span>
-					</button>
-
-					{#each VOLUMES as entry, i (entry.key)}
-						{@const value = volumes[entry.key]}
-						<button
-							type="button"
-							class="setting-row"
-							class:focused={focused && focusCol === 'content' && focusRow === i + 1}
-							class:muted={!soundEnabled && entry.key !== 'volume_video'}
-							onclick={() => {
-								focusCol = 'content';
-								focusRow = i + 1;
-								executeContentAction();
-							}}
-						>
-							<div class="row-label">
-								<span class="title">{entry.title}</span>
-								<span class="desc">{entry.desc}</span>
-							</div>
-							<span class="volume">
-								<span class="arrow">◂</span>
-								<span class="bar"><span class="fill" style="width: {value}%"></span></span>
-								<span class="percent">{value} %</span>
-								<span class="arrow">▸</span>
-							</span>
-						</button>
-					{/each}
-				</div>
-
-			{:else if currentCategory.id === 'system'}
-				<div class="rows-list">
-					<button
-						type="button"
-						class="setting-row"
-						class:focused={focused && focusCol === 'content' && focusRow === 0}
-						onclick={() => {
-							focusCol = 'content';
-							focusRow = 0;
-							onToggleFullscreen?.();
-						}}
-					>
-						<div class="row-label">
-							<span class="title">Affichage</span>
-							<span class="desc">Plein écran sans bordure, ou fenêtre avec sa barre de titre (F11)</span>
-						</div>
-						<span class="badge-layout">{fullscreen ? 'Plein écran ▸' : 'Fenêtre ▸'}</span>
-					</button>
-				</div>
-
+			{#if currentCategory.id === 'system'}
 				<!-- Les derniers messages du bandeau : un avertissement passé trop
 				     vite se relit ici. -->
-				<section class="journal">
-					<span class="journal-title">Journal</span>
-					{#if notices.length === 0}
-						<p class="journal-empty">Aucun message depuis le démarrage.</p>
-					{:else}
-						<ul>
-							{#each notices.slice(0, 12) as entry (entry.at + entry.message)}
-								<li class:failed={!entry.ok}>
-									<span class="journal-time">
-										{new Date(entry.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
-									</span>
-									<span class="journal-text">{entry.message}</span>
-								</li>
-							{/each}
-						</ul>
-					{/if}
-				</section>
-
+				<h3>Journal</h3>
+				{#if notices.length === 0}
+					<p class="journal-empty">Aucun message depuis le démarrage.</p>
+				{:else}
+					<ul class="journal">
+						{#each notices.slice(0, 12) as entry (entry.at + entry.message)}
+							<li class:failed={!entry.ok}>
+								<span class="journal-time">
+									{new Date(entry.at).toLocaleTimeString('fr-FR', { hour: '2-digit', minute: '2-digit' })}
+								</span>
+								<span>{entry.message}</span>
+							</li>
+						{/each}
+					</ul>
+				{/if}
 			{/if}
 		</div>
-	</main>
+	</section>
 
-	<!-- Clavier virtuel console pour modification du pseudo -->
+	<!-- Clavier virtuel : la seule saisie des réglages, la clé SteamGridDB. -->
 	<VirtualKeyboard
 		open={isKeyboardOpen}
 		title="Clé SteamGridDB"
@@ -640,409 +510,287 @@
 	.settings-screen {
 		position: relative;
 		display: grid;
-		grid-template-columns: 280px 1fr;
-		gap: 40px;
+		grid-template-columns: var(--settings-nav) minmax(0, 1fr);
+		gap: var(--settings-columns);
 		height: 100%;
-		padding: 0 var(--safe-x);
-		animation: fade-in 220ms var(--ease);
+		padding: 0 var(--safe-x) var(--settings-bottom);
 	}
 
-	/* Colonne de gauche */
+	/* Colonne de gauche : les catégories. */
 	.sidebar {
 		display: flex;
 		flex-direction: column;
-		gap: 24px;
-		padding-top: 10px;
+		min-height: 0;
 	}
 
-	.page-title {
+	h1 {
+		flex: none;
+		height: var(--settings-header);
 		margin: 0;
-		font-size: clamp(28px, 2.5vw, 42px);
+		font-size: var(--settings-title);
 		font-weight: 800;
-		color: var(--text);
+		line-height: 1.2;
 	}
 
 	.categories {
+		position: relative;
 		display: flex;
 		flex-direction: column;
-		gap: 10px;
+		gap: var(--settings-row-gap);
+		isolation: isolate;
 	}
 
-	.cat-btn {
+	/* Catégorie ouverte : la pilule claire du dock, qui glisse d'une catégorie à
+	   l'autre ; le contour ne s'y ajoute que si la sélection est ici. */
+	.pill {
+		top: 0;
+		left: 0;
+		right: 0;
+		height: var(--settings-nav-row);
+		--glide-y: calc(var(--cat) * (var(--settings-nav-row) + var(--settings-row-gap)));
+		border-radius: var(--settings-radius);
+		background: var(--dock-active);
+	}
+
+	.category {
+		position: relative;
+		z-index: 1;
 		display: flex;
 		align-items: center;
 		gap: 16px;
-		padding: 14px 20px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		border: 2px solid transparent;
-		cursor: pointer;
-		transition:
-			transform var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease),
-			border-color var(--fast) var(--ease),
-			background var(--fast) var(--ease);
+		width: 100%;
+		height: var(--settings-nav-row);
+		padding: 0 20px;
+		border-radius: var(--settings-radius);
+		font-size: var(--settings-label);
+		font-weight: 600;
+		color: var(--text-dim);
 		text-align: left;
+		transition:
+			background var(--fast) var(--ease),
+			color var(--fast) var(--ease);
 	}
 
-	.cat-btn.active {
-		background: var(--surface-strong);
-		border-color: rgba(255, 255, 255, 0.16);
+	.category img {
+		width: var(--settings-icon);
+		height: var(--settings-icon);
+		opacity: 0.7;
 	}
 
-	/* Hover & focus avec le même contour vert que les tuiles classiques */
-	.cat-btn:hover,
-	.cat-btn.focused {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
-		transform: translateX(6px);
-		outline: 3px solid var(--accent);
-		box-shadow:
-			0 0 34px 6px var(--accent-soft),
-			0 12px 30px rgba(0, 0, 0, 0.5);
+	.category:hover:not(.active) {
+		background: var(--dock-hover);
+		color: var(--text);
 	}
 
-	.cat-icon img {
-		width: 24px;
-		height: 24px;
-		opacity: 0.8;
-		transition: opacity 150ms var(--ease), filter 150ms var(--ease);
+	.category.active {
+		color: var(--text);
 	}
 
-	.cat-btn.active .cat-icon img,
-	.cat-btn:hover .cat-icon img,
-	.cat-btn.focused .cat-icon img {
+	.category.active img {
 		opacity: 1;
 	}
 
-	.cat-btn:hover .cat-icon img,
-	.cat-btn.focused .cat-icon img {
-		filter: drop-shadow(0 0 6px var(--accent-soft));
-	}
-
-	.cat-label {
-		font-size: 18px;
-		font-weight: 600;
-		color: var(--text);
-	}
-
-	/* Volet de droite */
-	.panel {
+	/* Colonne de droite : le titre reste en place, seules les lignes défilent. */
+	.page {
 		display: flex;
 		flex-direction: column;
-		gap: 24px;
-		padding: 30px 40px;
-		border-radius: calc(var(--radius) * 1.5);
-		background: rgba(14, 18, 26, 0.65);
-		backdrop-filter: blur(20px);
-		border: 1px solid var(--border);
-		overflow-y: auto;
-		max-height: calc(100vh - 170px);
+		min-width: 0;
+		min-height: 0;
 	}
 
-	.panel-header h2 {
-		margin: 0 0 6px;
-		font-size: 26px;
+	/* Le décalage pose le titre sur la ligne de base de « Réglages ». */
+	.page header {
+		flex: none;
+		height: var(--settings-header);
+		padding-top: var(--settings-heading-top);
+	}
+
+	h2 {
+		margin: 0 0 4px;
+		font-size: var(--settings-heading);
 		font-weight: 700;
+		line-height: 1.2;
 	}
 
-	.panel-hint {
+	.page header p {
 		margin: 0;
-		font-size: 15px;
+		font-size: var(--settings-text);
 		color: var(--text-dim);
 	}
 
-	.panel-body {
-		display: flex;
-		flex-direction: column;
-		gap: 20px;
-	}
-
-	/* Lignes de réglages */
-	.rows-list {
-		display: flex;
-		flex-direction: column;
-		gap: 12px;
-	}
-
-	.setting-row {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		padding: 18px 24px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		border: 2px solid transparent;
-		cursor: pointer;
-		transition:
-			transform var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease),
-			border-color var(--fast) var(--ease),
-			background var(--fast) var(--ease);
-		text-align: left;
-	}
-
-	/* Hover & focus avec le contour vert des tuiles classiques */
-	.setting-row:hover,
-	.setting-row.focused {
-		border-color: var(--accent);
-		background: color-mix(in srgb, var(--accent) 8%, transparent);
-		transform: translateX(6px);
-		outline: 3px solid var(--accent);
-		box-shadow:
-			0 0 34px 6px var(--accent-soft),
-			0 12px 30px rgba(0, 0, 0, 0.5);
-	}
-
-	.row-label {
-		display: flex;
-		flex-direction: column;
-		gap: 4px;
-	}
-
-	.row-label .title {
-		font-size: 17px;
-		font-weight: 600;
-		color: var(--text);
-	}
-
-	.row-label .desc {
-		font-size: 13px;
-		color: var(--text-dim);
-	}
-
-	.action-tag {
-		font-size: 15px;
-		font-weight: 600;
-		color: var(--text-dim);
-		transition: color 150ms var(--ease);
-	}
-
-	.setting-row:hover .action-tag,
-	.setting-row.focused .action-tag {
-		color: var(--accent);
-	}
-
-	.badge-layout {
-		padding: 6px 14px;
-		border-radius: 8px;
-		background: var(--surface-strong);
-		font-size: 15px;
-		font-weight: 700;
-		color: #ffffff;
-		border: 1px solid rgba(255, 255, 255, 0.12);
-	}
-
-	/* Carte de détection de jeux (recherche) - Style sobre et élégant */
-	.hero-action-card {
-		display: flex;
-		align-items: center;
-		justify-content: space-between;
-		gap: 20px;
-		padding: 24px 28px;
-		border-radius: var(--radius);
-		background: var(--surface-strong);
-		border: 2px solid rgba(255, 255, 255, 0.1);
-		transition: all 180ms var(--ease);
-	}
-
-	.hero-action-card:hover {
-		border-color: color-mix(in srgb, var(--accent) 50%, transparent);
-		box-shadow: 0 0 28px var(--accent-soft);
-	}
-
-	.hero-info {
-		display: flex;
-		flex-direction: column;
-		gap: 6px;
-	}
-
-	.hero-title-row {
-		display: flex;
-		align-items: center;
-		gap: 12px;
-	}
-
-	.hero-icon {
-		width: 22px;
-		height: 22px;
-		opacity: 0.85;
-	}
-
-	.hero-title {
-		font-size: 20px;
-		font-weight: 700;
-		color: var(--text);
-	}
-
-	.hero-desc {
-		font-size: 14px;
-		color: var(--text-dim);
-		max-width: 520px;
-		line-height: 1.4;
-	}
-
-	.btn-scan {
-		padding: 14px 24px;
-		border-radius: var(--radius);
-		border: 2px solid rgba(255, 255, 255, 0.16);
-		background: rgba(255, 255, 255, 0.08);
-		color: var(--text);
-		font-size: 16px;
-		font-weight: 700;
-		cursor: pointer;
-		white-space: nowrap;
-		transition:
-			transform var(--fast) var(--ease),
-			box-shadow var(--fast) var(--ease),
-			border-color var(--fast) var(--ease),
-			background var(--fast) var(--ease);
-	}
-
-	.btn-scan:hover,
-	.btn-scan.focused {
-		background: color-mix(in srgb, var(--accent) 15%, transparent);
-		color: #ffffff;
-		border-color: var(--accent);
-		outline: 3px solid var(--accent);
-		transform: scale(1.03);
-		box-shadow:
-			0 0 34px 6px var(--accent-soft),
-			0 12px 30px rgba(0, 0, 0, 0.5);
-	}
-
-	.section-divider h3 {
-		margin: 10px 0 0;
-		font-size: 17px;
-		font-weight: 600;
-		color: var(--text-dim);
-		text-transform: uppercase;
-		letter-spacing: 1px;
-	}
-
-	.folder-row {
-		cursor: default;
-	}
-
-	.btn-delete {
-		padding: 6px 14px;
-		border-radius: 8px;
-		background: rgba(255, 60, 60, 0.2);
-		color: #ff6e6e;
-		font-size: 13px;
-		font-weight: 600;
-		cursor: pointer;
-		transition: all 150ms var(--ease);
-	}
-
-	.btn-delete:hover {
-		background: rgba(255, 60, 60, 0.35);
-	}
-
-	.folder-input-box {
-		display: flex;
-		gap: 10px;
-		align-items: center;
-		padding: 10px 14px;
-		background: var(--surface-strong);
-		border-radius: var(--radius);
-		border: 1px solid rgba(255, 255, 255, 0.1);
-	}
-
-	.folder-input {
+	/* La gouttière laisse la place au contour et à l'agrandissement de la
+	   sélection, que le défilement trancherait sinon. */
+	.rows {
+		position: relative;
 		flex: 1;
-		padding: 10px 14px;
-		border-radius: 8px;
-		border: 1px solid rgba(255, 255, 255, 0.2);
-		background: rgba(0, 0, 0, 0.4);
-		color: #fff;
-		font-size: 16px;
-		outline: none;
-	}
-
-	.btn-sm {
-		padding: 10px 18px;
-		border-radius: 8px;
-		border: 2px solid rgba(255, 255, 255, 0.2);
-		background: rgba(255, 255, 255, 0.12);
-		color: #ffffff;
-		font-weight: 700;
-		cursor: pointer;
-		transition: all 150ms var(--ease);
-	}
-
-	.btn-sm:hover,
-	.btn-sm:focus-visible {
-		background: color-mix(in srgb, var(--accent) 15%, transparent);
-		color: #ffffff;
-		border-color: var(--accent);
-		outline: 3px solid var(--accent);
-		box-shadow: 0 0 24px 4px var(--accent-soft);
-	}
-
-	.btn-sm.secondary {
-		background: var(--surface);
-		color: var(--text-dim);
-		border-color: transparent;
-	}
-
-	/* Journal des messages (Réglages → Système). */
-	.journal {
 		display: flex;
 		flex-direction: column;
-		gap: 12px;
-		margin-top: 28px;
+		gap: var(--settings-row-gap);
+		min-height: 0;
+		margin: calc(-1 * var(--hover-room));
+		padding: var(--hover-room);
+		overflow-y: auto;
+		scrollbar-width: none;
+		isolation: isolate;
 	}
 
-	.journal-title {
-		font-size: 17px;
+	.cursor {
+		top: 0;
+		left: var(--hover-room);
+		right: var(--hover-room);
+		height: var(--settings-row);
+		--glide-scale: var(--settings-focus-scale);
+		border-radius: var(--settings-radius);
+		background: var(--settings-row-hover);
+	}
+
+	.cursor.off {
+		opacity: 0;
+	}
+
+	h3 {
+		flex: none;
+		margin: 14px 0 4px;
+		font-size: var(--settings-text);
 		font-weight: 700;
 		letter-spacing: 0.08em;
 		text-transform: uppercase;
 		color: var(--text-dim);
 	}
 
-	.journal ul {
+	.row {
+		flex: none;
+		display: flex;
+		align-items: center;
+		gap: 18px;
+		width: 100%;
+		height: var(--settings-row);
+		padding: 0 var(--settings-row-pad);
+		border-radius: var(--settings-radius);
+		background: var(--settings-row-bg);
+		text-align: left;
+		transition: background var(--fast) var(--ease);
+	}
+
+	.row:hover {
+		background: var(--settings-row-hover);
+	}
+
+	/* C'est le cadre qui marque la sélection : la ligne le laisse transparaître. */
+	.row.selected {
+		background: transparent;
+	}
+
+	.row > * {
+		position: relative;
+		z-index: 1;
+	}
+
+	/* Sons coupés : leurs volumes restent réglables, mais en retrait. Sur le
+	   contenu, pas sur la ligne : voir `.glider`. */
+	.row.muted > * {
+		opacity: 0.5;
+	}
+
+	.text {
+		flex: 1;
 		display: flex;
 		flex-direction: column;
-		gap: 6px;
-		margin: 0;
-		padding: 0;
-		list-style: none;
+		gap: 3px;
+		min-width: 0;
 	}
 
-	.journal li {
-		display: flex;
-		gap: 16px;
-		padding: 10px 16px;
-		border-radius: var(--radius);
-		background: var(--surface);
-		font-size: 17px;
+	.title,
+	.desc {
+		overflow: hidden;
+		white-space: nowrap;
+		text-overflow: ellipsis;
 	}
 
-	.journal li.failed {
-		box-shadow: inset 3px 0 0 var(--danger);
+	.title {
+		font-size: var(--settings-label);
+		font-weight: 600;
 	}
 
-	.journal-time {
+	.desc {
+		font-size: var(--settings-text);
+		color: var(--text-dim);
+	}
+
+	/* Valeur d'un réglage : la même partout. */
+	.value {
 		flex: none;
+		font-size: var(--settings-value);
+		font-weight: 600;
 		color: var(--text-dim);
-		font-variant-numeric: tabular-nums;
+		transition: color var(--fast) var(--ease);
 	}
 
-	.journal-empty {
-		margin: 0;
-		font-size: 17px;
-		color: var(--text-dim);
+	.row.selected .value {
+		color: var(--text);
+	}
+
+	.value.remove,
+	.row.selected .value.remove {
+		color: var(--danger);
+	}
+
+	.value.restore,
+	.row.selected .value.restore {
+		color: var(--accent);
+	}
+
+	.chevron {
+		flex: none;
+		width: var(--settings-chevron);
+		height: var(--settings-chevron);
+		opacity: 0.5;
+		transition: opacity var(--fast) var(--ease);
+	}
+
+	.row.selected .chevron {
+		opacity: 1;
+	}
+
+	.switch {
+		flex: none;
+		position: relative;
+		width: var(--settings-switch);
+		height: var(--settings-switch-height);
+		border-radius: 999px;
+		background: var(--surface-strong);
+		transition: background var(--fast) var(--ease);
+	}
+
+	.switch::after {
+		content: '';
+		position: absolute;
+		top: var(--settings-switch-pad);
+		left: var(--settings-switch-pad);
+		width: calc(var(--settings-switch-height) - 2 * var(--settings-switch-pad));
+		aspect-ratio: 1;
+		border-radius: 50%;
+		background: var(--text);
+		transition: transform var(--fast) var(--ease);
+	}
+
+	.switch.on {
+		background: var(--accent);
+	}
+
+	.switch.on::after {
+		background: var(--on-accent);
+		transform: translateX(calc(var(--settings-switch) - var(--settings-switch-height)));
 	}
 
 	/* Jauge de volume : gauche / droite la règlent par pas de 10 %. */
 	.volume {
+		flex: none;
 		display: flex;
 		align-items: center;
 		gap: 12px;
-		font-size: 17px;
-		font-weight: 700;
+		font-size: var(--settings-value);
+		font-weight: 600;
 	}
 
 	.bar {
@@ -1063,30 +811,55 @@
 	}
 
 	.percent {
-		min-width: 4ch;
+		min-width: 5ch;
 		text-align: right;
 		font-variant-numeric: tabular-nums;
 	}
 
+	/* Les flèches n'apparaissent que sur la ligne sélectionnée : c'est là que
+	   gauche / droite agissent. */
 	.arrow {
 		color: var(--text-dim);
 		opacity: 0;
 		transition: opacity var(--fast) var(--ease);
 	}
 
-	/* Les flèches n'apparaissent que sur la ligne sélectionnée : c'est là que
-	   gauche / droite agissent. */
-	.setting-row.focused .arrow {
+	.row.selected .arrow {
 		opacity: 1;
 	}
 
-	/* Sons coupés : leurs volumes restent réglables, mais en retrait. */
-	.setting-row.muted {
-		opacity: 0.5;
+	/* Journal des messages (Réglages → Système). */
+	.journal {
+		display: flex;
+		flex-direction: column;
+		gap: 6px;
+		margin: 0;
+		padding: 0;
+		list-style: none;
 	}
 
-	@keyframes fade-in {
-		from { opacity: 0; transform: translateY(6px); }
-		to { opacity: 1; transform: translateY(0); }
+	.journal li {
+		display: flex;
+		gap: 16px;
+		padding: 10px var(--settings-row-pad);
+		border-radius: var(--settings-radius);
+		background: var(--settings-row-bg);
+		font-size: var(--settings-text);
+	}
+
+	.journal li.failed {
+		box-shadow: inset 3px 0 0 var(--danger);
+	}
+
+	.journal-time {
+		flex: none;
+		color: var(--text-dim);
+		font-variant-numeric: tabular-nums;
+	}
+
+	.journal-empty {
+		margin: 0;
+		font-size: var(--settings-text);
+		color: var(--text-dim);
 	}
 </style>

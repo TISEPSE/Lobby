@@ -7,33 +7,49 @@
 	import Glyph from './Glyph.svelte';
 
 	/**
-	 * Explorateur de fichiers, façon Xbox, pour choisir l'exécutable d'un jeu
-	 * quand la détection s'est trompée (options du jeu → « Changer
-	 * l'exécutable »). Les disques, puis les dossiers et les exécutables
-	 * seulement. Haut / bas parcourent (la liste glisse pour garder la sélection
-	 * au centre), A ou droite ouvre un dossier, A sur un exécutable le choisit,
-	 * B ou gauche remonte d'un dossier, X ferme. Chaque dossier entre en
-	 * glissant du côté où l'on va : on sent qu'on descend ou qu'on remonte.
+	 * Explorateur de fichiers, façon Xbox. Il sert à choisir l'exécutable d'un
+	 * jeu quand la détection s'est trompée (options du jeu → « Changer
+	 * l'exécutable »), ou un dossier de jeux (Réglages → Jeux). Les disques, puis
+	 * les dossiers et les exécutables seulement. Haut / bas parcourent (la liste
+	 * glisse pour garder la sélection au centre), A ou droite ouvre un dossier,
+	 * A sur un exécutable le choisit, B ou gauche remonte d'un dossier, X ferme.
+	 * Chaque dossier entre en glissant du côté où l'on va : on sent qu'on descend
+	 * ou qu'on remonte.
+	 *
+	 * Pour choisir un dossier, on l'ouvre : la première ligne, « Choisir ce
+	 * dossier », le retient. La sélection arrive sur le premier sous-dossier :
+	 * deux appuis sur A descendent, ils ne choisissent pas par accident.
 	 */
 	let {
 		open = false,
 		game = null,
+		mode = 'exe',
 		onClose,
 		onPick,
 	}: {
 		open?: boolean;
 		game?: Game | null;
+		/** Ce qu'on choisit : l'exécutable d'un jeu, ou un dossier. */
+		mode?: 'exe' | 'folder';
 		onClose?: () => void;
-		/** Le chemin de l'exécutable choisi. */
+		/** Le chemin de l'exécutable ou du dossier choisi. */
 		onPick?: (path: string) => void;
 	} = $props();
 
 	interface Entry {
 		name: string;
 		path: string;
-		kind: 'drive' | 'folder' | 'exe';
+		kind: 'drive' | 'folder' | 'exe' | 'pick';
 		size: number;
 	}
+
+	const ICONS: Record<Entry['kind'], string> = { drive: 'drive', folder: 'folder', exe: 'app', pick: 'check' };
+	const ACCEPT: Record<Entry['kind'], string> = {
+		drive: 'Ouvrir',
+		folder: 'Ouvrir',
+		exe: 'Choisir',
+		pick: 'Choisir ce dossier',
+	};
 
 	/** Dossier affiché ; vide pour la liste des disques. */
 	let path = $state('');
@@ -54,20 +70,28 @@
 		return invoke<T>(command, args);
 	}
 
+	/** Ce que montre un dossier : pour en choisir un, pas d'exécutables, et la ligne qui le retient. */
+	function visible(target: string, listed: Entry[]): Entry[] {
+		if (mode === 'exe') return listed;
+		const folders = listed.filter((e) => e.kind !== 'exe');
+		if (!target) return folders;
+		return [{ name: 'Choisir ce dossier', path: target, kind: 'pick', size: 0 }, ...folders];
+	}
+
 	/** Ouvre un dossier (ou la liste des disques avec ''), et place la sélection. */
 	async function go(target: string, from: 1 | -1, select = '') {
 		if (!tauri()) {
-			// Capture (`?modal=files`) : un faux dossier, pour juger le rendu.
+			// Capture (`?modal=files`, `?modal=folders`) : un faux dossier, pour juger le rendu.
 			path = target || 'D:/Jeux/MotoGP 24';
 			parent = 'D:/Jeux';
-			entries = [
+			entries = visible(path, [
 				{ name: 'Binaries', path: 'D:/Jeux/MotoGP 24/Binaries', kind: 'folder', size: 0 },
 				{ name: 'Content', path: 'D:/Jeux/MotoGP 24/Content', kind: 'folder', size: 0 },
 				{ name: 'Engine', path: 'D:/Jeux/MotoGP 24/Engine', kind: 'folder', size: 0 },
 				{ name: 'MotoGP24.exe', path: 'D:/Jeux/MotoGP 24/MotoGP24.exe', kind: 'exe', size: 287_000_000 },
 				{ name: 'UnrealCEFSubProcess.exe', path: 'D:/Jeux/MotoGP 24/UnrealCEFSubProcess.exe', kind: 'exe', size: 1_400_000 },
-			];
-			index = 3;
+			]);
+			index = mode === 'exe' ? 3 : 1;
 			return;
 		}
 		remembered.set(path, index);
@@ -75,19 +99,20 @@
 		error = '';
 		try {
 			if (target === '') {
-				entries = await invoke<Entry[]>('list_roots');
+				entries = visible('', await invoke<Entry[]>('list_roots'));
 				parent = '';
 			} else {
 				const listing = await invoke<{ path: string; parent: string; entries: Entry[] }>('list_dir', {
 					path: target,
 				});
-				entries = listing.entries;
+				entries = visible(target, listing.entries);
 				parent = listing.parent;
 			}
 			direction = from;
 			path = target;
 			const wanted = select ? entries.findIndex((e) => sameFile(e.path, select)) : -1;
-			index = wanted >= 0 ? wanted : (remembered.get(target) ?? 0);
+			const first = entries[0]?.kind === 'pick' ? 1 : 0;
+			index = wanted >= 0 ? wanted : (remembered.get(target) ?? first);
 			index = Math.min(index, Math.max(0, entries.length - 1));
 		} catch (e) {
 			error = String(e);
@@ -110,7 +135,7 @@
 	$effect(() => {
 		if (!open) return;
 		remembered.clear();
-		const current = game?.executable ?? '';
+		const current = mode === 'exe' ? (game?.executable ?? '') : '';
 		let start = dirname(current);
 		if (/steam\.exe$/i.test(current)) start = `${start}/steamapps/common`;
 		// `go` lit `path` et `index` : sans `untrack`, l'effet les suivait et
@@ -142,13 +167,18 @@
 	/** Touches de l'explorateur ; l'appelant les lui transmet tant qu'il est ouvert. */
 	export function handleAction(action: Action) {
 		if (loading) return;
+		// Dossier illisible (droits) : B ramène à celui qu'on regardait, sans remonter d'un cran.
+		if (error && (action === 'cancel' || action === 'left')) {
+			error = '';
+			return;
+		}
 		const entry = entries[index];
 		if (action === 'up') index = Math.max(0, index - 1);
 		else if (action === 'down') index = Math.min(entries.length - 1, index + 1);
 		else if (action === 'cancel' || action === 'left') up();
 		else if (action === 'options') onClose?.();
 		else if ((action === 'accept' || action === 'right') && entry) {
-			if (entry.kind === 'exe') {
+			if (entry.kind === 'exe' || entry.kind === 'pick') {
 				if (action === 'accept') onPick?.(entry.path);
 			} else {
 				void go(entry.path, 1);
@@ -167,10 +197,12 @@
 		<section class="browser">
 			<header>
 				<div class="titles">
-					<h2>Changer l'exécutable</h2>
-					<p class="sub">{game?.title ?? ''}</p>
+					<h2>{mode === 'folder' ? 'Ajouter un dossier de jeux' : "Changer l'exécutable"}</h2>
+					<p class="sub">
+						{mode === 'folder' ? 'Ouvre le dossier qui contient tes jeux, puis choisis-le.' : (game?.title ?? '')}
+					</p>
 				</div>
-				{#if game?.executable}
+				{#if mode === 'exe' && game?.executable}
 					<p class="current" title={game.executable}>
 						Actuel : <span>{game.executable.split(/[\\/]/).pop()}</span>
 					</p>
@@ -201,17 +233,25 @@
 							in:fly={{ x: 80 * direction, duration: 260, easing: cubicOut, opacity: 0 }}
 						>
 							{#each entries as entry, i (entry.path)}
+								<!-- svelte-ignore a11y_click_events_have_key_events, a11y_no_noninteractive_element_interactions -->
 								<li
 									class:selected={i === index}
 									class:current={entry.kind === 'exe' && !!game?.executable && sameFile(entry.path, game.executable)}
+									class:pick={entry.kind === 'pick'}
+									onclick={() => {
+										index = i;
+										handleAction('accept');
+									}}
 								>
-									<img class="icon {entry.kind}" src="/assets/icons/{entry.kind === 'exe' ? 'app' : entry.kind}.svg" alt="" />
+									<img class="icon {entry.kind}" src="/assets/icons/{ICONS[entry.kind]}.svg" alt="" />
 									<span class="name">{entry.name}</span>
 									{#if entry.kind === 'exe'}
 										{#if game?.executable && sameFile(entry.path, game.executable)}
 											<span class="badge">Actuel</span>
 										{/if}
 										<span class="meta">{size(entry.size)}</span>
+									{:else if entry.kind === 'pick'}
+										<span class="meta">{crumbs.at(-1)}</span>
 									{:else}
 										<span class="chevron">›</span>
 									{/if}
@@ -223,7 +263,7 @@
 			</div>
 
 			<footer class="hints">
-				<span class="hint"><Glyph button="a" size="28px" />{entries[index]?.kind === 'exe' ? 'Choisir' : 'Ouvrir'}</span>
+				<span class="hint"><Glyph button="a" size="28px" />{ACCEPT[entries[index]?.kind ?? 'folder']}</span>
 				<span class="hint"><Glyph button="b" size="28px" />{path ? 'Dossier parent' : 'Fermer'}</span>
 				<span class="hint"><Glyph button="x" size="28px" />Fermer</span>
 			</footer>
@@ -239,7 +279,6 @@
 		display: grid;
 		place-items: center;
 		background: rgba(0, 0, 0, 0.75);
-		backdrop-filter: blur(10px);
 		animation: veil-in var(--fast) var(--ease) both;
 	}
 
@@ -397,9 +436,14 @@
 		text-overflow: ellipsis;
 	}
 
-	li.current .name {
+	li.current .name,
+	li.pick .name {
 		color: var(--accent);
 		font-weight: 600;
+	}
+
+	.icon.pick {
+		opacity: 1;
 	}
 
 	.badge {

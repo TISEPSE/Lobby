@@ -3,7 +3,7 @@
  * ou PlayStation selon la manette branchée. Partagés par la barre d'aide et le
  * dock, pour qu'une touche ait la même image partout.
  */
-export type GlyphButton = 'a' | 'b' | 'x' | 'y' | 'l1' | 'r1' | 'l2' | 'r2' | 'view' | 'dpad' | 'up' | 'down' | 'left' | 'right';
+export type GlyphButton = 'a' | 'b' | 'x' | 'y' | 'l1' | 'r1' | 'l2' | 'r2' | 'view' | 'menu' | 'dpad' | 'up' | 'down' | 'left' | 'right';
 
 export const GLYPHS: Record<'xbox' | 'ps5', Record<GlyphButton, string>> = {
 	xbox: {
@@ -16,6 +16,7 @@ export const GLYPHS: Record<'xbox' | 'ps5', Record<GlyphButton, string>> = {
 		l2: 'xbox/lt',
 		r2: 'xbox/rt',
 		view: 'xbox/view',
+		menu: 'xbox/menu',
 		dpad: 'xbox/dpad',
 		up: 'dpad_up',
 		down: 'dpad_down',
@@ -32,6 +33,7 @@ export const GLYPHS: Record<'xbox' | 'ps5', Record<GlyphButton, string>> = {
 		l2: 'ps5/l2',
 		r2: 'ps5/r2',
 		view: 'ps5/create',
+		menu: 'ps5/options',
 		dpad: 'ps5/dpad',
 		up: 'dpad_up',
 		down: 'dpad_down',

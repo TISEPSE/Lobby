@@ -445,22 +445,13 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     }
   }
 
-  let mut default_folders = Vec::new();
-  #[cfg(windows)]
-  {
-    if std::path::Path::new("D:\\Jeux").exists() {
-      default_folders.push("D:/Jeux".to_string());
-    }
-    if std::path::Path::new("C:\\Games").exists() {
-      default_folders.push("C:/Games".to_string());
-    }
-  }
-
+  // Aucun dossier par défaut : la détection les trouve seule sur chaque disque
+  // (`discover_game_folders`), et l'utilisateur ajoute les siens.
   Ok(UserSettings {
     profile_name: "Joueur".to_string(),
     avatar_path: "/assets/avatars/a11_face.svg".to_string(),
-    button_layout: "ps5".to_string(),
-    game_folders: default_folders,
+    button_layout: "auto".to_string(),
+    game_folders: Vec::new(),
     sound_enabled: true,
     steamgriddb_key: String::new(),
     screensaver_minutes: 5,
@@ -700,9 +691,10 @@ const NOT_A_GAME: [&str; 6] = [
   "msedgewebview2.exe",
 ];
 
-/// Nom de l'exécutable d'un processus (`rocketleague.exe`), en minuscules.
+/// Chemin de l'exécutable d'un processus, vide s'il est illisible. Le droit de
+/// lecture limité suffit, y compris pour un jeu protégé par un anti-triche.
 #[cfg(windows)]
-fn process_name(pid: u32) -> String {
+fn process_path(pid: u32) -> String {
   use windows_sys::Win32::Foundation::CloseHandle;
   use windows_sys::Win32::System::Threading::{
     OpenProcess, QueryFullProcessImageNameW, PROCESS_QUERY_LIMITED_INFORMATION,
@@ -719,8 +711,85 @@ fn process_name(pid: u32) -> String {
     if ok == 0 {
       return String::new();
     }
-    let path = String::from_utf16_lossy(&buffer[..len as usize]);
-    path.rsplit(['\\', '/']).next().unwrap_or_default().to_lowercase()
+    String::from_utf16_lossy(&buffer[..len as usize])
+  }
+}
+
+/// Nom de l'exécutable d'un processus (`rocketleague.exe`), en minuscules.
+#[cfg(windows)]
+fn process_name(pid: u32) -> String {
+  process_path(pid).rsplit(['\\', '/']).next().unwrap_or_default().to_lowercase()
+}
+
+/// Un programme ouvert : `running_programs`.
+#[derive(serde::Serialize)]
+struct RunningProgram {
+  pid: u32,
+  path: String,
+}
+
+/// Les programmes ouverts, pour reconnaître un jeu lancé hors de Lobby. Sous
+/// Windows, ceux qui ont une fenêtre visible, même réduite (un jeu quitté par
+/// Alt + Tab l'est souvent) ; ailleurs, tous les processus lisibles.
+#[tauri::command]
+fn running_programs() -> Vec<RunningProgram> {
+  #[cfg(windows)]
+  {
+    use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+    use windows_sys::Win32::UI::WindowsAndMessaging::{
+      EnumWindows, GetWindowThreadProcessId, IsWindowVisible,
+    };
+
+    unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
+      let pids = &mut *(data as *mut Vec<u32>);
+      if IsWindowVisible(hwnd) != 0 {
+        let mut pid = 0u32;
+        GetWindowThreadProcessId(hwnd, &mut pid);
+        if pid != std::process::id() && !pids.contains(&pid) {
+          pids.push(pid);
+        }
+      }
+      1
+    }
+
+    let mut pids: Vec<u32> = Vec::new();
+    unsafe {
+      EnumWindows(Some(visit), &mut pids as *mut _ as LPARAM);
+    }
+    pids
+      .into_iter()
+      .map(|pid| RunningProgram { pid, path: process_path(pid) })
+      .filter(|program| !program.path.is_empty())
+      .collect()
+  }
+  #[cfg(not(windows))]
+  {
+    let Ok(entries) = fs::read_dir("/proc") else {
+      return Vec::new();
+    };
+    entries
+      .flatten()
+      .filter_map(|entry| {
+        let pid = entry.file_name().to_string_lossy().parse::<u32>().ok()?;
+        let path = fs::read_link(entry.path().join("exe")).ok()?;
+        (pid != std::process::id())
+          .then(|| RunningProgram { pid, path: path.to_string_lossy().to_string() })
+      })
+      .collect()
+  }
+}
+
+#[cfg(test)]
+mod running_tests {
+  /// `cargo test --lib dump_programs -- --ignored --nocapture` : ce que Lobby
+  /// voit de cette machine, sans ouvrir de fenêtre.
+  #[test]
+  #[ignore]
+  fn dump_programs() {
+    println!("Steam : {:?}", crate::scanner::steam_root());
+    for program in super::running_programs() {
+      println!("{} {}", program.pid, program.path);
+    }
   }
 }
 
@@ -1882,6 +1951,7 @@ pub fn run() {
     .invoke_handler(tauri::generate_handler![
       launch_game,
       is_running,
+      running_programs,
       steam_running_app,
       set_launch_cover,
       bring_to_front,
