@@ -48,7 +48,7 @@
 		logoutEpic,
 		refreshEpicAccount,
 	} from './lib/epicAccount.svelte.js';
-	import { play, watchRunningGames } from './lib/launcher';
+	import { gameProcesses, play, watchRunningGames } from './lib/launcher';
 	import {
 		games,
 		view,
@@ -943,11 +943,18 @@
 	/** Revenir au jeu en cours : Lobby lui rend le premier plan. */
 	async function returnToGame() {
 		gameMenuOpen = false;
-		const pid = sessionPid();
 		if (!(window as any).__TAURI_INTERNALS__) return;
 		const { invoke } = await import('@tauri-apps/api/core');
-		const ok = pid > 0 && (await invoke<boolean>('focus_process', { pid }).catch(() => false));
-		if (!ok) notify('Fenêtre du jeu introuvable : reviens-y avec Alt + Tab.', false);
+		// Le processus connu d'abord, puis les autres programmes du jeu : celui
+		// qu'on suivait n'est parfois qu'un lanceur, sans fenêtre.
+		const others = runningGame ? await gameProcesses(runningGame) : [];
+		for (const pid of new Set([sessionPid(), ...others])) {
+			if (pid > 0 && (await invoke<boolean>('focus_process', { pid }).catch(() => false))) {
+				setSessionWindow(pid);
+				return;
+			}
+		}
+		notify('Fenêtre du jeu introuvable : reviens-y avec Alt + Tab.', false);
 	}
 
 	/** « Quitter le jeu », comme sur Xbox : son processus est arrêté. */
@@ -1280,7 +1287,8 @@
 			}
 			if (detailZone === 'media') return list(['a', 'Agrandir'], ['b', 'Retour']);
 			if (menuOptionsOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
-			const action = detailButton === 0 ? 'Jouer' : detailButton === 1 ? 'Détails du jeu' : 'Options';
+			const play = opened.id === session.id ? 'Reprendre' : 'Jouer';
+			const action = detailButton === 0 ? play : detailButton === 1 ? 'Détails du jeu' : 'Options';
 			return list(['a', action], ['x', 'Options'], ['b', 'Retour']);
 		}
 		if (section === 'library') {
@@ -1336,6 +1344,7 @@
 	{#if opened}
 		<Detail
 			game={opened}
+			running={opened.id === session.id}
 			favorite={isFavorite(opened.id)}
 			selected={detailButton}
 			playtime={playtimeText(opened.id)}

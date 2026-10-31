@@ -17,6 +17,7 @@
 	 */
 	let {
 		game,
+		running = false,
 		favorite = false,
 		selected = 0,
 		playtime = 'Jamais joué',
@@ -24,6 +25,8 @@
 		mediaIndex = 0,
 	}: {
 		game: Game;
+		/** Le jeu tourne : le bouton y revient au lieu d'en lancer un second. */
+		running?: boolean;
 		favorite?: boolean;
 		selected?: number;
 		playtime?: string;
@@ -144,7 +147,7 @@
 		<div class="actions">
 			<button class="action cta" class:focus-ring={selected === 0}>
 				<img src="/assets/icons/{game.installed === false ? 'download' : 'play'}.svg" alt="" />
-				{game.installed === false ? 'Installer' : 'Jouer'}
+				{game.installed === false ? 'Installer' : running ? 'Reprendre' : 'Jouer'}
 			</button>
 			<!-- Descend vers « Captures et vidéos » et le panneau « Plus sur… ». -->
 			<button class="action" class:focus-ring={selected === 1}>Détails du jeu</button>

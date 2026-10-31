@@ -46,6 +46,23 @@ const ADOPT_EVERY = 5000;
 const unixPath = (path: string) => path.replace(/\\/g, '/').toLowerCase();
 
 /**
+ * Ce programme appartient-il au jeu ? Un jeu Steam a pour exécutable le client
+ * Steam : ses fichiers sont sous `steamapps/common`, et Steam n'en lance qu'un.
+ */
+function belongsTo(game: Game, path: string): boolean {
+	const program = unixPath(path);
+	if (game.source === 'steam' && !game.custom_executable) return program.includes('/steamapps/common/');
+	return !!game.executable && program.startsWith(`${unixPath(game.executable).replace(/\/[^/]*$/, '')}/`);
+}
+
+/** Processus ouverts du jeu : le lanceur a pu laisser la place au jeu lui-même. */
+export async function gameProcesses(game: Game): Promise<number[]> {
+	const { invoke } = await import('@tauri-apps/api/core');
+	const programs = await invoke<RunningProgram[]>('running_programs').catch((): RunningProgram[] => []);
+	return programs.filter((program) => belongsTo(game, program.path)).map((program) => program.pid);
+}
+
+/**
  * Le jeu dont le dossier contient un programme ouvert, le dossier le plus
  * précis d'abord. On compare les dossiers et non les exécutables : la détection
  * retient parfois un lanceur (`Launcher.exe` pour Rocket League, dont le jeu
@@ -89,7 +106,7 @@ async function adoptRunningGame() {
 
 	const steamGame = appid ? games.find((game) => game.appid === String(appid)) : undefined;
 	if (steamGame) {
-		const pid = programs.find((p) => unixPath(p.path).includes('/steamapps/common/'))?.pid ?? 0;
+		const pid = programs.find((p) => belongsTo(steamGame, p.path))?.pid ?? 0;
 		markLaunched(steamGame.id);
 		startSession(steamGame.id, 0, appid);
 		if (pid) setSessionWindow(pid);

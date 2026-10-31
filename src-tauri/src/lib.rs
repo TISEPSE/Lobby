@@ -568,46 +568,51 @@ fn set_launch_cover(window: tauri::WebviewWindow, on: bool) -> Result<(), String
   window.set_always_on_top(on).map_err(|e| e.to_string())
 }
 
-/// Donne le premier plan à une fenêtre de Lobby alors qu'un autre programme
-/// (le jeu) l'a. Windows le refuse à une fenêtre en arrière-plan : on se
-/// rattache un instant à la file d'entrée de la fenêtre au premier plan
-/// (`AttachThreadInput`), ce qui l'autorise, et on passe un instant
-/// « au-dessus de tout ».
+/// Donne le premier plan à une fenêtre alors qu'un autre programme l'a. Windows
+/// le refuse à une fenêtre en arrière-plan : on se rattache un instant à la file
+/// d'entrée de la fenêtre au premier plan (`AttachThreadInput`), ce qui
+/// l'autorise. Rend vrai si la fenêtre est bien passée devant.
+#[cfg(windows)]
+unsafe fn take_foreground(target: windows_sys::Win32::Foundation::HWND) -> bool {
+  use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
+  use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, SetFocus, KEYEVENTF_KEYUP, VK_MENU};
+  use windows_sys::Win32::UI::WindowsAndMessaging::{
+    BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
+  };
+  // Plusieurs tentatives : un jeu en plein écran garde parfois la main au
+  // premier essai.
+  for _ in 0..5 {
+    let front = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
+    let me = GetCurrentThreadId();
+    let attached = front != 0 && front != me && AttachThreadInput(me, front, 1) != 0;
+    // Un appui d'Alt simulé lève le verrou de premier plan de Windows : c'est
+    // ce qui permet de prendre le focus à un jeu.
+    keybd_event(VK_MENU as u8, 0, 0, 0);
+    BringWindowToTop(target);
+    SetForegroundWindow(target);
+    SetFocus(target);
+    keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
+    if attached {
+      AttachThreadInput(me, front, 0);
+    }
+    if GetForegroundWindow() == target {
+      return true;
+    }
+    std::thread::sleep(std::time::Duration::from_millis(60));
+  }
+  false
+}
+
+/// Fait passer une fenêtre de Lobby devant le programme qui a le premier plan
+/// (le jeu), en passant un instant « au-dessus de tout ».
 fn force_foreground(window: &tauri::WebviewWindow, keep_on_top: bool) {
   let _ = window.unminimize();
   let _ = window.show();
   let _ = window.set_always_on_top(true);
   #[cfg(windows)]
   if let Ok(hwnd) = window.hwnd() {
-    use windows_sys::Win32::System::Threading::{AttachThreadInput, GetCurrentThreadId};
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::SetFocus;
-    use windows_sys::Win32::UI::WindowsAndMessaging::{
-      BringWindowToTop, GetForegroundWindow, GetWindowThreadProcessId, SetForegroundWindow,
-    };
-    use windows_sys::Win32::UI::Input::KeyboardAndMouse::{keybd_event, KEYEVENTF_KEYUP, VK_MENU};
     unsafe {
-      let ours: windows_sys::Win32::Foundation::HWND = hwnd.0 as _;
-      // Plusieurs tentatives : un jeu en plein écran garde parfois la main
-      // au premier essai.
-      for _ in 0..5 {
-        let front = GetWindowThreadProcessId(GetForegroundWindow(), std::ptr::null_mut());
-        let me = GetCurrentThreadId();
-        let attached = front != 0 && front != me && AttachThreadInput(me, front, 1) != 0;
-        // Un appui d'Alt simulé lève le verrou de premier plan de Windows :
-        // c'est ce qui permet de prendre le focus à un jeu.
-        keybd_event(VK_MENU as u8, 0, 0, 0);
-        BringWindowToTop(ours);
-        SetForegroundWindow(ours);
-        SetFocus(ours);
-        keybd_event(VK_MENU as u8, 0, KEYEVENTF_KEYUP, 0);
-        if attached {
-          AttachThreadInput(me, front, 0);
-        }
-        if GetForegroundWindow() == ours {
-          break;
-        }
-        std::thread::sleep(std::time::Duration::from_millis(60));
-      }
+      take_foreground(hwnd.0 as _);
     }
   }
   let _ = window.set_focus();
@@ -788,6 +793,9 @@ mod running_tests {
   fn dump_programs() {
     println!("Steam : {:?}", crate::scanner::steam_root());
     for program in super::running_programs() {
+      #[cfg(windows)]
+      println!("{} ({} fenêtres) {}", program.pid, super::windows_of(program.pid).len(), program.path);
+      #[cfg(not(windows))]
       println!("{} {}", program.pid, program.path);
     }
   }
@@ -908,25 +916,64 @@ fn focus_game_window(window: tauri::WebviewWindow) -> u32 {
   }
 }
 
-/// « Revenir au jeu » : Lobby rend le premier plan à la plus grande fenêtre
-/// du jeu en cours (processus `pid`). Faux si elle n'existe plus.
+/// Fenêtres visibles d'un processus, la plus grande d'abord. Contrairement à
+/// `big_windows`, qui repère un jeu qui démarre, celles qui sont **réduites** ou
+/// petites comptent : un jeu en plein écran se réduit dès que Lobby passe devant,
+/// et un jeu en fenêtre peut occuper une partie de l'écran seulement.
+#[cfg(windows)]
+fn windows_of(pid: u32) -> Vec<isize> {
+  use windows_sys::Win32::Foundation::{BOOL, HWND, LPARAM};
+  use windows_sys::Win32::UI::WindowsAndMessaging::{
+    EnumWindows, GetWindowPlacement, GetWindowThreadProcessId, IsWindowVisible, WINDOWPLACEMENT,
+  };
+
+  struct Search {
+    pid: u32,
+    found: Vec<(i64, isize)>,
+  }
+
+  unsafe extern "system" fn visit(hwnd: HWND, data: LPARAM) -> BOOL {
+    let search = &mut *(data as *mut Search);
+    let mut owner = 0u32;
+    GetWindowThreadProcessId(hwnd, &mut owner);
+    if owner == search.pid && IsWindowVisible(hwnd) != 0 {
+      // La taille hors réduction : une fenêtre réduite n'a plus de vrai cadre.
+      let mut place: WINDOWPLACEMENT = std::mem::zeroed();
+      place.length = std::mem::size_of::<WINDOWPLACEMENT>() as u32;
+      GetWindowPlacement(hwnd, &mut place);
+      let r = place.rcNormalPosition;
+      search.found.push((i64::from(r.right - r.left).max(0) * i64::from(r.bottom - r.top).max(0), hwnd as isize));
+    }
+    1
+  }
+
+  let mut search = Search { pid, found: Vec::new() };
+  unsafe {
+    EnumWindows(Some(visit), &mut search as *mut _ as LPARAM);
+  }
+  search.found.sort_by_key(|(size, _)| std::cmp::Reverse(*size));
+  search.found.into_iter().map(|(_, hwnd)| hwnd).collect()
+}
+
+/// « Revenir au jeu » : Lobby rend le premier plan à la plus grande fenêtre du
+/// processus `pid`, restaurée si elle est réduite. Faux si elle n'existe plus ou
+/// si Windows refuse de la passer devant.
 #[tauri::command]
 fn focus_process(pid: u32) -> bool {
   #[cfg(windows)]
   {
-    use windows_sys::Win32::UI::WindowsAndMessaging::{BringWindowToTop, SetForegroundWindow};
-    let Some((hwnd, _, _)) = big_windows()
-      .into_iter()
-      .filter(|(_, _, owner)| *owner == pid)
-      .max_by_key(|(_, size, _)| *size)
-    else {
+    use windows_sys::Win32::UI::WindowsAndMessaging::{IsIconic, ShowWindowAsync, SW_RESTORE};
+    let Some(&hwnd) = windows_of(pid).first() else {
       return false;
     };
+    let hwnd = hwnd as windows_sys::Win32::Foundation::HWND;
     unsafe {
-      BringWindowToTop(hwnd as _);
-      SetForegroundWindow(hwnd as _);
+      // Asynchrone : un jeu occupé ne doit pas figer l'interface.
+      if IsIconic(hwnd) != 0 {
+        ShowWindowAsync(hwnd, SW_RESTORE);
+      }
+      take_foreground(hwnd)
     }
-    true
   }
   #[cfg(not(windows))]
   {
