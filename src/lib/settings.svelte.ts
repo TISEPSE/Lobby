@@ -3,8 +3,9 @@
  * et dossiers de jeux suivis.
  * Persisté via Tauri (disque) et localStorage (secours).
  */
-import type { UserSettings, VolumeKey } from './types';
-import { setLayoutChoice } from './gamepad';
+import type { SelectOption, UserSettings, VolumeKey } from './types';
+import { padLayout, setLayoutChoice } from './gamepad';
+import { glyphPreview, type GlyphFamily } from './glyphs';
 
 export const VOLUME_KEYS: VolumeKey[] = ['volume_master', 'volume_menu', 'volume_alerts', 'volume_launch', 'volume_video'];
 
@@ -38,6 +39,9 @@ export const settings = $state<UserSettings>({
 	volume_alerts: 100,
 	volume_launch: 100,
 	volume_video: 100,
+	// Vrai hors application : un onglet de navigateur (captures) ne passe pas
+	// par la bienvenue. Dans l'application, c'est le disque qui décide.
+	onboarding_done: true,
 });
 
 export async function initSettings() {
@@ -60,6 +64,7 @@ export async function initSettings() {
 				settings.library_filter = loaded.library_filter || 'all';
 				settings.library_sort = loaded.library_sort || 'title';
 				for (const key of VOLUME_KEYS) settings[key] = clampVolume(loaded[key] ?? 100);
+				settings.onboarding_done = loaded.onboarding_done ?? false;
 				return;
 			}
 		} catch (e) {
@@ -115,11 +120,20 @@ export function setAvatar(path: string) {
 	saveSettings();
 }
 
-export const LAYOUT_LABELS: Record<string, string> = { ps5: 'PlayStation', xbox: 'Xbox', auto: 'Automatique' };
+export const LAYOUT_LABELS: Record<string, string> = {
+	auto: 'Automatique',
+	xbox: 'Xbox',
+	ps5: 'PlayStation',
+	ps5_solid: 'PlayStation pleine',
+};
 
-/** Disposition suivante : PlayStation, Xbox, puis automatique. */
-export function nextLayout(layout: string): string {
-	return layout === 'ps5' ? 'xbox' : layout === 'xbox' ? 'auto' : 'ps5';
+/** Tous les packs de touches, dans l'ordre du menu. `auto` montre celui qu'il suit. */
+export function layoutOptions(): SelectOption[] {
+	return Object.entries(LAYOUT_LABELS).map(([id, label]) => ({
+		id,
+		label,
+		preview: glyphPreview(id === 'auto' ? padLayout() : (id as GlyphFamily)),
+	}));
 }
 
 export function setButtonLayout(layout: string) {
@@ -144,6 +158,12 @@ export function setLibraryView(filter: string, sort: string) {
 
 export function setHomeOrder(order: 'recent' | 'title') {
 	settings.home_order = order;
+	saveSettings();
+}
+
+/** Bienvenue terminée : elle ne se rouvre plus d'elle-même. */
+export function setOnboardingDone(done: boolean) {
+	settings.onboarding_done = done;
 	saveSettings();
 }
 

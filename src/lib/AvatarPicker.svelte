@@ -6,12 +6,15 @@
 		current = '',
 		profileName = 'Joueur',
 		onSelect,
+		onImport,
 		onClose,
 	}: {
 		open: boolean;
 		current: string;
 		profileName: string;
 		onSelect: (path: string) => void;
+		/** Ouvre l'import d'une photo du PC. */
+		onImport: () => void;
 		onClose: () => void;
 	} = $props();
 
@@ -32,18 +35,33 @@
 	];
 
 	const COLUMNS = 5;
+	/** La case qui ouvre l'import, en tête de la grille. */
+	const IMPORT = 'import';
 	let focusedIndex = $state(0);
+
+	/**
+	 * Importer, puis la photo actuelle si elle n'est pas une illustration (photo
+	 * importée, photo Steam) : on la revoit, et on peut la garder.
+	 */
+	const cells = $derived([IMPORT, ...(current && !AVATARS.includes(current) ? [current] : []), ...AVATARS]);
+	const onImportCell = $derived(cells[focusedIndex] === IMPORT);
 
 	$effect(() => {
 		if (open) {
-			const found = AVATARS.indexOf(current);
+			const found = cells.indexOf(current);
 			focusedIndex = found >= 0 ? found : 0;
 		}
 	});
 
+	function choose(cell: string) {
+		if (cell === IMPORT) return onImport();
+		onSelect(cell);
+		onClose();
+	}
+
 	export function handleAction(action: string) {
 		if (!open) return;
-		const total = AVATARS.length;
+		const total = cells.length;
 		if (action === 'left') {
 			if (focusedIndex % COLUMNS > 0) focusedIndex--;
 		} else if (action === 'right') {
@@ -53,8 +71,7 @@
 		} else if (action === 'down') {
 			if (focusedIndex + COLUMNS < total) focusedIndex += COLUMNS;
 		} else if (action === 'accept') {
-			onSelect(AVATARS[focusedIndex]);
-			onClose();
+			choose(cells[focusedIndex]);
 		} else if (action === 'cancel') {
 			onClose();
 		}
@@ -66,23 +83,26 @@
 		<div class="dialog">
 			<header>
 				<h2>Photo de profil</h2>
-				<p>Choisis une illustration pour ton profil ou conserve l'initiale de ton pseudo.</p>
+				<p>Importe ta propre photo, choisis une illustration ou garde l'initiale de ton pseudo.</p>
 			</header>
 
 			<div class="grid">
-				{#each AVATARS as avatar, i}
+				{#each cells as avatar, i (avatar)}
 					<button
 						type="button"
 						class="cell"
 						class:active={focusedIndex === i}
 						class:selected={current === avatar}
+						class:add={avatar === IMPORT}
+						aria-label={avatar === IMPORT ? 'Importer une photo' : undefined}
 						onclick={() => {
 							focusedIndex = i;
-							onSelect(avatar);
-							onClose();
+							choose(avatar);
 						}}
 					>
-						{#if avatar}
+						{#if avatar === IMPORT}
+							<img src="/assets/icons/image.svg" alt="" class="import-icon" />
+						{:else if avatar}
 							<img src={avatar} alt="" class="avatar-img" />
 						{:else}
 							<span class="initial">{profileName.charAt(0).toUpperCase() || 'J'}</span>
@@ -94,7 +114,7 @@
 			<div class="footer">
 				<HelpBar
 					entries={[
-						{ button: 'a', label: 'Choisir' },
+						{ button: 'a', label: onImportCell ? 'Importer une photo' : 'Choisir' },
 						{ button: 'b', label: 'Fermer' },
 					]}
 				/>
@@ -110,8 +130,8 @@
 		z-index: 10;
 		display: grid;
 		place-items: center;
-		background: rgba(3, 5, 8, 0.78);
-		backdrop-filter: blur(16px);
+		background: var(--files-veil);
+		backdrop-filter: blur(var(--files-blur));
 		animation: fade-in 180ms var(--ease);
 	}
 
@@ -122,8 +142,8 @@
 		width: min(680px, 90vw);
 		padding: 36px 44px;
 		border-radius: calc(var(--radius) * 1.5);
-		background: var(--surface-strong);
-		border: 1px solid var(--border);
+		background: var(--files-panel);
+		border: 1px solid var(--xbox-line);
 		box-shadow: 0 24px 60px rgba(0, 0, 0, 0.6);
 		animation: scale-in 220ms var(--ease);
 	}
@@ -180,6 +200,19 @@
 		height: 100%;
 		border-radius: 50%;
 		object-fit: cover;
+	}
+
+	.cell.add {
+		border: 2px dashed var(--welcome-field-line);
+	}
+
+	.cell.add.active {
+		border-style: solid;
+	}
+
+	.import-icon {
+		width: 38px;
+		height: 38px;
 	}
 
 	.initial {

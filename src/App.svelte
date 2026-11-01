@@ -18,6 +18,7 @@
 	import Profile from './lib/Profile.svelte';
 	import { demoLog, formatMinutes, summarize, type Period } from './lib/stats';
 	import AvatarPicker from './lib/AvatarPicker.svelte';
+	import AvatarCropper from './lib/AvatarCropper.svelte';
 	import ScanResultsModal from './lib/ScanResultsModal.svelte';
 	import ArtPicker from './lib/ArtPicker.svelte';
 	import OptionsMenu from './lib/OptionsMenu.svelte';
@@ -28,8 +29,10 @@
 	import PadToast from './lib/PadToast.svelte';
 	import LaunchOverlay from './lib/LaunchOverlay.svelte';
 	import FilePicker from './lib/FilePicker.svelte';
+	import SelectMenu from './lib/SelectMenu.svelte';
+	import Welcome from './lib/Welcome.svelte';
 	import { remember } from './lib/notices.svelte.js';
-	import type { TileAction, Game, Section, Outcome } from './lib/types';
+	import type { TileAction, Game, Section, Outcome, SelectRequest } from './lib/types';
 	import { allowInBackground, listen, onGameCombo, padCount, type Action } from './lib/gamepad';
 	import { endSession, session, sessionPid, setSessionWindow } from './lib/session.svelte.js';
 	import type { GlyphButton } from './lib/glyphs';
@@ -69,6 +72,7 @@
 		setGameExecutable,
 		FILTERS,
 		SORTS,
+		SORT_LABELS,
 		uninstalledSteamGames,
 		uninstalledEpicGames,
 		stats,
@@ -86,11 +90,12 @@
 		setScreensaverMinutes,
 		setHomeOrder,
 		setLibraryView,
+		setOnboardingDone,
 		stepVolume,
 		setSteamGridKey,
 		addGameFolder,
 		removeGameFolder,
-		nextLayout,
+		layoutOptions,
 	} from './lib/settings.svelte.js';
 
 	/** Sections du dock. Réglages et Profil s'ouvrent par le menu rapide. */
@@ -103,6 +108,28 @@
 
 	const wanted = params.get('screen');
 	const wantedIndex = Number(params.get('index') ?? 0);
+
+	/**
+	 * Écrans de bienvenue : une fois, au premier lancement (`onboarding_done`), ou
+	 * rouverts depuis les Réglages. `?welcome=1&step=N` : capture.
+	 */
+	let welcomeOpen = $state(params.get('welcome') === '1');
+	let welcomeComponent: {
+		handleAction: (action: Action) => void;
+		selectionKey: () => string;
+		hints: () => [GlyphButton, string][];
+	} | null = $state(null);
+	/** La bienvenue a lancé la recherche des jeux : inutile de la refaire en sortant. */
+	let welcomeScanned = false;
+	/** Menu déroulant demandé par l'écran du moment, au-dessus de tout le reste. */
+	let selectRequest = $state.raw<SelectRequest | null>(null);
+	let selectComponent: { handleAction: (action: Action) => void; selectionKey: () => string } | null =
+		$state(null);
+	let libraryComponent: { sortAnchor: () => HTMLElement | null } | null = $state(null);
+	/** Tant que les réglages ne sont pas lus, on ne sait pas quel écran montrer. */
+	let booting = $state(!!(window as any).__TAURI_INTERNALS__);
+	/** Lobby s'ouvre avec la session ; `null` : sans objet sur ce système. */
+	let autostart = $state<boolean | null>(params.get('welcome') === '1' ? false : null);
 
 	/** Section affichée, et si la sélection est montée sur la barre du haut. */
 	let section = $state<Section>(
@@ -275,6 +302,61 @@
 		notify(`Profil Steam repris : ${steamAccount.persona}.`);
 	}
 
+	/** Case « Importer » du choix de photo : l'explorateur, parti du dossier Images. */
+	async function importPhoto() {
+		avatarPickerOpen = false;
+		if (!photoFolder && (window as any).__TAURI_INTERNALS__) {
+			const { invoke } = await import('@tauri-apps/api/core');
+			photoFolder = (await invoke<string | null>('pictures_dir').catch(() => null)) ?? '';
+		}
+		filePickerMode = 'image';
+		filePickerOpen = true;
+	}
+
+	/** Photo choisie : on la recadre, et le prochain import repart de son dossier. */
+	function cropPhoto(path: string) {
+		filePickerOpen = false;
+		photoFolder = path.replace(/[\\/][^\\/]*$/, '');
+		cropPath = path;
+	}
+
+	function connectSteam() {
+		loginSteamLibrary().catch((e) => notify(`Connexion Steam impossible : ${e}`, false));
+	}
+
+	function connectEpic() {
+		loginEpic().catch((e) => notify(`Connexion Epic impossible : ${e}`, false));
+	}
+
+	async function toggleAutostart() {
+		const on = !autostart;
+		const { invoke } = await import('@tauri-apps/api/core');
+		try {
+			await invoke('set_autostart', { on });
+			autostart = on;
+		} catch (e) {
+			notify(`${e}`, false);
+		}
+	}
+
+	/** Bienvenue terminée ou passée : elle ne se rouvrira plus d'elle-même. */
+	function finishWelcome() {
+		welcomeOpen = false;
+		setOnboardingDone(true);
+		// Passée d'un coup : les jeux n'ont pas encore été cherchés.
+		if (!welcomeScanned) searchGames();
+		opened = null;
+		statsOpen = false;
+		goToSection('home');
+		homeZone = 'row';
+		homeIndex = resumeGame ? -1 : 0;
+	}
+
+	function restartWelcome() {
+		welcomeScanned = false;
+		welcomeOpen = true;
+	}
+
 	let statsComponent: {
 		handleAction: (action: Action) => void;
 		selectionKey?: () => string;
@@ -282,9 +364,16 @@
 	let avatarPickerComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let scanModalComponent: { handleAction: (action: string) => void } | null = $state(null);
 	let artPickerComponent: { handleAction: (action: Action) => void } | null = $state(null);
-	/** Explorateur de fichiers : l'exécutable d'un jeu, ou un dossier de jeux (Réglages). */
-	let filePickerOpen = $state(params.get('modal') === 'files' || params.get('modal') === 'folders');
-	let filePickerMode = $state<'exe' | 'folder'>(params.get('modal') === 'folders' ? 'folder' : 'exe');
+	/** Explorateur de fichiers : l'exécutable d'un jeu, un dossier de jeux, ou une photo. */
+	let filePickerOpen = $state(['files', 'folders', 'photos'].includes(params.get('modal') ?? ''));
+	let filePickerMode = $state<'exe' | 'folder' | 'image'>(
+		params.get('modal') === 'folders' ? 'folder' : params.get('modal') === 'photos' ? 'image' : 'exe'
+	);
+	/** Dossier où chercher une photo : Images, puis le dernier utilisé. */
+	let photoFolder = $state('');
+	/** Photo en cours de recadrage. `?modal=crop` ouvre le logo (capture). */
+	let cropPath = $state(params.get('modal') === 'crop' ? '/assets/logo.png' : '');
+	let cropComponent: { handleAction: (action: Action) => void } | null = $state(null);
 	let filePickerComponent: { handleAction: (action: Action) => void; selectionKey: () => string } | null =
 		$state(null);
 
@@ -504,7 +593,7 @@
 			else if (action === 'right') headerIndex = 1;
 			else if (action === 'down') libraryZone = 'grid';
 			else if (action === 'accept') {
-				if (headerIndex === 0) cycleSort();
+				if (headerIndex === 0) openSortMenu();
 				else runSync();
 			} else if (action === 'cancel') goToSection('home');
 			return;
@@ -529,14 +618,32 @@
 			// X : les options du jeu, comme sur l'accueil.
 			optionsIndex = 0;
 			menuOptionsOpen = true;
-		} else if (action === 'view') cycleSort();
-		else if (action === 'cancel') goToSection('home');
+		} else if (action === 'cancel') goToSection('home');
 	}
 
-	/** Critère de tri suivant ; la sélection repart du début. */
-	function cycleSort() {
-		setLibraryView(filter, SORTS[(SORTS.indexOf(sort) + 1) % SORTS.length]);
-		libraryIndex = 0;
+	/** Le tri de la bibliothèque ; la sélection repart du début. */
+	function openSortMenu() {
+		selectRequest = {
+			title: 'Trier la bibliothèque',
+			options: SORTS.map((id) => ({ id, label: SORT_LABELS[id] })),
+			value: sort,
+			anchor: libraryComponent?.sortAnchor() ?? null,
+			onPick: (id) => {
+				setLibraryView(filter, id);
+				libraryIndex = 0;
+			},
+		};
+	}
+
+	/** Tous les packs de touches, avec leur aperçu. */
+	function openLayoutMenu(anchor: HTMLElement | null) {
+		selectRequest = {
+			title: 'Touches affichées',
+			options: layoutOptions(),
+			value: settings.button_layout,
+			anchor,
+			onPick: setButtonLayout,
+		};
 	}
 
 
@@ -663,15 +770,19 @@
 		await runSync();
 	}
 
-	async function runSync() {
+	/** `quiet` : l'écran affiche déjà le bilan (bienvenue), seule une erreur s'annonce. */
+	async function runSync(quiet = false) {
 		if (syncing) return;
 		const tauri = (window as any).__TAURI_INTERNALS__;
-		if (!tauri) return notify('Hors application : rien à synchroniser.');
+		if (!tauri) {
+			if (!quiet) notify('Hors application : rien à synchroniser.');
+			return;
+		}
 		syncing = true;
 		try {
 			const changes = await scanAndSync();
 			libraryIndex = 0;
-			notify(changes ? `Bibliothèque synchronisée : ${changes}.` : 'Bibliothèque déjà à jour.');
+			if (!quiet) notify(changes ? `Bibliothèque synchronisée : ${changes}.` : 'Bibliothèque déjà à jour.');
 		} catch (e) {
 			notify(`Synchronisation impossible : ${e}`, false);
 		} finally {
@@ -775,11 +886,13 @@
 	 * comme avant.
 	 */
 	function selectionKey(): string | null {
-		if (avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
+		if (selectRequest) return selectComponent?.selectionKey() ?? null;
+		if (cropPath || avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
 		if (quickOpen) return quickComponent?.selectionKey() ?? null;
 		if (filePickerOpen) return filePickerComponent?.selectionKey() ?? null;
 		if (searchOpen) return searchComponent?.selectionKey?.() ?? null;
 		if (nameKeyboardOpen) return null;
+		if (welcomeOpen) return welcomeComponent?.selectionKey() ?? null;
 		const settingsKey = section === 'settings' ? (settingsComponent?.selectionKey?.() ?? null) : '';
 		if (settingsKey === null) return null;
 		return JSON.stringify([
@@ -812,6 +925,8 @@
 			if (action === 'cancel') endLaunchCover();
 			return;
 		}
+		if (selectRequest) return selectComponent?.handleAction(action);
+		if (cropPath) return cropComponent?.handleAction(action);
 		if (gameMenuOpen) return handleGameMenu(action);
 		if (quickOpen) return quickComponent?.handleAction(action);
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
@@ -820,6 +935,9 @@
 		if (filePickerOpen) return filePickerComponent?.handleAction(action);
 		if (searchOpen) return searchComponent?.handleAction(action);
 		if (nameKeyboardOpen) return nameKeyboard?.handleAction(action);
+		// Ses fenêtres (pseudo, photo, dossier) d'abord, puis la bienvenue, seule
+		// à l'écran : ni menu, ni recherche, ni dock pendant ce temps.
+		if (welcomeOpen) return welcomeComponent?.handleAction(action);
 		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
 			return settingsComponent.handleAction(action);
 		}
@@ -1040,22 +1158,37 @@
 	}
 
 	/**
-	 * Démarrage : réglages, bibliothèque installée, puis — en arrière-plan —
-	 * recherche des jeux installés (un jeu installé, désinstallé ou déplacé
-	 * depuis un autre launcher est à jour d'office) et lecture des comptes
-	 * Steam et Epic.
+	 * Recherche des jeux installés, en arrière-plan : un jeu installé, désinstallé
+	 * ou déplacé depuis un autre launcher est à jour d'office.
+	 */
+	function searchGames() {
+		if (!(window as any).__TAURI_INTERNALS__) return;
+		scanAndSync()
+			.then((changes) => {
+				if (changes) notify(`Bibliothèque mise à jour : ${changes}.`);
+			})
+			.catch((e) => notify(`Recherche des jeux impossible : ${e}`, false));
+	}
+
+	/**
+	 * Démarrage : réglages, bibliothèque installée, recherche des jeux, puis
+	 * lecture des comptes Steam et Epic. Au premier lancement, la recherche
+	 * attend les écrans de bienvenue : elle en est une étape. Sans ça, la
+	 * bibliothèque se remplissait toute seule en quelques secondes, et une
+	 * installation neuve semblait avoir gardé ses données.
 	 */
 	async function startup() {
 		await initSettings();
+		const tauri = !!(window as any).__TAURI_INTERNALS__;
+		if (tauri && !settings.onboarding_done) welcomeOpen = true;
+		booting = false;
 		await Promise.all([initLibrary(), initArtStore()]);
 		libraryReady = true;
 
-		if ((window as any).__TAURI_INTERNALS__) {
-			scanAndSync()
-				.then((changes) => {
-					if (changes) notify(`Bibliothèque mise à jour : ${changes}.`);
-				})
-				.catch((e) => notify(`Recherche des jeux impossible : ${e}`, false));
+		if (tauri) {
+			const { invoke } = await import('@tauri-apps/api/core');
+			autostart = await invoke<boolean | null>('autostart_enabled').catch(() => null);
+			if (!welcomeOpen) searchGames();
 		}
 
 		// Le compte local d'abord : la liste complète en complète les temps.
@@ -1139,7 +1272,7 @@
 			pads = padCount();
 			// Pas de veille sans artwork à montrer.
 			const delay = settings.screensaver_minutes * 60_000;
-			if (delay > 0 && saverImages.length > 0) {
+			if (delay > 0 && saverImages.length > 0 && !welcomeOpen) {
 				if (Date.now() - lastInput >= delay) saverOn = true;
 			}
 		}, 1000);
@@ -1262,6 +1395,9 @@
 		const list = (...entries: [GlyphButton, string][]): Entry[] =>
 			entries.map(([button, label]) => ({ button, label }));
 
+		if (selectRequest) return list(['a', 'Choisir'], ['b', 'Fermer']);
+		// Le recadrage affiche ses propres touches.
+		if (cropPath) return list();
 		if (searchOpen) return list(['a', 'Taper / Ouvrir'], ['y', 'Espace'], ['b', 'Fermer']);
 		if (keyboardOpen) return list(['a', 'Taper'], ['x', 'Effacer'], ['y', 'Espace'], ['b', 'Annuler']);
 		// Le menu du jeu affiche ses propres touches.
@@ -1277,6 +1413,7 @@
 				? list(['b', 'Annuler'])
 				: list(['a', 'Cocher / Valider'], ['x', 'Tout cocher'], ['b', 'Fermer']);
 		}
+		if (welcomeOpen) return list(...(welcomeComponent?.hints() ?? []));
 		if (menuOptionsOpen && !opened) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (opened) {
 			if (viewerOpen) {
@@ -1293,7 +1430,7 @@
 		}
 		if (section === 'library') {
 			if (libraryZone === 'header') {
-				return list(['a', headerIndex === 0 ? 'Changer le tri' : 'Synchroniser'], ['b', 'Accueil']);
+				return list(['a', headerIndex === 0 ? 'Trier' : 'Synchroniser'], ['b', 'Accueil']);
 			}
 			return list(
 				['a', 'Ouvrir'],
@@ -1366,6 +1503,7 @@
 		/>
 	{:else if section === 'library'}
 		<Library
+			bind:this={libraryComponent}
 			games={libraryGames}
 			index={libraryIndex}
 			{syncing}
@@ -1385,22 +1523,16 @@
 			steamPersona={steamAccount.persona}
 			steamAvatar={steamAccount.avatar}
 			epicConnected={epicAccount.connected}
-			epicName={epicAccount.displayName}
 			epicPending={epicAccount.pending}
-			epicError={epicAccount.error}
-			epicGamesCount={epicAccount.library.length || Object.keys(epicAccount.playtime).length}
 			steamLibraryCount={Object.keys(steamAccount.owned).length}
-			steamLibraryDate={steamLibrary.fetchedAt}
-			steamLibraryPending={steamLibrary.pending}
-			onSteamLibraryLogin={() =>
-				loginSteamLibrary().catch((e) => notify(`Connexion Steam impossible : ${e}`, false))}
+			onSteamLibraryLogin={connectSteam}
 			onSteamLibraryForget={async () => {
 				await forgetSteamLibrary();
 				notify('Compte Steam déconnecté : seuls les jeux installés restent.');
 			}}
 			onEditName={() => (nameKeyboardOpen = true)}
 			onChangeAvatar={() => (avatarPickerOpen = true)}
-			onEpicLogin={() => loginEpic().catch((e) => notify(`Connexion Epic impossible : ${e}`, false))}
+			onEpicLogin={connectEpic}
 			onEpicRefresh={async () => {
 				await refreshEpicAccount();
 				notify(epicAccount.error ? `Epic : ${epicAccount.error}` : 'Temps de jeu Epic actualisé.', !epicAccount.error);
@@ -1439,7 +1571,7 @@
 			onRemoveFolder={removeGameFolder}
 			{hiddenGames}
 			onRestoreGame={restoreGame}
-			onChangeLayout={setButtonLayout}
+			onPickLayout={openLayoutMenu}
 			soundEnabled={settings.sound_enabled}
 			volumes={{
 				volume_master: settings.volume_master,
@@ -1467,6 +1599,9 @@
 			initialRow={Number(params.get('row') ?? -1)}
 			{fullscreen}
 			onToggleFullscreen={toggleFullscreen}
+			{autostart}
+			onToggleAutostart={toggleAutostart}
+			onRestartWelcome={restartWelcome}
 			initialKeyboard={params.get('modal') === 'keyboard'}
 			onChangeSteamGridKey={async (key) => {
 				setSteamGridKey(key);
@@ -1568,7 +1703,7 @@
 	}}
 	onToggleSound={toggleSound}
 	onToggleFullscreen={toggleFullscreen}
-	onCycleLayout={() => setButtonLayout(nextLayout(settings.button_layout))}
+	onPickLayout={openLayoutMenu}
 	onPower={powerAction}
 />
 
@@ -1578,8 +1713,26 @@
 	current={settings.avatar_path}
 	profileName={settings.profile_name}
 	onSelect={setAvatar}
+	onImport={importPhoto}
 	onClose={() => (avatarPickerOpen = false)}
 />
+
+{#if cropPath}
+	<AvatarCropper
+		bind:this={cropComponent}
+		path={cropPath}
+		onDone={(src) => {
+			setAvatar(src);
+			cropPath = '';
+			notify('Photo de profil mise à jour.');
+		}}
+		onCancel={() => {
+			cropPath = '';
+			filePickerMode = 'image';
+			filePickerOpen = true;
+		}}
+	/>
+{/if}
 
 <OptionsMenu actions={tileActions} index={optionsIndex} open={menuOptionsOpen} game={selected} />
 
@@ -1606,9 +1759,15 @@
 	open={filePickerOpen}
 	game={selected}
 	mode={filePickerMode}
-	onClose={() => (filePickerOpen = false)}
+	startFolder={photoFolder}
+	onClose={() => {
+		filePickerOpen = false;
+		// Sans photo choisie, on revient au choix de la photo.
+		if (filePickerMode === 'image') avatarPickerOpen = true;
+	}}
 	onPick={(path) => {
 		if (filePickerMode === 'folder') return void addFolder(path);
+		if (filePickerMode === 'image') return cropPhoto(path);
 		if (!selected) return;
 		setGameExecutable(selected.id, path);
 		filePickerOpen = false;
@@ -1626,6 +1785,40 @@
 	onClose={closeScan}
 />
 
+{#if welcomeOpen}
+	<Welcome
+		bind:this={welcomeComponent}
+		initialStep={Number(params.get('step') ?? 0)}
+		{pads}
+		scanning={syncing}
+		totalGames={allGames.length}
+		{autostart}
+		onEditName={() => (nameKeyboardOpen = true)}
+		onChangeAvatar={() => (avatarPickerOpen = true)}
+		onUseSteamProfile={useSteamProfile}
+		onSteamLogin={connectSteam}
+		onEpicLogin={connectEpic}
+		onScan={() => {
+			welcomeScanned = true;
+			void runSync(true);
+		}}
+		onPickFolder={() => {
+			filePickerMode = 'folder';
+			filePickerOpen = true;
+		}}
+		onToggleSound={toggleSound}
+		onPickLayout={openLayoutMenu}
+		onToggleAutostart={toggleAutostart}
+		onDone={finishWelcome}
+	/>
+{/if}
+
+{#if booting}
+	<div class="booting"></div>
+{/if}
+
+<SelectMenu bind:this={selectComponent} request={selectRequest} onClose={() => (selectRequest = null)} />
+
 {#if notice}
 	<div class="notice" class:failed={!noticeOk}>
 		{#if !noticeOk}<span class="mark">!</span>{/if}
@@ -1634,7 +1827,7 @@
 {/if}
 
 <!-- Sur l'accueil, le panneau « Mises à jour » montre déjà les téléchargements. -->
-{#if section !== 'home' || opened}
+{#if (section !== 'home' || opened) && !welcomeOpen}
 	<DownloadBar />
 {/if}
 
@@ -1695,6 +1888,15 @@
 	.todo p {
 		font-size: 20px;
 		color: var(--text-dim);
+	}
+
+	/* Un fond plein le temps de lire les réglages : ni l'accueil, ni son encart
+	   « Aucun jeu », ne passent avant la bienvenue. */
+	.booting {
+		position: fixed;
+		inset: 0;
+		z-index: 3;
+		background: var(--bg);
 	}
 
 	/* Une erreur se distingue au premier coup d'œil : liseré rouge et pastille,

@@ -259,7 +259,10 @@ fn strip_html(value: &str) -> String {
 
 mod scanner;
 mod steam_account;
+mod autostart;
 mod epic_account;
+mod images;
+mod played;
 mod secure_store;
 mod steam_library;
 
@@ -301,6 +304,10 @@ pub struct UserSettings {
   pub volume_launch: u32,
   #[serde(default = "default_volume")]
   pub volume_video: u32,
+  /// Écrans de bienvenue terminés ou passés. Absent d'un fichier plus ancien :
+  /// ils s'ouvrent alors une fois.
+  #[serde(default)]
+  pub onboarding_done: bool,
 }
 
 fn default_volume() -> u32 {
@@ -463,7 +470,55 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     volume_alerts: default_volume(),
     volume_launch: default_volume(),
     volume_video: default_volume(),
+    onboarding_done: false,
   })
+}
+
+/// Le dossier Images de l'utilisateur : le départ de l'import d'une photo.
+#[tauri::command]
+fn pictures_dir(app: tauri::AppHandle) -> Option<String> {
+  app.path().picture_dir().ok().map(|dir| dir.to_string_lossy().to_string())
+}
+
+/// Les octets d'une image choisie dans l'explorateur, sans passer par JSON.
+#[tauri::command]
+fn read_image(path: String) -> Result<tauri::ipc::Response, String> {
+  images::read(Path::new(&path)).map(tauri::ipc::Response::new)
+}
+
+/// Enregistre la photo recadrée (PNG en corps brut) et rend son chemin.
+#[tauri::command]
+fn save_avatar(app: tauri::AppHandle, request: tauri::ipc::Request<'_>) -> Result<String, String> {
+  let tauri::ipc::InvokeBody::Raw(bytes) = request.body() else {
+    return Err("Photo recadrée invalide.".into());
+  };
+  let dir = app
+    .path()
+    .app_data_dir()
+    .map_err(|error| format!("Dossier de données introuvable : {error}"))?
+    .join("avatars");
+  let stamp = std::time::SystemTime::now()
+    .duration_since(std::time::UNIX_EPOCH)
+    .map(|d| d.as_secs())
+    .unwrap_or(0);
+  images::write_avatar(&dir, bytes, stamp).map(|path| path.to_string_lossy().to_string())
+}
+
+/// Dernières parties vues hors de Lobby (Windows, launcher Epic).
+#[tauri::command]
+fn played_elsewhere() -> Vec<played::PlayedElsewhere> {
+  played::read()
+}
+
+/// Lobby s'ouvre-t-il avec la session ? `None` : réglage sans objet ici.
+#[tauri::command]
+fn autostart_enabled() -> Option<bool> {
+  autostart::enabled()
+}
+
+#[tauri::command]
+fn set_autostart(on: bool) -> Result<(), String> {
+  autostart::set(on)
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -522,6 +577,13 @@ async fn epic_login(app: tauri::AppHandle) -> Result<(), String> {
 async fn epic_account(app: tauri::AppHandle) -> Result<Option<epic_account::EpicAccount>, String> {
   let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
   epic_account::read_account(&data_dir).await
+}
+
+/// Fiches du catalogue qui manquent : la longue partie, après la connexion.
+#[tauri::command]
+async fn epic_library(app: tauri::AppHandle) -> Result<Vec<epic_account::EpicGame>, String> {
+  let data_dir = app.path().app_data_dir().map_err(|e| e.to_string())?;
+  epic_account::read_full_library(&data_dir).await
 }
 
 #[tauri::command]
@@ -786,12 +848,30 @@ fn running_programs() -> Vec<RunningProgram> {
 
 #[cfg(test)]
 mod running_tests {
+  /// Suit un vrai processus : vivant, puis terminé.
+  #[test]
+  fn is_running_follows_a_process() {
+    assert!(super::is_running(std::process::id()));
+    #[cfg(windows)]
+    let mut child = super::silent("cmd").args(["/C", "ping -n 2 127.0.0.1 >nul"]).spawn().unwrap();
+    #[cfg(not(windows))]
+    let mut child = super::Command::new("sleep").arg("1").spawn().unwrap();
+    let pid = child.id();
+    assert!(super::is_running(pid));
+    child.wait().unwrap();
+    drop(child);
+    assert!(!super::is_running(pid));
+  }
+
   /// `cargo test --lib dump_programs -- --ignored --nocapture` : ce que Lobby
   /// voit de cette machine, sans ouvrir de fenêtre.
   #[test]
   #[ignore]
   fn dump_programs() {
     println!("Steam : {:?}", crate::scanner::steam_root());
+    for game in crate::scanner::scan_epic() {
+      println!("Epic : {} -> {}", game.title, game.launch_url);
+    }
     for program in super::running_programs() {
       #[cfg(windows)]
       println!("{} ({} fenêtres) {}", program.pid, super::windows_of(program.pid).len(), program.path);
@@ -982,6 +1062,18 @@ fn focus_process(pid: u32) -> bool {
   }
 }
 
+/// Commande système sans fenêtre. L'application installée n'a pas de console :
+/// Windows en ouvrirait une pour chaque programme lancé, par-dessus le jeu.
+/// `tauri dev` en a une, et le problème ne s'y voit pas.
+#[cfg(windows)]
+fn silent(program: &str) -> Command {
+  use std::os::windows::process::CommandExt;
+  const CREATE_NO_WINDOW: u32 = 0x0800_0000;
+  let mut command = Command::new(program);
+  command.creation_flags(CREATE_NO_WINDOW);
+  command
+}
+
 /// « Quitter le jeu », comme sur Xbox : le processus du jeu (et ses enfants)
 /// est arrêté. Jamais Lobby lui-même.
 #[tauri::command]
@@ -990,14 +1082,7 @@ fn kill_process(pid: u32) -> Result<(), String> {
     return Err("aucun jeu à quitter".into());
   }
   #[cfg(windows)]
-  let status = {
-    use std::os::windows::process::CommandExt;
-    // CREATE_NO_WINDOW : pas de console qui clignote par-dessus l'interface.
-    Command::new("taskkill")
-      .args(["/PID", &pid.to_string(), "/T", "/F"])
-      .creation_flags(0x0800_0000)
-      .status()
-  };
+  let status = silent("taskkill").args(["/PID", &pid.to_string(), "/T", "/F"]).status();
   #[cfg(not(windows))]
   let status = Command::new("kill").args(["-TERM", &pid.to_string()]).status();
   match status {
@@ -1701,8 +1786,9 @@ async fn fetch_game_art(
 #[tauri::command]
 fn launch_game(program: String, args: Vec<String>) -> Result<u32, String> {
   if program.starts_with("com.epicgames.launcher://") || program.starts_with("steam://") {
+    // Pas de `cmd /C start` : son `&` couperait l'adresse (`…&silent=true`).
     #[cfg(windows)]
-    let res = Command::new("cmd").args(["/C", "start", "", &program]).spawn();
+    let res = silent("rundll32").args(["url.dll,FileProtocolHandler", &program]).spawn();
     #[cfg(not(windows))]
     let res = Command::new("xdg-open").arg(&program).spawn();
 
@@ -1728,16 +1814,28 @@ fn launch_game(program: String, args: Vec<String>) -> Result<u32, String> {
 }
 
 /// Vrai tant que le jeu tourne : c'est ce qui permet de remettre l'interface au
-/// premier plan quand la partie se termine.
+/// premier plan quand la partie se termine. Appelée toutes les 2 s pendant une
+/// partie : elle demande à Windows sans lancer de programme. `tasklist`, sans
+/// console à hériter, ouvrait une fenêtre de terminal à chaque appel.
 #[tauri::command]
 fn is_running(pid: u32) -> bool {
   #[cfg(windows)]
   {
-    Command::new("tasklist")
-      .args(["/FI", &format!("PID eq {pid}"), "/NH"])
-      .output()
-      .map(|out| String::from_utf8_lossy(&out.stdout).contains(&pid.to_string()))
-      .unwrap_or(false)
+    use windows_sys::Win32::Foundation::{CloseHandle, GetLastError, ERROR_ACCESS_DENIED, STILL_ACTIVE};
+    use windows_sys::Win32::System::Threading::{
+      GetExitCodeProcess, OpenProcess, PROCESS_QUERY_LIMITED_INFORMATION,
+    };
+    unsafe {
+      let handle = OpenProcess(PROCESS_QUERY_LIMITED_INFORMATION, 0, pid);
+      if handle.is_null() {
+        // Accès refusé : il existe, on n'a juste pas le droit de le lire.
+        return GetLastError() == ERROR_ACCESS_DENIED;
+      }
+      let mut code = 0u32;
+      let read = GetExitCodeProcess(handle, &mut code);
+      CloseHandle(handle);
+      read != 0 && code == STILL_ACTIVE as u32
+    }
   }
   #[cfg(not(windows))]
   {
@@ -1803,11 +1901,12 @@ fn list_roots() -> Vec<FileEntry> {
   }
 }
 
-/// Le contenu d'un dossier : ses sous-dossiers puis ses exécutables, chacun par
-/// ordre alphabétique. Les fichiers cachés ou système et le reste sont omis :
-/// on cherche un exécutable, pas à tout parcourir.
+/// Le contenu d'un dossier : ses sous-dossiers puis ses exécutables (ou ses
+/// images, avec `images`), chacun par ordre alphabétique. Les fichiers cachés ou
+/// système et le reste sont omis : on cherche un fichier, pas à tout parcourir.
 #[tauri::command]
-fn list_dir(path: String) -> Result<FolderListing, String> {
+fn list_dir(path: String, images: Option<bool>) -> Result<FolderListing, String> {
+  let images = images.unwrap_or(false);
   let dir = Path::new(&path);
   let read = fs::read_dir(dir).map_err(|e| format!("Dossier illisible : {e}"))?;
   let mut folders = Vec::new();
@@ -1829,7 +1928,9 @@ fn list_dir(path: String) -> Result<FolderListing, String> {
     }
     if meta.is_dir() {
       folders.push(FileEntry { name, path: full.to_string_lossy().to_string(), kind: "folder", size: 0 });
-    } else if is_launchable(&full) {
+    } else if images && images::is_image(&full) {
+      files.push(FileEntry { name, path: full.to_string_lossy().to_string(), kind: "image", size: meta.len() });
+    } else if !images && is_launchable(&full) {
       files.push(FileEntry { name, path: full.to_string_lossy().to_string(), kind: "exe", size: meta.len() });
     }
   }
@@ -1952,7 +2053,7 @@ fn open_url(url: String) -> Result<(), String> {
   }
 
   #[cfg(windows)]
-  let result = Command::new("cmd").args(["/C", "start", "", &url]).spawn();
+  let result = silent("cmd").args(["/C", "start", "", &url]).spawn();
   #[cfg(not(windows))]
   let result = Command::new("xdg-open").arg(&url).spawn();
 
@@ -1973,7 +2074,7 @@ fn power_action(app: tauri::AppHandle, action: String) -> Result<(), String> {
     "shutdown" | "reboot" => {
       #[cfg(windows)]
       let mut command = {
-        let mut c = Command::new("shutdown");
+        let mut c = silent("shutdown");
         c.args([if action == "reboot" { "/r" } else { "/s" }, "/t", "0"]);
         c
       };
@@ -1999,6 +2100,12 @@ pub fn run() {
       launch_game,
       is_running,
       running_programs,
+      played_elsewhere,
+      pictures_dir,
+      read_image,
+      save_avatar,
+      autostart_enabled,
+      set_autostart,
       steam_running_app,
       set_launch_cover,
       bring_to_front,
@@ -2026,6 +2133,7 @@ pub fn run() {
       steam_library_forget,
       epic_login,
       epic_account,
+      epic_library,
       epic_logout,
       open_url,
       scan_installed_games,

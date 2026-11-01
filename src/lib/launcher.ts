@@ -3,7 +3,7 @@
  * de le signaler : le prototype reste utilisable pour juger le design.
  */
 import type { Game, Outcome } from './types';
-import { games, markLaunched, recordSession } from './library.svelte.js';
+import { games, markLaunched, programFolder, recordSession, unixPath } from './library.svelte.js';
 import { endSession, session, setSessionWindow, startSession } from './session.svelte.js';
 
 export async function play(game: Game): Promise<Outcome> {
@@ -12,10 +12,14 @@ export async function play(game: Game): Promise<Outcome> {
 
 	const { invoke } = await import('@tauri-apps/api/core');
 	try {
+		// Un jeu Epic passe par son launcher : lui seul lui donne la session du
+		// compte. Un exécutable choisi à la main reste prioritaire.
+		const launcherUrl = game.custom_executable ? '' : (game.launch_url ?? '');
 		// Sans exécutable connu, c'est Steam qui sait où est le jeu, et son
 		// protocole marche où qu'il soit installé, sous Windows comme sous Linux.
-		const program = game.executable || (game.appid ? `steam://rungameid/${game.appid}` : '');
-		const args = game.executable ? (game.args ?? []) : [];
+		const program =
+			launcherUrl || game.executable || (game.appid ? `steam://rungameid/${game.appid}` : '');
+		const args = !launcherUrl && game.executable ? (game.args ?? []) : [];
 		if (!program) return { ok: false, message: `Impossible de lancer ${game.title} : exécutable inconnu.` };
 
 		const pid = await invoke<number>('launch_game', {
@@ -23,11 +27,17 @@ export async function play(game: Game): Promise<Outcome> {
 			args,
 		});
 		markLaunched(game.id);
+		if (launcherUrl) {
+			// Le processus lancé rend la main aussitôt : le jeu arrivera plus tard.
+			startSession(game.id, 0);
+			watchLauncher(game);
+			return { ok: true, message: `${game.title} démarre…` };
+		}
 		const steamApp = args[0] === '-applaunch' ? Number(args[1]) : game.executable ? 0 : Number(game.appid);
 		// Un jeu Steam : le processus lancé est le client Steam, à ne jamais arrêter.
 		startSession(game.id, steamApp ? 0 : pid, steamApp);
 		if (steamApp) watchSteam(steamApp, game.id);
-		else watch(pid, game.id);
+		else watch(pid, game.id, false, game);
 		return { ok: true, message: `${game.title} démarre…` };
 	} catch (error) {
 		return { ok: false, message: `Impossible de lancer ${game.title} : ${error}` };
@@ -42,8 +52,6 @@ interface RunningProgram {
 
 /** Délai entre deux recherches d'un jeu lancé hors de Lobby. */
 const ADOPT_EVERY = 5000;
-
-const unixPath = (path: string) => path.replace(/\\/g, '/').toLowerCase();
 
 /**
  * Ce programme appartient-il au jeu ? Un jeu Steam a pour exécutable le client
@@ -64,22 +72,17 @@ export async function gameProcesses(game: Game): Promise<number[]> {
 
 /**
  * Le jeu dont le dossier contient un programme ouvert, le dossier le plus
- * précis d'abord. On compare les dossiers et non les exécutables : la détection
- * retient parfois un lanceur (`Launcher.exe` pour Rocket League, dont le jeu
- * est `RocketLeague.exe`).
- *
- * Ni jeu Steam (son exécutable est le client Steam : c'est lui qui les annonce),
- * ni raccourci du Bureau (souvent une application, ouverte toute la journée),
- * ni exécutable posé trop haut (`C:/Program Files` engloberait tout).
+ * précis d'abord. Pas de raccourci du Bureau : c'est souvent une application,
+ * ouverte toute la journée.
  */
 function findRunning(programs: RunningProgram[]): { game: Game; pid: number } | null {
 	let best: { game: Game; pid: number } | null = null;
 	let bestLength = 0;
 	for (const game of games) {
-		if (!game.executable || game.source === 'steam' || game.source === 'shortcut') continue;
-		const folder = unixPath(game.executable).replace(/\/[^/]*$/, '');
-		if (folder.split('/').length < 3 || folder.length <= bestLength) continue;
-		const program = programs.find((p) => unixPath(p.path).startsWith(`${folder}/`));
+		if (game.source === 'shortcut') continue;
+		const folder = programFolder(game);
+		if (!folder || folder.length <= bestLength) continue;
+		const program = programs.find((p) => unixPath(p.path).startsWith(folder));
 		if (program) {
 			best = { game, pid: program.pid };
 			bestLength = folder.length;
@@ -118,7 +121,7 @@ async function adoptRunningGame() {
 	markLaunched(found.game.id);
 	startSession(found.game.id, found.pid);
 	setSessionWindow(found.pid);
-	watch(found.pid, found.game.id, true);
+	watch(found.pid, found.game.id, true, found.game);
 }
 
 /** Cherche régulièrement un jeu lancé hors de Lobby. Rend la fonction d'arrêt. */
@@ -141,7 +144,7 @@ function gameExited(quiet: boolean) {
  * Surveille le processus pour savoir quand la partie se termine, puis la
  * compte dans les statistiques.
  */
-async function watch(pid: number, id: string, quiet = false) {
+async function watch(pid: number, id: string, quiet = false, game?: Game) {
 	const { invoke } = await import('@tauri-apps/api/core');
 	const start = Date.now();
 	const timer = setInterval(async () => {
@@ -149,6 +152,10 @@ async function watch(pid: number, id: string, quiet = false) {
 		// jeu repérée, c'est elle qu'on suit.
 		const target = session.id === id && session.pid ? session.pid : pid;
 		if (!(await invoke<boolean>('is_running', { pid: target }))) {
+			// Il a fini, mais le jeu a pris le relais dans son dossier : la partie
+			// continue. Sinon, Lobby repassait devant un jeu en train de démarrer.
+			const next = game && session.id === id ? (await gameProcesses(game))[0] : 0;
+			if (next) return setSessionWindow(next);
 			clearInterval(timer);
 			endSession(id);
 			// Moins d'une minute, ce n'est pas une partie : c'est le plus souvent
@@ -160,8 +167,29 @@ async function watch(pid: number, id: string, quiet = false) {
 	}, 2000);
 }
 
-/** Temps laissé à Steam pour démarrer le jeu (mise à jour, synchronisation cloud…). */
-const STEAM_START_TIMEOUT = 10 * 60_000;
+/** Temps laissé à un launcher pour démarrer le jeu (mise à jour, synchronisation cloud…). */
+const START_TIMEOUT = 10 * 60_000;
+
+/**
+ * Un jeu lancé par son launcher : on attend qu'il apparaisse dans son dossier,
+ * puis on le suit comme les autres. Rien au bout de dix minutes (mise à jour
+ * annulée, compte déconnecté) : on abandonne.
+ */
+function watchLauncher(game: Game) {
+	const launched = Date.now();
+	const timer = setInterval(async () => {
+		if (session.id !== game.id) return clearInterval(timer);
+		const [pid] = await gameProcesses(game);
+		if (pid) {
+			clearInterval(timer);
+			if (!session.pid) setSessionWindow(pid);
+			watch(pid, game.id, false, game);
+		} else if (Date.now() - launched > START_TIMEOUT) {
+			clearInterval(timer);
+			endSession(game.id);
+		}
+	}, 2000);
+}
 
 /**
  * Un jeu Steam : `steam -applaunch` rend la main aussitôt, son processus ne dit
@@ -183,7 +211,7 @@ async function watchSteam(appid: number, id: string, quiet = false) {
 		if (!start) {
 			if (running === appid) start = Date.now();
 			// Le jeu n'a jamais démarré (annulé, erreur Steam) : on abandonne.
-			else if (Date.now() - launched > STEAM_START_TIMEOUT) {
+			else if (Date.now() - launched > START_TIMEOUT) {
 				clearInterval(timer);
 				endSession(id);
 			}

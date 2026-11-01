@@ -74,6 +74,42 @@
 	--viewer-inset: calc(var(--safe-y) + 50px);
 	/* Menu rapide : panneau à gauche, écart aux bords de l'écran, onglets, photo,
 	   titre, et voile sur l'écran du dessous. Ses lignes sont celles des options. */
+	/* Écrans de bienvenue (`Welcome.svelte`) : un titre très grand, lisible
+	   depuis un canapé, et les lignes à droite. */
+	--welcome-rows: 620px;
+	--welcome-gap: 96px;
+	--welcome-center-gap: 44px;
+	--welcome-header: 56px;
+	--welcome-bottom: 70px;
+	--welcome-measure: 660px;
+	--welcome-row: 84px;
+	--welcome-row-gap: 12px;
+	--welcome-row-pad: 24px;
+	--welcome-radius: 12px;
+	--welcome-title: 72px;
+	--welcome-text: 23px;
+	--welcome-label: 21px;
+	--welcome-logo: 168px;
+	--welcome-mark: 40px;
+	--welcome-badge: 48px;
+	--welcome-icon: 26px;
+	--welcome-glyph: 34px;
+	--welcome-cover: 124px;
+	--welcome-shelf-gap: 14px;
+	--welcome-segment: 56px;
+	--welcome-drift: 26s;
+	--welcome-breath: 3.6s;
+	--welcome-sweep: 1.4s;
+	--welcome-glow: color-mix(in srgb, var(--accent) 24%, transparent);
+	--welcome-glow-soft: color-mix(in srgb, var(--accent) 12%, transparent);
+	--welcome-field: 46px;
+	--welcome-field-bg: rgba(0, 0, 0, 0.42);
+	--welcome-field-line: rgba(255, 255, 255, 0.22);
+	/* Jeu sans aucune image : une tuile unie et son titre, rien d'autre. */
+	--cover-plain: #16191f;
+	--cover-plain-line: rgba(255, 255, 255, 0.07);
+	--cover-plain-title: 19px;
+	--cover-plain-pad: 14px;
 	--quick-width: 480px;
 	--quick-inset: 24px;
 	--quick-tab: 52px;
@@ -81,6 +117,11 @@
 	--quick-avatar: 64px;
 	--quick-title: 28px;
 	--quick-veil: rgba(0, 0, 0, 0.55);
+	/* Panneau de droite (`SidePanel.svelte`). */
+	--side-width: 400px;
+	--side-gap: 14px;
+	--side-clock: 46px;
+	--side-day: 36px;
 	/* Page Réglages : une seule hauteur de ligne et une seule échelle de texte,
 	   quel que soit le réglage. `--settings-header` aligne la première catégorie
 	   sur la première ligne ; `--settings-bottom` laisse la place à la barre d'aide. */
@@ -163,6 +204,31 @@
 	--files-rows: 8;
 	--files-row: 62px;
 	--files-gap: 8px;
+	/* Fenêtres posées sur un écran chargé (explorateur, choix de la photo) : on
+	   ne doit plus deviner ce qu'il y a derrière. Fond flouté et très sombre,
+	   panneau et lignes opaques. */
+	--files-veil: rgba(2, 3, 5, 0.86);
+	--files-blur: 18px;
+	--files-panel: #15171c;
+	--files-row-bg: #22252c;
+	--files-row-focus: #2f333c;
+	--files-preview: 300px;
+	/* Recadrage d'une photo (`AvatarCropper.svelte`). */
+	--crop-stage: 780px;
+	--crop-stage-height: 620px;
+	--crop-disc: 540px;
+	--crop-preview: 170px;
+	--crop-shade: rgba(0, 0, 0, 0.72);
+	--crop-glyph: 28px;
+	/* Menu déroulant (`SelectMenu.svelte`). */
+	--select-width: 420px;
+	--select-pad: 12px;
+	--select-row: 56px;
+	--select-gap: 6px;
+	--select-margin: 12px;
+	--select-check: 22px;
+	--select-glyph: 26px;
+	--select-veil: rgba(0, 0, 0, 0.45);
 	--slide-width: 52vw;
 	--slide-gap: 28px;
 	--slide-duration: 380ms;
@@ -205,6 +271,10 @@
 	--selection-shift: calc(-1 * (var(--tile) + var(--tile-gap)));
 	/* Carte « Reprendre » : même hauteur qu'une tuile, au format 16/9. */
 	--resume-width: calc(var(--tile) * 1.5 * 16 / 9);
+	/* Au-dessus de la rangée de l'accueil : ce dont la sélection grandit (vers le
+	   haut seulement), son contour compris. Moins, et elle mordait « Dernière
+	   partie… », la ligne sous le titre. `--home-gap` en fait déjà partie. */
+	--rail-room: calc(var(--tile) * 1.5 * (var(--tile-focus-scale) - 1) + var(--hover-room) - var(--home-gap));
 
 	--ease: cubic-bezier(0.22, 0.61, 0.36, 1);
 	--fast: 180ms;

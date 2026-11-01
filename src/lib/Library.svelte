@@ -37,6 +37,13 @@
 
 	const filters = FILTERS;
 
+	let sortButton = $state<HTMLElement | null>(null);
+
+	/** Le bouton « Trier » : le menu déroulant s'y accroche. */
+	export function sortAnchor(): HTMLElement | null {
+		return sortButton;
+	}
+
 	const currentRow = $derived(Math.floor(index / columns));
 	let scrollRow = $state(0);
 
@@ -46,6 +53,9 @@
 	 * Le défilement ne s'enclenche que lorsqu'on dépasse la rangée du bas.
 	 */
 	const VISIBLE_ROWS = 2;
+	/** Rangées sous l'écran dont on prépare déjà les fiches et les visuels. */
+	const AHEAD_ROWS = 2;
+	const near = (i: number) => Math.floor(i / columns) < scrollRow + VISIBLE_ROWS + AHEAD_ROWS;
 
 	$effect(() => {
 		const cur = currentRow;
@@ -130,9 +140,10 @@
 		<!-- De vrais boutons, atteints en montant depuis la première rangée :
 		     X reste aux options du jeu sélectionné, comme sur l'accueil. -->
 		<div class="actions">
-			<span class="button" class:selected={focused && zone === 'header' && headerIndex === 0}>
+			<span class="button" bind:this={sortButton} class:selected={focused && zone === 'header' && headerIndex === 0}>
 				<img src="/assets/icons/library.svg" alt="" />
 				Trier : {SORT_LABELS[sort]}
+				<img class="arrow" src="/assets/icons/chevron.svg" alt="" />
 			</span>
 			<span
 				class="button"
@@ -153,7 +164,7 @@
 					class:selected={focused && zone === 'grid' && i === index}
 					class:absent={game.installed === false}
 				>
-					<Cover {game} />
+					<Cover {game} near={near(i)} />
 					{#if game.installed === false}
 						<!-- Possédé mais pas installé : grisé, et dit tel quel. -->
 						<span class="missing"><img src="/assets/icons/download.svg" alt="" />Non installé</span>
@@ -265,6 +276,12 @@
 	.button img {
 		width: 18px;
 		height: 18px;
+	}
+
+	/* Un menu s'ouvre dessous : la flèche le dit. */
+	.button .arrow {
+		transform: rotate(90deg);
+		opacity: 0.7;
 	}
 
 	.button.busy img {
@@ -399,6 +416,11 @@
 		font-weight: 600;
 		text-align: center;
 		background: linear-gradient(to top, rgba(0, 0, 0, 0.9), transparent);
+	}
+
+	/* Sans image, le titre est déjà sur la tuile. */
+	.tile:has(:global(.plain)) .caption {
+		display: none;
 	}
 
 	.empty {

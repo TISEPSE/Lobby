@@ -1,6 +1,6 @@
 <script lang="ts">
 	import { hasGamepad, padLayout } from './gamepad';
-	import { glyphSrc, type GlyphButton } from './glyphs';
+	import { glyphSrc, type GlyphButton, type GlyphFamily } from './glyphs';
 
 	/**
 	 * Barre d'aide : le vrai glyphe de la touche, puis ce qu'elle fait. Les
@@ -11,7 +11,7 @@
 
 	let { entries }: { entries: Entry[] } = $props();
 
-	let layout = $state<'xbox' | 'ps5'>('xbox');
+	let layout = $state<GlyphFamily>('xbox');
 	let pad = $state(false);
 
 	$effect(() => {

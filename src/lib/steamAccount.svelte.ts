@@ -145,6 +145,20 @@ export async function initSteamAccount() {
 	}
 }
 
+/**
+ * Une seule ligne pour le compte et sa bibliothèque : le Profil et les écrans de
+ * bienvenue disent la même chose. Connectée, elle dit combien de jeux. Rien à
+ * « synchroniser » à la main : les jeux installés sont rescannés et les comptes
+ * relus à chaque démarrage.
+ */
+export function steamStatus(): string {
+	const count = Object.keys(steamAccount.owned).length;
+	if (steamLibrary.pending) return 'Connexion…';
+	if (count > 0) return `${steamAccount.persona ? `${steamAccount.persona} · ` : ''}${count} jeux`;
+	if (steamAccount.persona) return `${steamAccount.persona} · connecte-toi pour toute ta bibliothèque`;
+	return 'Non connecté';
+}
+
 /** Ce que Steam sait d'un jeu, d'après son appid. */
 export function steamPlayOf(appid: string | null | undefined): SteamPlay | undefined {
 	return appid ? steamAccount.apps[appid] : undefined;

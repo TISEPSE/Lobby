@@ -1,13 +1,18 @@
 <script lang="ts">
 	import type { Game } from './types';
-	import { details, ensureDetails, artStyles, artwork, ensureArtwork, coverFor } from './steam.svelte.js';
-	import { generateProceduralCover } from './art';
+	import { ensureDetails, ensureArtwork, coverFor } from './steam.svelte.js';
 
 	let {
 		game,
 		override = '',
+		near = true,
 	}: {
 		game: Game;
+		/**
+		 * Tuile proche de l'écran. Les autres attendent pour demander fiche et
+		 * visuels : un lot de 48 lançait sinon 48 recherches d'un coup.
+		 */
+		near?: boolean;
 		/**
 		 * Image imposée, quelle que soit l'affiche retenue pour ce jeu. Sert à
 		 * l'aperçu du choix d'affiche : la tuile est alors rendue exactement
@@ -18,7 +23,7 @@
 
 	$effect(() => {
 		// En aperçu, rien à chercher : l'image est déjà connue.
-		if (override) return;
+		if (override || !near) return;
 		// Les métadonnées (note, genres, résumé) viennent de l'appid…
 		if (game.appid) {
 			ensureDetails(game.appid);
@@ -31,17 +36,16 @@
 		ensureArtwork(game);
 	});
 
-	const online = $derived(artwork[game.id]);
-
-	const sheet = $derived(game.appid ? details[game.appid] : undefined);
-	// L'affiche choisie est rangée sous l'identifiant du jeu : un appid peut
-	// manquer, un id jamais.
-	const style = $derived(artStyles[game.id] ?? 'auto');
-
 	// Même logique que le préchargement du démarrage (`coverFor`).
 	const coverSrc = $derived(override || coverFor(game));
 
 	let failed = $state(false);
+
+	// Une nouvelle image arrive (fiche, affiche téléchargée) : on la retente.
+	$effect(() => {
+		void coverSrc;
+		failed = false;
+	});
 
 	function onError() {
 		if (!failed) {
@@ -56,21 +60,19 @@
 </script>
 
 <span class="cover">
-	{#if !failed}
+	{#if coverSrc && !failed}
 		<img
 			class="art"
 			src={coverSrc}
 			alt={game.title}
 			loading="lazy"
+			decoding="async"
 			onerror={onError}
 		/>
 	{:else}
-		<img
-			class="art"
-			src={generateProceduralCover(game.title, game.source)}
-			alt={game.title}
-			loading="lazy"
-		/>
+		<!-- Aucune image : une tuile unie et le titre, rien d'inventé autour.
+		     `Home` et `Library` masquent alors leur légende, qui le répéterait. -->
+		<span class="plain"><span class="plain-title">{game.title}</span></span>
 	{/if}
 </span>
 
@@ -79,7 +81,7 @@
 		position: absolute;
 		inset: 0;
 		display: block;
-		background: #0c0e13;
+		background: var(--cover-plain);
 	}
 
 	.art {
@@ -90,45 +92,26 @@
 		display: block;
 	}
 
-	.made {
+	.plain {
 		position: absolute;
 		inset: 0;
 		display: grid;
 		place-items: center;
+		padding: var(--cover-plain-pad);
+		box-shadow: inset 0 0 0 1px var(--cover-plain-line);
+		border-radius: inherit;
 	}
 
-	/* L'artwork est cadré serré et adouci : il sert de décor, pas de sujet. */
-	.blurred {
-		position: absolute;
-		inset: 0;
-		filter: saturate(1.1) brightness(0.8);
-		transform: scale(1.08);
-	}
-
-	.veil {
-		position: absolute;
-		inset: 0;
-		background:
-			linear-gradient(180deg, rgba(8, 10, 14, 0.55) 0%, rgba(8, 10, 14, 0.2) 45%, rgba(8, 10, 14, 0.9) 100%),
-			radial-gradient(90% 60% at 50% 45%, rgba(8, 10, 14, 0) 0%, rgba(8, 10, 14, 0.55) 100%);
-	}
-
-	.logo {
-		position: relative;
-		width: 78%;
-		max-height: 46%;
-		object-fit: contain;
-		filter: drop-shadow(0 6px 18px rgba(0, 0, 0, 0.75));
-	}
-
-	.name {
-		position: relative;
-		padding: 0 14px;
-		font-size: clamp(16px, 1.3vw, 24px);
+	.plain-title {
+		display: -webkit-box;
+		-webkit-box-orient: vertical;
+		-webkit-line-clamp: 5;
+		overflow: hidden;
+		font-size: var(--cover-plain-title);
 		font-weight: 700;
-		line-height: 1.15;
+		line-height: 1.25;
 		text-align: center;
 		text-wrap: balance;
-		filter: drop-shadow(0 4px 14px rgba(0, 0, 0, 0.8));
+		overflow-wrap: anywhere;
 	}
 </style>

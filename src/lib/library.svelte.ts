@@ -9,7 +9,7 @@
 import rawGames from './data/games.json';
 import type { Game, GameStats, SessionRecord } from './types';
 import { steamPlayOf } from './steamAccount.svelte.js';
-import { epicMinutesOf } from './epicAccount.svelte.js';
+import { epicImage, epicMinutesOf } from './epicAccount.svelte.js';
 import { details } from './steam.svelte.js';
 import { persist, restore } from './persist';
 
@@ -53,6 +53,7 @@ export function deduplicateGames(list: Game[]): Game[] {
 			if (!existing.hero && g.hero) existing.hero = g.hero;
 			if (!existing.logo && g.logo) existing.logo = g.logo;
 			if (!existing.appid && g.appid) existing.appid = g.appid;
+			if (!existing.launch_url && g.launch_url) existing.launch_url = g.launch_url;
 			if (g.title.length > existing.title.length && g.title.includes(' ')) {
 				existing.title = g.title;
 			} else if (/[A-Z]/.test(g.title) && !/[A-Z]/.test(existing.title)) {
@@ -102,6 +103,65 @@ export const sessions = $state<SessionRecord[]>(loadSessions());
  */
 export const hiddenGames = $state<Game[]>([]);
 
+/** Une partie vue hors de Lobby, telle que la donne la commande Rust `played_elsewhere`. */
+interface PlayedElsewhere {
+	/** Exécutable lancé (Windows), vide sinon. */
+	path: string;
+	/** Nom interne Epic (`Sugar`), vide sinon. */
+	app_name: string;
+	/** Horodatage, 0 s'il est dans `local_time`. */
+	at: number;
+	/** Heure locale sans fuseau, que `Date.parse` lit comme telle. */
+	local_time: string;
+}
+
+const playedElsewhere = $state<PlayedElsewhere[]>([]);
+
+export const unixPath = (path: string) => path.replace(/\\/g, '/').toLowerCase();
+
+/**
+ * Dossier où chercher les programmes d'un jeu, ou vide. On compare les dossiers
+ * et non les exécutables : la détection retient parfois un lanceur
+ * (`Launcher.exe` pour Rocket League, dont le jeu est `RocketLeague.exe`).
+ *
+ * Vide pour un jeu Steam (son exécutable est le client Steam, et c'est Steam qui
+ * le suit) et pour un exécutable posé trop haut (`C:/Program Files` engloberait
+ * tout).
+ */
+export function programFolder(game: Game): string {
+	if (!game.executable || game.source === 'steam') return '';
+	const folder = unixPath(game.executable).replace(/\/[^/]*$/, '');
+	return folder.split('/').length < 3 ? '' : `${folder}/`;
+}
+
+/**
+ * Dernière partie de chaque jeu vue hors de Lobby, par identifiant. Recalculée
+ * quand la liste change : sur un PC neuf, les jeux n'arrivent qu'avec la
+ * détection, après cette lecture.
+ */
+const elsewhereDates = $derived.by(() => {
+	const dates: Record<string, number> = {};
+	const folders = games.map((game) => ({ id: game.id, folder: programFolder(game) })).filter((g) => g.folder);
+	for (const seen of playedElsewhere) {
+		const at = seen.at || Date.parse(seen.local_time) || 0;
+		const path = unixPath(seen.path);
+		const epicId = `epic-${seen.app_name}`.toLowerCase();
+		const owners = seen.app_name
+			? games.filter((game) => game.id.toLowerCase() === epicId)
+			: folders.filter(({ folder }) => path.startsWith(folder));
+		for (const { id } of owners) dates[id] = Math.max(dates[id] ?? 0, at);
+	}
+	return dates;
+});
+
+async function loadPlayedElsewhere() {
+	if (!(window as any).__TAURI_INTERNALS__) return;
+	const { invoke } = await import('@tauri-apps/api/core');
+	// Une date en moins ne doit jamais empêcher le démarrage.
+	const found = await invoke<PlayedElsewhere[] | null>('played_elsewhere').catch(() => null);
+	playedElsewhere.splice(0, playedElsewhere.length, ...(found ?? []));
+}
+
 /**
  * Charge la bibliothèque, puis les statistiques et le journal depuis le disque
  * (`persist.ts`) : sans ça, l'exécutable compilé — qui n'a pas le stockage de
@@ -109,6 +169,7 @@ export const hiddenGames = $state<Game[]>([]);
  */
 export async function initLibrary() {
 	await loadGames();
+	await loadPlayedElsewhere();
 	const savedStats = await restore<Record<string, GameStats>>('stats', STORAGE_KEY);
 	if (savedStats && typeof savedStats === 'object') Object.assign(stats, savedStats);
 	const savedSessions = await restore<SessionRecord[]>('sessions', SESSIONS_KEY);
@@ -230,6 +291,10 @@ export async function syncLibrary(
 			report.updated += 1;
 		}
 		if (!known.appid && found.appid) known.appid = found.appid;
+		if (found.launch_url && found.launch_url !== known.launch_url) {
+			known.launch_url = found.launch_url;
+			report.updated += 1;
+		}
 	}
 
 	// Les jeux que le scan n'a pas retrouvés : on ne retire que ceux dont
@@ -342,13 +407,14 @@ function steamPlay(id: string) {
 }
 
 /**
- * Dernière partie : la nôtre ou celle de Steam, la plus récente des deux. Un
- * jeu Steam lancé hors de la console (depuis Steam lui-même) remonte aussi.
+ * Dernière partie : la nôtre, celle de Steam ou celle vue par Windows et le
+ * launcher Epic, la plus récente. Un jeu lancé hors de la console, même Lobby
+ * fermé, remonte donc aussi.
  */
 export function lastPlayedAt(id: string): number | null {
 	const local = statsOf(id).lastPlayed ?? 0;
 	const steam = steamPlay(id)?.lastPlayed ?? 0;
-	const best = Math.max(local, steam);
+	const best = Math.max(local, steam, elsewhereDates[id] ?? 0);
 	return best > 0 ? best : null;
 }
 
@@ -503,8 +569,9 @@ export function uninstalledEpicGames(
 		.map((game) => ({
 			id: `epic-${game.app_name}`,
 			title: game.title,
-			cover: game.cover,
-			hero: game.hero,
+			// Largeur d'une tuile et d'un écran, sur un écran 4K : au-delà, rien ne se voit.
+			cover: epicImage(game.cover, 360, 480),
+			hero: epicImage(game.hero, 1920, 1080),
 			logo: '',
 			source: 'epic',
 			installed: false,

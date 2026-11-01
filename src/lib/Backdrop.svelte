@@ -18,15 +18,29 @@
 	let shown = $state('');
 	let previous = $state('');
 
+	/**
+	 * On attend que la sélection se pose : en parcourant une rangée, chaque jeu
+	 * survolé téléchargeait un artwork de plusieurs Mo pour rien.
+	 */
+	const SETTLE = 140;
+
 	$effect(() => {
 		const next = src;
 		if (!next || next === shown) return;
-		const image = new Image();
-		image.onload = () => {
-			previous = shown;
-			shown = next;
+		let stale = false;
+		const timer = setTimeout(() => {
+			const image = new Image();
+			image.onload = () => {
+				if (stale) return;
+				previous = shown;
+				shown = next;
+			};
+			image.src = next;
+		}, shown ? SETTLE : 0);
+		return () => {
+			stale = true;
+			clearTimeout(timer);
 		};
-		image.src = next;
 	});
 </script>
 

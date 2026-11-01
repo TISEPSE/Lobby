@@ -6,6 +6,8 @@
 	import { sessions, playtimeOf } from './library.svelte.js';
 	import { details, ensureDetails } from './steam.svelte.js';
 	import { activity, formatMinutes, platformOf, rankByPlaytime } from './stats';
+	import { epicAction, epicStatus } from './epicAccount.svelte.js';
+	import { steamStatus } from './steamAccount.svelte.js';
 
 	/**
 	 * Profil, à la manière de celui d'une Xbox, sur sa propre page : la carte
@@ -22,14 +24,9 @@
 		avatar = '',
 		steamPersona = '',
 		steamAvatar = '',
-		epicName = '',
 		epicPending = false,
-		epicError = '',
-		epicGamesCount = 0,
 		epicConnected = false,
 		steamLibraryCount = 0,
-		steamLibraryDate = 0,
-		steamLibraryPending = false,
 		onSteamLibraryLogin,
 		onSteamLibraryForget,
 		focused = true,
@@ -49,15 +46,9 @@
 		steamAvatar?: string;
 		/** Une session Epic existe. */
 		epicConnected?: boolean;
-		/** Pseudo du compte Epic ; vide sans connexion, ou pour un compte sans pseudo. */
-		epicName?: string;
 		epicPending?: boolean;
-		epicError?: string;
-		epicGamesCount?: number;
-		/** Bibliothèque Steam complète (connexion) : nombre de jeux et date (ms). */
+		/** Bibliothèque Steam complète (connexion) : nombre de jeux. */
 		steamLibraryCount?: number;
-		steamLibraryDate?: number;
-		steamLibraryPending?: boolean;
 		onSteamLibraryLogin?: () => void;
 		onSteamLibraryForget?: () => void;
 		focused?: boolean;
@@ -118,40 +109,10 @@
 	const current = $derived(entries[Math.min(index, entries.length - 1)]);
 	const isOn = (entry: Entry) => focused && current === entry;
 
-	const epicWho = $derived(epicName || 'Connecté');
-	/** Epic refuse la session, ou ne répond pas : deux problèmes, deux messages. */
-	const epicProblem = $derived(epicError.includes('refusé') ? 'session expirée' : 'Epic injoignable');
-	const epicLabel = $derived(
-		epicPending
-			? 'Connexion…'
-			: epicConnected
-				? epicError
-					? `${epicWho} · ${epicProblem}`
-					: `${epicWho} · ${epicGamesCount} jeu${epicGamesCount > 1 ? 'x' : ''}`
-				: 'Non connecté'
-	);
-	/**
-	 * Une seule tuile Steam : le compte et sa bibliothèque. Connectée, elle dit
-	 * combien de jeux. Rien à « synchroniser » à la main : les jeux installés
-	 * sont rescannés et les comptes relus à chaque démarrage.
-	 */
-	const steamLabel = $derived(
-		steamLibraryPending
-			? 'Connexion…'
-			: steamLibraryCount > 0
-				? `${steamPersona ? steamPersona + ' · ' : ''}${steamLibraryCount} jeux`
-				: steamPersona
-					? `${steamPersona} · connecte-toi pour toute ta bibliothèque`
-					: 'Non connecté'
-	);
-
-	/**
-	 * Ce que fait A sur la tuile Epic : se connecter, ou se reconnecter si la
-	 * session a expiré. Connectée, rien : le compte est relu au démarrage.
-	 */
-	const epicAction = $derived(
-		epicPending ? '' : epicConnected ? (epicError ? 'Se reconnecter' : '') : 'Se connecter'
-	);
+	const epicLabel = $derived(epicStatus());
+	const steamLabel = $derived(steamStatus());
+	/** Connectée, A ne fait rien : le compte est relu au démarrage. */
+	const epicVerb = $derived(epicAction());
 
 	export function selectionKey(): string {
 		return String(index);
@@ -168,7 +129,7 @@
 			else if (current === 'name') onEditName?.();
 			// Connecté, A ne fait rien : comptes et jeux se mettent à jour au démarrage.
 			else if (current === 'steam' && steamLibraryCount === 0) onSteamLibraryLogin?.();
-			else if (current === 'epic' && epicAction) onEpicLogin?.();
+			else if (current === 'epic' && epicVerb) onEpicLogin?.();
 			else if (current === 'stats') onOpenStats?.();
 		}
 	}
@@ -238,7 +199,7 @@
 				</span>
 				{#if isOn('epic')}
 					<span class="do">
-						{#if epicAction}<Glyph button="a" size="26px" />{epicAction}{/if}
+						{#if epicVerb}<Glyph button="a" size="26px" />{epicVerb}{/if}
 						{#if epicConnected && !epicPending}<Glyph button="x" size="26px" />Déconnecter{/if}
 					</span>
 				{/if}

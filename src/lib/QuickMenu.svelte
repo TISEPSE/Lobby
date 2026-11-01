@@ -11,7 +11,7 @@
 
 	/**
 	 * Menu rapide, façon guide de console : un panneau qui glisse depuis la
-	 * gauche, par-dessus l'écran du moment, ouvert par le bouton Menu (ou Home).
+	 * gauche, par-dessus l'écran du moment, ouvert par le bouton View (ou Home).
 	 * Quatre onglets (L1 / R1) : Profil, Paramètres, Manette, Alimentation. Le
 	 * dock du haut ne porte plus que l'accueil, la recherche et la bibliothèque :
 	 * tout le reste passe par ici.
@@ -39,7 +39,7 @@
 		onDetectGames,
 		onToggleSound,
 		onToggleFullscreen,
-		onCycleLayout,
+		onPickLayout,
 		onPower,
 	}: {
 		open?: boolean;
@@ -63,7 +63,8 @@
 		onDetectGames?: () => void;
 		onToggleSound?: () => void;
 		onToggleFullscreen?: () => void;
-		onCycleLayout?: () => void;
+		/** Ouvre la liste des packs de touches, accrochée à sa ligne. */
+		onPickLayout?: (anchor: HTMLElement | null) => void;
 		onPower?: (action: PowerAction) => Promise<Outcome>;
 	} = $props();
 
@@ -97,6 +98,7 @@
 	let pad = $state('');
 	/** Sens du dernier changement de page : le contenu entre du côté où l'on va. */
 	let direction = $state<1 | -1>(1);
+	let list = $state<HTMLElement | null>(null);
 
 	const confirming = $derived(POWER_ENTRIES.find((entry) => entry.action === pending) ?? null);
 
@@ -126,7 +128,11 @@
 			case 2:
 				return [
 					{ label: 'Manette', value: pad || 'Aucune' },
-					{ label: 'Disposition des touches', value: LAYOUT_LABELS[buttonLayout] ?? LAYOUT_LABELS.auto, run: () => onCycleLayout?.() },
+					{
+						label: 'Touches affichées',
+						value: LAYOUT_LABELS[buttonLayout] ?? LAYOUT_LABELS.auto,
+						run: () => onPickLayout?.(list?.querySelector<HTMLElement>('.row.selected') ?? null),
+					},
 				];
 			default:
 				return POWER_ENTRIES.map((entry) => ({
@@ -193,7 +199,7 @@
 		else if (action === 'prev' || action === 'left') goToTab(tab - 1);
 		else if (action === 'next' || action === 'right') goToTab(tab + 1);
 		else if (action === 'accept') rows[row]?.run?.();
-		else if (action === 'menu') onClose?.();
+		else if (action === 'view') onClose?.();
 		else if (action === 'cancel') {
 			if (confirming) cancelConfirm();
 			else onClose?.();
@@ -241,7 +247,7 @@
 		<span class="clock">{clock}</span>
 	</header>
 
-	<div class="rows" style="--row: {row}">
+	<div class="rows" bind:this={list} style="--row: {row}">
 		<span class="glider focus-ring"></span>
 		{#key confirming?.action ?? tab}
 			<div class="list" in:fly={{ x: SHIFT * direction, duration: SLIDE, easing: cubicOut, opacity: 0 }}>

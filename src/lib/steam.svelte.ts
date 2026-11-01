@@ -8,7 +8,6 @@
  */
 import { persist, restore } from './persist';
 import type { Details, Game, MediaItem } from './types';
-import { generateProceduralCover } from './art';
 
 /**
  * File d'attente des requêtes vers Steam : quatre à la fois au plus. Avec la
@@ -148,8 +147,7 @@ export function coverFor(game: Game): string {
 	}
 	if (sheet?.cover?.trim()) return sheet.cover;
 	if (online?.cover?.trim()) return online.cover;
-	if (game.cover?.trim()) return game.cover;
-	return generateProceduralCover(game.title, game.source);
+	return game.cover?.trim() ?? '';
 }
 
 /** Artwork de fond, même principe. */

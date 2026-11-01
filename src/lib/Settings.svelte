@@ -3,8 +3,10 @@
 	import type { GlyphButton } from './glyphs';
 	import type { Game, VolumeKey } from './types';
 	import { notices } from './notices.svelte.js';
-	import { LAYOUT_LABELS, nextLayout } from './settings.svelte.js';
-	import VirtualKeyboard from './VirtualKeyboard.svelte';
+	import { LAYOUT_LABELS } from './settings.svelte.js';
+	import { epicAccount, epicAction, epicStatus } from './epicAccount.svelte.js';
+	import { steamAccount, steamStatus } from './steamAccount.svelte.js';
+	import { steamGridStatus } from './steamGrid.svelte.js';
 
 	let {
 		focused = true,
@@ -14,12 +16,13 @@
 		volumes = { volume_master: 100, volume_menu: 100, volume_alerts: 100, volume_launch: 100, volume_video: 100 },
 		onStepVolume,
 		screensaverMinutes = 5,
-		steamGridKey = '',
 		initialCategory = 'games',
 		initialRow = -1,
-		initialKeyboard = false,
 		fullscreen = true,
 		onToggleFullscreen,
+		autostart = null,
+		onToggleAutostart,
+		onRestartWelcome,
 		homeOrderLabel = '',
 		onCycleHomeOrder,
 		onBack,
@@ -29,10 +32,15 @@
 		onRemoveFolder,
 		hiddenGames = [],
 		onRestoreGame,
-		onChangeLayout,
+		onPickLayout,
 		onToggleSound,
 		onCycleScreensaver,
-		onChangeSteamGridKey,
+		onConnectSteam,
+		onForgetSteam,
+		onConnectEpic,
+		onLogoutEpic,
+		onConnectSteamGrid,
+		onEditSteamGridKey,
 	}: {
 		focused?: boolean;
 		gameFolders: string[];
@@ -43,16 +51,18 @@
 		/** Monte ou baisse un volume de `delta` points. */
 		onStepVolume?: (key: VolumeKey, delta: number) => void;
 		screensaverMinutes?: number;
-		steamGridKey?: string;
 		/** Catégorie ouverte au premier affichage (outil de capture). */
 		initialCategory?: string;
 		/** Ligne sélectionnée au premier affichage, -1 pour les catégories (outil de capture). */
 		initialRow?: number;
-		/** Ouvre le clavier au premier affichage (outil de capture). */
-		initialKeyboard?: boolean;
 		/** Plein écran sans bordure, ou fenêtre classique. */
 		fullscreen?: boolean;
 		onToggleFullscreen?: () => void;
+		/** Lobby s'ouvre avec la session ; `null` : sans objet sur ce système. */
+		autostart?: boolean | null;
+		onToggleAutostart?: () => void;
+		/** Rouvre les écrans de bienvenue. */
+		onRestartWelcome?: () => void;
 		/** Ordre de la rangée d'accueil, tel qu'affiché. */
 		homeOrderLabel?: string;
 		onCycleHomeOrder?: () => void;
@@ -65,13 +75,20 @@
 		/** Entrées retirées de la bibliothèque, qu'on peut rétablir ici. */
 		hiddenGames?: Game[];
 		onRestoreGame?: (id: string) => void;
-		onChangeLayout: (layout: string) => void;
+		/** Ouvre la liste des packs de touches, accrochée à sa ligne. */
+		onPickLayout: (anchor: HTMLElement | null) => void;
 		onToggleSound?: () => void;
 		onCycleScreensaver?: () => void;
-		onChangeSteamGridKey?: (key: string) => void;
+		onConnectSteam?: () => void;
+		onForgetSteam?: () => void;
+		onConnectEpic?: () => void;
+		onLogoutEpic?: () => void;
+		onConnectSteamGrid?: () => void;
+		/** Saisie de la clé à la main, si la connexion ne la trouve pas. */
+		onEditSteamGridKey?: () => void;
 	} = $props();
 
-	type CategoryId = 'games' | 'appearance' | 'audio' | 'system';
+	type CategoryId = 'games' | 'accounts' | 'appearance' | 'audio' | 'system';
 
 	interface Category {
 		id: CategoryId;
@@ -86,6 +103,12 @@
 			label: 'Jeux',
 			icon: 'library',
 			hint: 'Détection automatique et dossiers où chercher tes jeux.',
+		},
+		{
+			id: 'accounts',
+			label: 'Comptes',
+			icon: 'user',
+			hint: 'À relier une fois : tout le reste se fait ensuite tout seul.',
 		},
 		{
 			id: 'appearance',
@@ -103,7 +126,7 @@
 			id: 'system',
 			label: 'Système',
 			icon: 'settings',
-			hint: 'Affichage, et journal des derniers messages.',
+			hint: 'Affichage, démarrage, et journal des derniers messages.',
 		},
 	];
 
@@ -111,6 +134,7 @@
 	type Control =
 		| { kind: 'open' }
 		| { kind: 'value'; text: string }
+		| { kind: 'status'; text: string }
 		| { kind: 'switch'; on: boolean }
 		| { kind: 'volume'; key: VolumeKey }
 		| { kind: 'remove' }
@@ -120,9 +144,11 @@
 		title: string;
 		desc: string;
 		control: Control;
-		/** Ce que fait A, pour la barre d'aide. */
+		/** Ce que fait A, pour la barre d'aide ; vide : A ne fait rien ici. */
 		accept: string;
 		run: () => void;
+		/** Seconde action, sur X : ce qu'on ne veut pas déclencher par mégarde. */
+		alternate?: { label: string; run: () => void };
 		/** Titre de groupe, affiché au-dessus de la ligne. */
 		section?: string;
 		/** Réglage sans effet pour l'instant : volumes quand les sons sont coupés. */
@@ -133,8 +159,6 @@
 	let focusCol = $state<'categories' | 'content'>(initialRow >= 0 ? 'content' : 'categories');
 	let focusRow = $state(Math.max(0, initialRow));
 
-	let isKeyboardOpen = $state(initialKeyboard);
-	let keyboardComponent = $state<any>(null);
 	let scroller = $state<HTMLElement | null>(null);
 	/** Position de la ligne sélectionnée dans la liste : le cadre y glisse. */
 	let rowTop = $state(0);
@@ -154,54 +178,44 @@
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
 	);
 
-	/**
-	 * État de la clé : une clé mal recopiée resterait sinon silencieuse jusqu'au
-	 * prochain jeu sans jaquette. On la teste à la saisie et on le dit ici.
-	 */
-	let steamGridStatus = $state<'unknown' | 'testing' | 'ok' | 'bad' | 'offline'>('unknown');
-
-	/** La clé ne s'affiche jamais en entier : quatre caractères suffisent. */
-	const steamGridKeyLabel = $derived.by(() => {
-		if (!steamGridKey) return 'Non configurée';
-		const masked = `Configurée ····${steamGridKey.slice(-4)}`;
-		if (steamGridStatus === 'testing') return `${masked} · vérification…`;
-		if (steamGridStatus === 'ok') return `${masked} · vérifiée`;
-		if (steamGridStatus === 'bad') return `${masked} · refusée`;
-		if (steamGridStatus === 'offline') return `${masked} · non vérifiée`;
-		return masked;
-	});
-
-	/** Clé déjà essayée, pour ne pas relancer la vérification à chaque rendu. */
-	let testedKey = $state('');
-
-	$effect(() => {
-		const key = steamGridKey;
-		if (!key || testedKey === key) return;
-		testedKey = key;
-		void checkSteamGridKey(key);
-	});
-
-	/** Essaie la clé auprès de SteamGridDB sans jamais l'afficher ni l'envoyer ailleurs. */
-	export async function checkSteamGridKey(key: string): Promise<string> {
-		if (!key) {
-			steamGridStatus = 'unknown';
-			return 'empty';
-		}
-		const tauri = (window as any).__TAURI_INTERNALS__;
-		if (!tauri) {
-			steamGridStatus = 'unknown';
-			return 'offline';
-		}
-		steamGridStatus = 'testing';
-		try {
-			const { invoke } = await import('@tauri-apps/api/core');
-			const result = await invoke<string>('test_steamgriddb_key', { key });
-			steamGridStatus = result === 'ok' ? 'ok' : result === 'unauthorized' ? 'bad' : 'offline';
-			return result;
-		} catch {
-			steamGridStatus = 'offline';
-			return 'offline';
-		}
+	/** Les trois comptes, avec leur état réel, les mêmes que dans la bienvenue. */
+	function accountRows(): Row[] {
+		const steamLinked = Object.keys(steamAccount.owned).length > 0;
+		const epicVerb = epicAction();
+		return [
+			{
+				title: 'Steam',
+				desc: steamStatus(),
+				control: steamLinked ? { kind: 'status', text: 'Connecté' } : { kind: 'open' },
+				accept: steamLinked ? '' : 'Se connecter',
+				run: () => {
+					if (!steamLinked) onConnectSteam?.();
+				},
+				alternate: steamLinked ? { label: 'Déconnecter', run: () => onForgetSteam?.() } : undefined,
+			},
+			{
+				title: 'Epic Games',
+				desc: epicStatus(),
+				control: epicVerb ? { kind: 'open' } : { kind: 'status', text: 'Connecté' },
+				accept: epicVerb,
+				run: () => {
+					if (epicVerb) onConnectEpic?.();
+				},
+				alternate:
+					epicAccount.connected && !epicAccount.pending
+						? { label: 'Déconnecter', run: () => onLogoutEpic?.() }
+						: undefined,
+			},
+			{
+				section: 'Jaquettes',
+				title: 'SteamGridDB',
+				desc: steamGridStatus(),
+				control: { kind: 'open' },
+				accept: 'Se connecter',
+				run: () => onConnectSteamGrid?.(),
+				alternate: { label: 'Saisir la clé', run: () => onEditSteamGridKey?.() },
+			},
+		];
 	}
 
 	/** La ligne sélectionnée disparaît : la sélection reste dans la liste. */
@@ -224,14 +238,6 @@
 						control: { kind: 'open' },
 						accept: 'Lancer',
 						run: () => onOpenScan(),
-					},
-					{
-						section: 'Jaquettes',
-						title: 'Clé SteamGridDB',
-						desc: 'Pour les jeux absents de Steam. Clé gratuite sur steamgriddb.com, gardée sur ce PC.',
-						control: { kind: 'value', text: steamGridKeyLabel },
-						accept: 'Modifier',
-						run: () => (isKeyboardOpen = true),
 					},
 					{
 						section: 'Dossiers surveillés',
@@ -257,14 +263,16 @@
 						run: () => dropRow(() => onRestoreGame?.(game.id)),
 					})),
 				];
+			case 'accounts':
+				return accountRows();
 			case 'appearance':
 				return [
 					{
-						title: 'Disposition des touches',
+						title: 'Touches affichées',
 						desc: 'Style des icônes de la manette dans l’interface et la barre d’aide',
 						control: { kind: 'value', text: LAYOUT_LABELS[buttonLayout] ?? LAYOUT_LABELS.auto },
-						accept: 'Changer',
-						run: () => onChangeLayout(nextLayout(buttonLayout)),
+						accept: 'Choisir',
+						run: () => onPickLayout(scroller?.querySelector<HTMLElement>('.row.selected') ?? null),
 					},
 					{
 						title: 'Écran de veille',
@@ -309,6 +317,24 @@
 						accept: 'Changer',
 						run: () => onToggleFullscreen?.(),
 					},
+					...(autostart === null
+						? []
+						: [
+								{
+									title: 'Ouvrir Lobby au démarrage',
+									desc: 'Lobby se lance dès l’ouverture de ta session Windows',
+									control: { kind: 'value', text: autostart ? 'Oui' : 'Non' } as Control,
+									accept: 'Changer',
+									run: () => onToggleAutostart?.(),
+								},
+							]),
+					{
+						title: 'Refaire la configuration',
+						desc: 'Rouvre les écrans de bienvenue. Rien n’est effacé.',
+						control: { kind: 'open' },
+						accept: 'Ouvrir',
+						run: () => onRestartWelcome?.(),
+					},
 				];
 		}
 	});
@@ -328,29 +354,24 @@
 		scroller.scrollTo({ top, behavior: 'smooth' });
 	});
 
-	/** Empreinte de la sélection, pour ne sonner que si elle bouge. Inconnue sous le clavier. */
-	export function selectionKey(): string | null {
-		if (isKeyboardOpen) return null;
+	/** Empreinte de la sélection, pour ne sonner que si elle bouge. */
+	export function selectionKey(): string {
 		return `${focusCol}|${activeCatIndex}|${focusRow}`;
-	}
-
-	export function isKeyboardActive(): boolean {
-		return isKeyboardOpen;
 	}
 
 	/** Touches de la barre d'aide pour la sélection du moment. */
 	export function hints(): [GlyphButton, string][] {
 		if (!focusedRow) return [['a', 'Ouvrir'], ['b', 'Accueil']];
 		if (focusedVolume) return [['dpad', 'Régler'], ['b', 'Retour']];
-		return [['a', focusedRow.accept], ['b', 'Retour']];
+		const { accept, alternate } = focusedRow;
+		return [
+			...(accept ? ([['a', accept]] as [GlyphButton, string][]) : []),
+			...(alternate ? ([['x', alternate.label]] as [GlyphButton, string][]) : []),
+			['b', 'Retour'],
+		];
 	}
 
 	export function handleAction(action: Action) {
-		if (isKeyboardOpen) {
-			keyboardComponent?.handleAction(action);
-			return;
-		}
-
 		if (focusCol === 'categories') {
 			if (action === 'up') {
 				// Rien au-dessus de la première catégorie : le dock se parcourt
@@ -382,6 +403,8 @@
 			focusCol = 'categories';
 		} else if (action === 'accept') {
 			focusedRow?.run();
+		} else if (action === 'options') {
+			focusedRow?.alternate?.run();
 		}
 	}
 </script>
@@ -445,6 +468,8 @@
 					{#if row.control.kind === 'value'}
 						<span class="value">{row.control.text}</span>
 						<img class="chevron" src="/assets/icons/chevron.svg" alt="" />
+					{:else if row.control.kind === 'status'}
+						<span class="value">{row.control.text}</span>
 					{:else if row.control.kind === 'open'}
 						<img class="chevron" src="/assets/icons/chevron.svg" alt="" />
 					{:else if row.control.kind === 'switch'}
@@ -487,23 +512,6 @@
 			{/if}
 		</div>
 	</section>
-
-	<!-- Clavier virtuel : la seule saisie des réglages, la clé SteamGridDB. -->
-	<VirtualKeyboard
-		open={isKeyboardOpen}
-		title="Clé SteamGridDB"
-		subtitle="Colle ta clé (steamgriddb.com > Preferences > API). Elle reste sur cette machine."
-		initialValue={steamGridKey}
-		maxLength={64}
-		onConfirm={(value) => {
-			onChangeSteamGridKey?.(value.trim());
-			isKeyboardOpen = false;
-		}}
-		onClose={() => {
-			isKeyboardOpen = false;
-		}}
-		bind:this={keyboardComponent}
-	/>
 </div>
 
 <style>

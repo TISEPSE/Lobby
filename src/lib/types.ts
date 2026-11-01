@@ -19,6 +19,11 @@ export interface Game {
 	 * recherche automatique ne le remplace plus jamais.
 	 */
 	custom_executable?: boolean;
+	/**
+	 * Adresse de lancement par le launcher de la boutique (jeux Epic) : elle
+	 * passe avant l'exécutable, sauf si l'utilisateur en a choisi un.
+	 */
+	launch_url?: string;
 }
 
 /** Ce que l'utilisateur a fait d'un jeu. Conservé à part de la liste des jeux. */
@@ -78,6 +83,25 @@ export interface TileAction {
 	hint?: string;
 }
 
+/** Une entrée d'un menu déroulant. */
+export interface SelectOption {
+	id: string;
+	label: string;
+	/** Petites images à droite du libellé (les touches d'un pack). */
+	preview?: string[];
+}
+
+/** Menu déroulant demandé par un écran (`SelectMenu.svelte`). */
+export interface SelectRequest {
+	title: string;
+	options: SelectOption[];
+	/** Identifiant de la valeur actuelle, cochée. */
+	value: string;
+	/** Bouton auquel s'accrocher ; sans lui, le menu se centre. */
+	anchor: HTMLElement | null;
+	onPick: (id: string) => void;
+}
+
 /** Sections de la barre du haut. */
 export type Section = 'home' | 'library' | 'settings' | 'profile';
 
@@ -115,6 +139,8 @@ export interface UserSettings {
 	volume_alerts: number;
 	volume_launch: number;
 	volume_video: number;
+	/** Écrans de bienvenue terminés ou passés. */
+	onboarding_done: boolean;
 }
 
 /** Réglages de volume, dans l'ordre de la page Audio. */

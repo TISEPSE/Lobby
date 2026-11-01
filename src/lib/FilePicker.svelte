@@ -5,6 +5,7 @@
 	import type { Action } from './gamepad';
 	import type { Game } from './types';
 	import Glyph from './Glyph.svelte';
+	import { imageUrl, releaseImage } from './images';
 
 	/**
 	 * Explorateur de fichiers, façon Xbox. Il sert à choisir l'exécutable d'un
@@ -19,37 +20,55 @@
 	 * Pour choisir un dossier, on l'ouvre : la première ligne, « Choisir ce
 	 * dossier », le retient. La sélection arrive sur le premier sous-dossier :
 	 * deux appuis sur A descendent, ils ne choisissent pas par accident.
+	 *
+	 * Pour une photo de profil, seules les images sont listées, et celle qui est
+	 * sélectionnée s'affiche à côté de la liste : un nom de fichier ne dit pas
+	 * quelle photo c'est.
 	 */
 	let {
 		open = false,
 		game = null,
 		mode = 'exe',
+		startFolder = '',
 		onClose,
 		onPick,
 	}: {
 		open?: boolean;
 		game?: Game | null;
-		/** Ce qu'on choisit : l'exécutable d'un jeu, ou un dossier. */
-		mode?: 'exe' | 'folder';
+		/** Ce qu'on choisit : l'exécutable d'un jeu, un dossier, ou une photo. */
+		mode?: 'exe' | 'folder' | 'image';
+		/** Dossier de départ pour une photo. */
+		startFolder?: string;
 		onClose?: () => void;
-		/** Le chemin de l'exécutable ou du dossier choisi. */
+		/** Le chemin du fichier ou du dossier choisi. */
 		onPick?: (path: string) => void;
 	} = $props();
 
 	interface Entry {
 		name: string;
 		path: string;
-		kind: 'drive' | 'folder' | 'exe' | 'pick';
+		kind: 'drive' | 'folder' | 'exe' | 'image' | 'pick';
 		size: number;
 	}
 
-	const ICONS: Record<Entry['kind'], string> = { drive: 'drive', folder: 'folder', exe: 'app', pick: 'check' };
+	/** Délai avant d'ouvrir l'aperçu : parcourir la liste ne charge pas chaque photo. */
+	const PREVIEW_DELAY = 160;
+
+	const ICONS: Record<Entry['kind'], string> = {
+		drive: 'drive',
+		folder: 'folder',
+		exe: 'app',
+		image: 'image',
+		pick: 'check',
+	};
 	const ACCEPT: Record<Entry['kind'], string> = {
 		drive: 'Ouvrir',
 		folder: 'Ouvrir',
 		exe: 'Choisir',
+		image: 'Choisir cette photo',
 		pick: 'Choisir ce dossier',
 	};
+	const TITLES = { exe: "Changer l'exécutable", folder: 'Ajouter un dossier de jeux', image: 'Importer une photo' };
 
 	/** Dossier affiché ; vide pour la liste des disques. */
 	let path = $state('');
@@ -72,7 +91,7 @@
 
 	/** Ce que montre un dossier : pour en choisir un, pas d'exécutables, et la ligne qui le retient. */
 	function visible(target: string, listed: Entry[]): Entry[] {
-		if (mode === 'exe') return listed;
+		if (mode !== 'folder') return listed;
 		const folders = listed.filter((e) => e.kind !== 'exe');
 		if (!target) return folders;
 		return [{ name: 'Choisir ce dossier', path: target, kind: 'pick', size: 0 }, ...folders];
@@ -84,6 +103,14 @@
 			// Capture (`?modal=files`, `?modal=folders`) : un faux dossier, pour juger le rendu.
 			path = target || 'D:/Jeux/MotoGP 24';
 			parent = 'D:/Jeux';
+			if (mode === 'image') {
+				entries = [
+					{ name: 'Vacances', path: 'D:/Images/Vacances', kind: 'folder', size: 0 },
+					{ name: 'logo.png', path: '/assets/logo.png', kind: 'image', size: 120_000 },
+				];
+				index = 1;
+				return;
+			}
 			entries = visible(path, [
 				{ name: 'Binaries', path: 'D:/Jeux/MotoGP 24/Binaries', kind: 'folder', size: 0 },
 				{ name: 'Content', path: 'D:/Jeux/MotoGP 24/Content', kind: 'folder', size: 0 },
@@ -104,6 +131,7 @@
 			} else {
 				const listing = await invoke<{ path: string; parent: string; entries: Entry[] }>('list_dir', {
 					path: target,
+					images: mode === 'image',
 				});
 				entries = visible(target, listing.entries);
 				parent = listing.parent;
@@ -136,7 +164,7 @@
 		if (!open) return;
 		remembered.clear();
 		const current = mode === 'exe' ? (game?.executable ?? '') : '';
-		let start = dirname(current);
+		let start = mode === 'image' ? startFolder : dirname(current);
 		if (/steam\.exe$/i.test(current)) start = `${start}/steamapps/common`;
 		// `go` lit `path` et `index` : sans `untrack`, l'effet les suivait et
 		// chaque déplacement ramenait l'explorateur à son dossier de départ.
@@ -146,6 +174,36 @@
 				if (error && start) void go('', 1);
 			});
 		});
+	});
+
+	/** Aperçu de la photo sélectionnée. */
+	let preview = $state('');
+	/** Photo voulue : une réponse arrivée après un autre déplacement est ignorée. */
+	let previewing = '';
+
+	function showPreview(url: string) {
+		releaseImage(preview);
+		preview = url;
+	}
+
+	$effect(() => {
+		const wanted = open && mode === 'image' && entries[index]?.kind === 'image' ? entries[index].path : '';
+		previewing = wanted;
+		if (!wanted) {
+			untrack(() => showPreview(''));
+			return;
+		}
+		const timer = setTimeout(() => {
+			imageUrl(wanted)
+				.then((url) => {
+					if (previewing === wanted) showPreview(url);
+					else releaseImage(url);
+				})
+				.catch(() => {
+					if (previewing === wanted) showPreview('');
+				});
+		}, PREVIEW_DELAY);
+		return () => clearTimeout(timer);
 	});
 
 	/** Segments du chemin affiché, pour le fil d'Ariane. */
@@ -178,7 +236,7 @@
 		else if (action === 'cancel' || action === 'left') up();
 		else if (action === 'options') onClose?.();
 		else if ((action === 'accept' || action === 'right') && entry) {
-			if (entry.kind === 'exe' || entry.kind === 'pick') {
+			if (entry.kind === 'exe' || entry.kind === 'pick' || entry.kind === 'image') {
 				if (action === 'accept') onPick?.(entry.path);
 			} else {
 				void go(entry.path, 1);
@@ -197,9 +255,15 @@
 		<section class="browser">
 			<header>
 				<div class="titles">
-					<h2>{mode === 'folder' ? 'Ajouter un dossier de jeux' : "Changer l'exécutable"}</h2>
+					<h2>{TITLES[mode]}</h2>
 					<p class="sub">
-						{mode === 'folder' ? 'Ouvre le dossier qui contient tes jeux, puis choisis-le.' : (game?.title ?? '')}
+						{#if mode === 'folder'}
+							Ouvre le dossier qui contient tes jeux, puis choisis-le.
+						{:else if mode === 'image'}
+							Choisis une image de ce PC : tu la recadreras ensuite.
+						{:else}
+							{game?.title ?? ''}
+						{/if}
 					</p>
 				</div>
 				{#if mode === 'exe' && game?.executable}
@@ -220,11 +284,12 @@
 				{/each}
 			</nav>
 
+			<div class="content">
 			<div class="viewport">
 				{#if error}
 					<p class="state">{error}</p>
 				{:else if !loading && entries.length === 0}
-					<p class="state">Aucun dossier ni exécutable ici.</p>
+					<p class="state">{mode === 'image' ? 'Aucun dossier ni image ici.' : 'Aucun dossier ni exécutable ici.'}</p>
 				{:else}
 					{#key path}
 						<ul
@@ -245,8 +310,8 @@
 								>
 									<img class="icon {entry.kind}" src="/assets/icons/{ICONS[entry.kind]}.svg" alt="" />
 									<span class="name">{entry.name}</span>
-									{#if entry.kind === 'exe'}
-										{#if game?.executable && sameFile(entry.path, game.executable)}
+									{#if entry.kind === 'exe' || entry.kind === 'image'}
+										{#if entry.kind === 'exe' && game?.executable && sameFile(entry.path, game.executable)}
 											<span class="badge">Actuel</span>
 										{/if}
 										<span class="meta">{size(entry.size)}</span>
@@ -260,6 +325,16 @@
 						</ul>
 					{/key}
 				{/if}
+			</div>
+			{#if mode === 'image'}
+				<aside class="preview">
+					{#if preview}
+						<img src={preview} alt="" />
+					{:else}
+						<span>Aperçu</span>
+					{/if}
+				</aside>
+			{/if}
 			</div>
 
 			<footer class="hints">
@@ -278,7 +353,8 @@
 		z-index: 8;
 		display: grid;
 		place-items: center;
-		background: rgba(0, 0, 0, 0.75);
+		background: var(--files-veil);
+		backdrop-filter: blur(var(--files-blur));
 		animation: veil-in var(--fast) var(--ease) both;
 	}
 
@@ -294,8 +370,9 @@
 		gap: 18px;
 		width: var(--files-width);
 		padding: 30px 34px;
+		border: 1px solid var(--xbox-line);
 		border-radius: var(--radius-lg);
-		background: var(--surface-strong);
+		background: var(--files-panel);
 		box-shadow: 0 30px 80px rgba(0, 0, 0, 0.7);
 		animation: browser-in var(--normal) var(--ease) both;
 	}
@@ -347,7 +424,7 @@
 		gap: 8px;
 		padding: 6px 12px;
 		border-radius: 999px;
-		background: var(--surface);
+		background: var(--files-row-bg);
 	}
 
 	.crumb img {
@@ -366,10 +443,36 @@
 		opacity: 0.5;
 	}
 
+	.content {
+		display: flex;
+		gap: calc(var(--hover-room) * 2);
+		align-items: stretch;
+	}
+
+	.preview {
+		flex: none;
+		display: grid;
+		place-items: center;
+		width: var(--files-preview);
+		overflow: hidden;
+		border-radius: var(--radius);
+		background: var(--files-row-bg);
+		color: var(--text-dim);
+		font-size: 17px;
+	}
+
+	.preview img {
+		width: 100%;
+		height: 100%;
+		object-fit: contain;
+	}
+
 	/* La fenêtre montre `--files-rows` lignes ; la liste glisse dedans pour
 	   garder la sélection au tiers supérieur, sans jamais sauter. */
 	.viewport {
 		position: relative;
+		flex: 1;
+		min-width: 0;
 		height: calc(var(--files-rows) * (var(--files-row) + var(--files-gap)));
 		margin: calc(-1 * var(--hover-room));
 		padding: var(--hover-room);
@@ -397,7 +500,7 @@
 		height: var(--files-row);
 		padding: 0 22px;
 		border-radius: var(--radius);
-		background: var(--surface);
+		background: var(--files-row-bg);
 		font-size: 19px;
 		transition:
 			transform var(--fast) var(--ease),
@@ -407,7 +510,7 @@
 
 	/* Sélection : contour d'accent, halo, et la ligne avance légèrement. */
 	li.selected {
-		background: rgba(255, 255, 255, 0.12);
+		background: var(--files-row-focus);
 		outline: 3px solid var(--accent);
 		box-shadow: 0 0 28px 4px var(--accent-soft);
 		transform: translateX(8px) scale(1.01);

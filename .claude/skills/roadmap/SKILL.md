@@ -11,6 +11,7 @@ description: Feuille de route de Lobby (Interface Console) — ce qui reste à f
 6. **Système** : build Linux, Gamescope, systemd, boot direct.
 8. **Au niveau de warmUP** (warmup-gamelauncher.com/features) :
    - Interface « couch gaming » 100 % manette — *fait*
+   - Écrans de bienvenue au premier lancement (profil, boutiques, jeux, habitudes), ouverture au démarrage de Windows, choix de repartir de zéro dans le setup — *fait*. Reste : désigner l'écran de jeu (« Jump Screen » de warmUP), Lobby ne sait pas encore en choisir un.
    - Statistiques (temps, parties, top jeux, genres, boutiques, par période) — *fait*. Jeux possédés / installés et mesure des jeux Steam (`RunningAppID`) — *fait*.
    - Bibliothèque unifiée : Steam, Epic, dossiers, `.lnk`, registre — *fait*. Reste : GOG, EA, Xbox, Ubisoft, Amazon, émulateurs (dossiers de ROMs, émulateur choisi par jeu).
    - Synchronisation : X dans la bibliothèque — *fait*

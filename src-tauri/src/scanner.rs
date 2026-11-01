@@ -69,6 +69,10 @@ pub struct ScannedGame {
   /// la recherche automatique ne doit plus jamais le remplacer.
   #[serde(default, skip_serializing_if = "std::ops::Not::not")]
   pub custom_executable: bool,
+  /// Adresse de lancement par le launcher de la boutique. Un jeu Epic ne démarre
+  /// pas par son exécutable : c'est le launcher qui lui donne la session du compte.
+  #[serde(default, skip_serializing_if = "String::is_empty")]
+  pub launch_url: String,
 }
 
 /// Normalise un nom pour comparaison insensible à la ponctuation et casse.
@@ -306,6 +310,7 @@ pub fn scan_steam() -> Vec<ScannedGame> {
             executable: client.clone(),
             args: vec!["-applaunch".to_string(), appid],
             custom_executable: false,
+            launch_url: String::new(),
           });
         }
       }
@@ -393,6 +398,7 @@ pub fn scan_steam_common() -> Vec<ScannedGame> {
         executable: exe.to_string_lossy().replace('\\', "/"),
         args: vec![],
         custom_executable: false,
+        launch_url: String::new(),
       });
     }
   }
@@ -589,6 +595,7 @@ pub fn scan_registry() -> Vec<ScannedGame> {
           executable: exe.to_string_lossy().replace('\\', "/"),
           args: vec![],
           custom_executable: false,
+          launch_url: String::new(),
         });
       }
     }
@@ -618,6 +625,8 @@ pub fn scan_epic() -> Vec<ScannedGame> {
               let app_name = json["AppName"].as_str().unwrap_or("").trim();
               let location = json["InstallLocation"].as_str().unwrap_or("").trim();
               let launch_exe = json["LaunchExecutable"].as_str().unwrap_or("").trim();
+              let namespace = json["CatalogNamespace"].as_str().unwrap_or("").trim();
+              let item = json["CatalogItemId"].as_str().unwrap_or("").trim();
 
               if title.is_empty() || location.is_empty() || launch_exe.is_empty() {
                 continue;
@@ -645,6 +654,12 @@ pub fn scan_epic() -> Vec<ScannedGame> {
                 executable: full_exe.to_string_lossy().replace('\\', "/"),
                 args: vec![],
                 custom_executable: false,
+                // La même adresse que le raccourci créé par Epic.
+                launch_url: if app_name.is_empty() || namespace.is_empty() || item.is_empty() {
+                  String::new()
+                } else {
+                  format!("com.epicgames.launcher://apps/{namespace}%3A{item}%3A{app_name}?action=launch&silent=true")
+                },
               });
             }
           }
@@ -721,6 +736,7 @@ pub fn scan_custom_folder(folder: &Path) -> Vec<ScannedGame> {
         executable: exe_str,
         args: vec![],
         custom_executable: false,
+        launch_url: String::new(),
       });
     }
   }
@@ -933,6 +949,7 @@ fn collect_lnk_shortcuts(dir: &Path, depth: usize, max_depth: usize, games: &mut
           executable: target_clean,
           args: vec![],
           custom_executable: false,
+          launch_url: String::new(),
         });
       }
     }
@@ -1108,6 +1125,9 @@ pub async fn scan_all_games(custom_folders: &[String]) -> Vec<ScannedGame> {
           existing.title = game.title.clone();
         } else if game.title.chars().any(|c| c.is_uppercase()) && !existing.title.chars().any(|c| c.is_uppercase()) {
           existing.title = game.title.clone();
+        }
+        if existing.launch_url.is_empty() {
+          existing.launch_url = game.launch_url.clone();
         }
         // Préfère une source officielle ("steam" ou "epic")
         if (game.source == "steam" || game.source == "epic") && existing.source != "steam" && existing.source != "epic" {

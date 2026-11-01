@@ -6,6 +6,7 @@
  * sont hauts et asymétriques (engagement 0,65 / relâchement 0,40) pour qu'un
  * stick qui traîne au repos ne déplace pas la sélection tout seul.
  */
+import { GLYPHS, type GlyphFamily } from './glyphs';
 
 export type Action =
 	| 'up'
@@ -16,7 +17,7 @@ export type Action =
 	| 'cancel'
 	| 'options'
 	| 'search'
-	/** Bouton Options (PlayStation) / Menu (Xbox), ou Home : le menu rapide. */
+	/** Bouton de droite, Options (PlayStation) / Menu (Xbox) : le panneau de droite. */
 	| 'menu'
 	/** L1/LB et R1/RB : section précédente / suivante du dock, onglets du menu rapide. */
 	| 'prev'
@@ -24,7 +25,7 @@ export type Action =
 	/** L2/LT et R2/RT : catégorie précédente / suivante (filtres, périodes). */
 	| 'pagePrev'
 	| 'pageNext'
-	/** Bouton View (Xbox) / Create (PS5) : le tri de la bibliothèque. */
+	/** Bouton de gauche, View (Xbox) / Create (PS5), ou Home : le menu rapide, à gauche. */
 	| 'view';
 
 const ENGAGE = 0.65;
@@ -48,8 +49,8 @@ const BUTTONS: Record<number, Action> = {
 	13: 'down',
 	14: 'left',
 	15: 'right',
-	// Xbox / PS : souvent pris par la Game Bar ou Steam, d'où le bouton Menu.
-	16: 'menu',
+	// Xbox / PS : souvent pris par la Game Bar ou Steam, d'où le bouton View.
+	16: 'view',
 };
 
 const KEYS: Record<string, Action> = {
@@ -63,13 +64,14 @@ const KEYS: Record<string, Action> = {
 	Backspace: 'cancel',
 	x: 'options',
 	y: 'search',
-	m: 'menu',
-	g: 'menu',
-	Home: 'menu',
+	m: 'view',
+	g: 'view',
+	Home: 'view',
+	Tab: 'view',
+	p: 'menu',
 	// Dock : A / E, comme L1 / R1. Catégories : Page précédente / suivante.
 	a: 'prev',
 	e: 'next',
-	Tab: 'view',
 	PageUp: 'pagePrev',
 	PageDown: 'pageNext',
 };
@@ -278,8 +280,8 @@ export function setLayoutChoice(choice: string) {
  * Famille de glyphes à afficher. Les index des boutons ne changent pas d'une
  * manette à l'autre : seule la façon de les nommer change.
  */
-export function padLayout(): 'xbox' | 'ps5' {
-	if (layoutChoice === 'xbox' || layoutChoice === 'ps5') return layoutChoice;
+export function padLayout(): GlyphFamily {
+	if (layoutChoice in GLYPHS) return layoutChoice as GlyphFamily;
 	const pad = navigator.getGamepads?.().find((p) => p && p.connected);
 	if (!pad) return 'xbox';
 	const id = pad.id.toLowerCase();

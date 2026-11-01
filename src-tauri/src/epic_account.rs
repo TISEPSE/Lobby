@@ -28,6 +28,9 @@ const TOKEN_URL: &str = "https://account-public-service-prod03.ol.epicgames.com/
 const PLAYTIME_URL: &str = "https://library-service.live.use1a.on.epicgames.com/library/api/public/playtime/account";
 const LIBRARY_URL: &str = "https://library-service.live.use1a.on.epicgames.com/library/api/public/items";
 const CATALOG_URL: &str = "https://catalog-public-service-prod06.ol.epicgames.com/catalog/api/shared/namespace";
+/// Requêtes de catalogue en parallèle : une par jeu, soit 37 s pour 688 fiches à
+/// 8 à la fois.
+const CATALOG_PARALLEL: usize = 16;
 /// Adresse fictive vers laquelle la fenêtre de connexion renvoie le code : on
 /// l'intercepte avant qu'elle ne parte sur le réseau.
 const CODE_HOST: &str = "epic-code.invalid";
@@ -72,8 +75,11 @@ pub struct EpicAccount {
   pub account_id: String,
   pub display_name: String,
   pub playtime: Vec<EpicPlay>,
-  /// Toute la bibliothèque (jeux seulement, sans DLC).
+  /// La bibliothèque connue du cache (jeux seulement, sans DLC).
   pub library: Vec<EpicGame>,
+  /// Fiches pas encore lues : `epic_library` les demande à part, sans bloquer
+  /// la connexion.
+  pub missing: usize,
 }
 
 /// Fiche de catalogue gardée en cache : `None` pour ce qui n'est pas un jeu
@@ -131,24 +137,31 @@ async fn library_records(token: &str) -> Result<Vec<LibraryRecord>, String> {
 }
 
 /// Fiche de catalogue d'un élément : titre, jaquettes, et si c'est un jeu.
-async fn catalog_entry(token: &str, record: &LibraryRecord) -> Option<EpicGame> {
-  let body: serde_json::Value = client()
+/// `None` si Epic n'a pas répondu : rien à retenir, on redemandera. `Some(None)`
+/// pour ce qui n'est pas un jeu. Sans cette différence, une requête ratée
+/// classait le jeu « pas un jeu » pour toujours dans le cache.
+async fn catalog_entry(token: &str, record: &LibraryRecord) -> Option<Option<EpicGame>> {
+  let response = client()
     .ok()?
     .get(format!("{CATALOG_URL}/{}/bulk/items", record.namespace))
     .bearer_auth(token)
     .query(&[("id", record.catalog_id.as_str()), ("country", "FR"), ("locale", "fr")])
     .send()
     .await
-    .ok()?
-    .json()
-    .await
     .ok()?;
+  if !response.status().is_success() {
+    return None;
+  }
+  let body: serde_json::Value = response.json().await.ok()?;
   let item = &body[&record.catalog_id];
+  if !item.is_object() {
+    return None;
+  }
   let is_game = item["categories"]
     .as_array()
     .is_some_and(|list| list.iter().any(|c| c["path"] == "games"));
   if !is_game || item["mainGameItem"].is_object() {
-    return None;
+    return Some(None);
   }
   let image = |kind: &str| {
     item["keyImages"]
@@ -158,18 +171,18 @@ async fn catalog_entry(token: &str, record: &LibraryRecord) -> Option<EpicGame> 
       .unwrap_or_default()
       .to_string()
   };
-  Some(EpicGame {
+  Some(Some(EpicGame {
     app_name: record.app_name.to_lowercase(),
     title: item["title"].as_str().unwrap_or(&record.app_name).to_string(),
     cover: image("DieselGameBoxTall"),
     hero: image("DieselGameBox"),
-  })
+  }))
 }
 
-/// Bibliothèque complète : la liste vient d'Epic à chaque lecture, les
-/// fiches du catalogue du cache (chiffré) — seules les nouvelles sont
-/// demandées, plusieurs à la fois.
-async fn read_library(data_dir: &Path, token: &str) -> Result<Vec<EpicGame>, String> {
+/// Bibliothèque : la liste vient d'Epic à chaque lecture, les fiches du
+/// catalogue du cache (chiffré). `fetch` demande celles qui manquent, plusieurs
+/// à la fois ; sans lui, on rend ce qui est connu et le nombre de fiches à lire.
+async fn read_library(data_dir: &Path, token: &str, fetch: bool) -> Result<(Vec<EpicGame>, usize), String> {
   let records = library_records(token).await?;
   let mut cache: CatalogCache = crate::secure_store::read(&catalog_path(data_dir))
     .ok()
@@ -178,7 +191,8 @@ async fn read_library(data_dir: &Path, token: &str) -> Result<Vec<EpicGame>, Str
     .unwrap_or_default();
 
   let missing: Vec<&LibraryRecord> = records.iter().filter(|r| !cache.contains_key(&r.app_name)).collect();
-  for chunk in missing.chunks(8) {
+  let to_fetch: &[&LibraryRecord] = if fetch { &missing } else { &[] };
+  for chunk in to_fetch.chunks(CATALOG_PARALLEL) {
     let tasks: Vec<_> = chunk
       .iter()
       .map(|record| {
@@ -192,25 +206,25 @@ async fn read_library(data_dir: &Path, token: &str) -> Result<Vec<EpicGame>, Str
       })
       .collect();
     for task in tasks {
-      if let Ok((app, entry)) = task.await {
+      if let Ok((app, Some(entry))) = task.await {
         cache.insert(app, entry);
       }
     }
   }
-  if !missing.is_empty() {
+  if !to_fetch.is_empty() {
     if let Ok(bytes) = serde_json::to_vec(&cache) {
       let _ = crate::secure_store::write(&catalog_path(data_dir), &bytes);
     }
   }
 
+  let unread = records.iter().filter(|r| !cache.contains_key(&r.app_name)).count();
   let mut seen = std::collections::BTreeSet::new();
-  Ok(
-    records
-      .iter()
-      .filter_map(|r| cache.get(&r.app_name).cloned().flatten())
-      .filter(|game| seen.insert(game.app_name.clone()))
-      .collect(),
-  )
+  let games = records
+    .iter()
+    .filter_map(|r| cache.get(&r.app_name).cloned().flatten())
+    .filter(|game| seen.insert(game.app_name.clone()))
+    .collect();
+  Ok((games, unread))
 }
 
 /// Résultat de la connexion, envoyé à l'interface (événement `epic-login`).
@@ -551,12 +565,13 @@ pub async fn read_account(data_dir: &Path) -> Result<Option<EpicAccount>, String
     .collect();
 
   // La bibliothèque complète n'est pas indispensable : sans elle, le temps
-  // de jeu des jeux installés reste juste.
-  let library = match read_library(data_dir, &token.access_token).await {
-    Ok(list) => list,
+  // de jeu des jeux installés reste juste. On ne lit ici que le cache : la
+  // connexion aboutit tout de suite, `read_full_library` fait le reste.
+  let (library, missing) = match read_library(data_dir, &token.access_token, false).await {
+    Ok(found) => found,
     Err(error) => {
       log::warn!("Epic : bibliothèque illisible : {error}");
-      Vec::new()
+      (Vec::new(), 0)
     }
   };
 
@@ -565,7 +580,26 @@ pub async fn read_account(data_dir: &Path) -> Result<Option<EpicAccount>, String
     display_name: session.display_name,
     playtime,
     library,
+    missing,
   }))
+}
+
+/// Lit les fiches qui manquent au cache et rend toute la bibliothèque : une
+/// requête par jeu, longue la première fois, d'où sa commande à part.
+pub async fn read_full_library(data_dir: &Path) -> Result<Vec<EpicGame>, String> {
+  let Some(session) = load_session(data_dir)? else {
+    return Ok(Vec::new());
+  };
+  let token = request_token(&[
+    ("grant_type", "refresh_token"),
+    ("refresh_token", &session.refresh_token),
+    ("token_type", "eg1"),
+  ])
+  .await?;
+  save(data_dir, &token, &session.display_name)?;
+  let (library, unread) = read_library(data_dir, &token.access_token, true).await?;
+  log::info!("Epic : bibliothèque lue ({} jeux, {unread} fiches sans réponse)", library.len());
+  Ok(library)
 }
 
 pub fn logout(data_dir: &Path) {

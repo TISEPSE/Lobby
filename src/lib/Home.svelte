@@ -200,7 +200,7 @@
 		display: flex;
 		align-items: flex-end;
 		gap: var(--tile-gap);
-		padding: 40px 0 0;
+		padding: var(--rail-room) 0 0;
 		/* La sélection se tient un peu à droite du centre : pile au milieu, la
 		   rangée paraît figée et la lecture est moins naturelle. */
 		transform: translateX(
@@ -347,5 +347,10 @@
 		font-weight: 600;
 		text-align: center;
 		background: linear-gradient(to top, rgba(0, 0, 0, 0.88), transparent);
+	}
+
+	/* Sans image, le titre est déjà sur la tuile. */
+	.tile:has(:global(.plain)) .caption {
+		display: none;
 	}
 </style>
