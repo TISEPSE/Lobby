@@ -100,6 +100,8 @@ export interface SelectRequest {
 	/** Bouton auquel s'accrocher ; sans lui, le menu se centre. */
 	anchor: HTMLElement | null;
 	onPick: (id: string) => void;
+	/** Appelé à chaque déplacement dans la liste : pour écouter avant de choisir. */
+	onPreview?: (id: string) => void;
 }
 
 /** Sections de la barre du haut. */
@@ -141,6 +143,9 @@ export interface UserSettings {
 	volume_video: number;
 	/** Écrans de bienvenue terminés ou passés. */
 	onboarding_done: boolean;
+	/** Sons choisis pour le clic et le déplacement (`SOUND_CHOICES`). */
+	sound_accept: string;
+	sound_move: string;
 }
 
 /** Réglages de volume, dans l'ordre de la page Audio. */

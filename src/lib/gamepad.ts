@@ -45,13 +45,17 @@ const BUTTONS: Record<number, Action> = {
 	7: 'pageNext',
 	8: 'view',
 	9: 'menu',
-	12: 'up',
-	13: 'down',
-	14: 'left',
-	15: 'right',
 	// Xbox / PS : souvent pris par la Game Bar ou Steam, d'où le bouton View.
 	16: 'view',
 };
+
+/** La croix : à part des boutons, elle suit la règle du stick (maintenir répète). */
+const DPAD: [number, Action][] = [
+	[12, 'up'],
+	[13, 'down'],
+	[14, 'left'],
+	[15, 'right'],
+];
 
 const KEYS: Record<string, Action> = {
 	ArrowUp: 'up',
@@ -81,6 +85,23 @@ type Listener = (action: Action) => void;
 const listeners = new Set<Listener>();
 let held: Action | null = null;
 let nextRepeat = 0;
+/** L'action en cours d'envoi vient d'une touche maintenue, pas d'un nouvel appui. */
+let repeating = false;
+/**
+ * Depuis quand Lobby n'a plus le focus. Un accroc d'une image ne compte pas : il
+ * remettait la manette à zéro, et une direction maintenue se retrouvait bloquée
+ * comme une touche déjà tenue, jusqu'au relâchement.
+ */
+let focusLostAt: number | null = null;
+const FOCUS_GRACE = 300;
+
+/**
+ * Pour un geste qui ne doit pas se répéter tout seul : dans l'explorateur, gauche et
+ * droite changent de dossier, et maintenus ils traverseraient toute l'arborescence.
+ */
+export function isRepeat(): boolean {
+	return repeating;
+}
 let frame = 0;
 /** Boutons enfoncés à la frame précédente, pour ne déclencher qu'au front montant. */
 const pressed = new Set<number>();
@@ -174,6 +195,11 @@ function direction(pad: Gamepad): Action | null {
 	return y > 0 ? 'down' : 'up';
 }
 
+/** La direction demandée : la croix, sinon le stick. */
+function wantedDirection(pad: Gamepad): Action | null {
+	return DPAD.find(([i]) => pad.buttons[i]?.pressed)?.[1] ?? direction(pad);
+}
+
 function poll(now: number) {
 	frame = requestAnimationFrame(poll);
 	const pad = navigator.getGamepads?.().find((p) => p && p.connected) ?? null;
@@ -181,12 +207,17 @@ function poll(now: number) {
 	// pilote plus l'interface. Au retour, son état sert de nouveau départ :
 	// une touche encore tenue ne déclenche rien.
 	const focused = windowActive && document.hasFocus();
+	if (focused) focusLostAt = null;
+	else focusLostAt ??= now;
 	if (pad && !NO_PAD && !focused && comboHandler) checkCombo(pad, now);
-	if (!pad || NO_PAD || (!focused && background.size === 0)) {
+	const ignored = !focused && background.size === 0;
+	if (!pad || NO_PAD || (ignored && now - (focusLostAt ?? now) >= FOCUS_GRACE)) {
 		held = null;
 		seenPad = '';
 		return;
 	}
+	// Focus perdu depuis un instant : on n'agit pas, mais rien n'est oublié.
+	if (ignored) return;
 	const key = `${pad.index}:${pad.id}`;
 	if (key !== seenPad) {
 		seenPad = key;
@@ -194,7 +225,7 @@ function poll(now: number) {
 		pad.buttons.forEach((button, i) => {
 			if (button?.pressed) pressed.add(i);
 		});
-		held = direction(pad);
+		held = wantedDirection(pad);
 		nextRepeat = Number.POSITIVE_INFINITY;
 		return;
 	}
@@ -206,27 +237,25 @@ function poll(now: number) {
 			pressed.add(i);
 			if (!focused && !background.has(action)) continue;
 			emit(action);
-			if (action === 'up' || action === 'down' || action === 'left' || action === 'right') {
-				held = action;
-				nextRepeat = now + INITIAL_REPEAT;
-			}
 		} else if (!down) {
 			pressed.delete(i);
 		}
 	}
 
-	const stick = focused ? direction(pad) : null;
-	if (stick) {
-		if (stick !== held) {
-			held = stick;
-			nextRepeat = now + INITIAL_REPEAT;
-			emit(stick);
-		} else if (now >= nextRepeat) {
-			nextRepeat = now + REPEAT_INTERVAL;
-			emit(stick);
-		}
-	} else if (held && !pad.buttons[12]?.pressed && !pad.buttons[13]?.pressed && !pad.buttons[14]?.pressed && !pad.buttons[15]?.pressed) {
+	// Croix ou stick, même règle : un déplacement tout de suite, puis la répétition
+	// tant que la direction est tenue.
+	const wanted = focused ? wantedDirection(pad) : null;
+	if (!wanted) {
 		held = null;
+	} else if (wanted !== held) {
+		held = wanted;
+		nextRepeat = now + INITIAL_REPEAT;
+		emit(wanted);
+	} else if (now >= nextRepeat) {
+		nextRepeat = now + REPEAT_INTERVAL;
+		repeating = true;
+		emit(wanted);
+		repeating = false;
 	}
 }
 
@@ -244,7 +273,9 @@ function onKey(event: KeyboardEvent) {
 	const action = KEYS[event.key.length === 1 ? event.key.toLowerCase() : event.key];
 	if (!action) return;
 	event.preventDefault();
+	repeating = event.repeat;
 	emit(action);
+	repeating = false;
 }
 
 /** Branche les entrées et rend la fonction de débranchement. */

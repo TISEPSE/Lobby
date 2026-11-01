@@ -58,9 +58,12 @@
 
 	export function handleAction(action: Action) {
 		if (!request) return;
-		if (action === 'up') index = Math.max(0, index - 1);
-		else if (action === 'down') index = Math.min(request.options.length - 1, index + 1);
-		else if (action === 'accept') pick(index);
+		if (action === 'up' || action === 'down') {
+			const next = Math.max(0, Math.min(request.options.length - 1, index + (action === 'up' ? -1 : 1)));
+			if (next === index) return;
+			index = next;
+			request.onPreview?.(request.options[next].id);
+		} else if (action === 'accept') pick(index);
 		else if (action === 'cancel') onClose?.();
 	}
 </script>

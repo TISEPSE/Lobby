@@ -22,20 +22,30 @@ const KEY_HOST: &str = "steamgriddb-key.invalid";
 const ALLOWED_HOSTS: [&str; 4] = ["steamgriddb.com", "steamcommunity.com", "steampowered.com", "steamstatic.com"];
 const KEY_LENGTH: usize = 32;
 
-/// Cherche la clé dans la page, y compris dans ses champs, le temps qu'elle
-/// s'affiche et que l'utilisateur la génère s'il n'en a pas encore (2 minutes).
+/// Cherche la clé dans la page, le temps que le site l'affiche : il construit tout
+/// en JavaScript, puis montre `Key: <code>…</code>`, ou le seul bouton « Create API
+/// Key » pour un compte qui n'en a pas. Ce bouton est pressé une fois : c'est pour
+/// obtenir sa clé que l'utilisateur est là, et à la manette il ne pourrait pas
+/// cliquer dans cette page. « Revoke API Key » n'est jamais touché.
 const READ_KEY: &str = r#"(() => {
   if (window.__lobbyKeySent) return;
   window.__lobbyKeySent = true;
   let tries = 0;
+  let created = false;
   const timer = setInterval(() => {
-    const fields = [...document.querySelectorAll('input, textarea, code, pre')].map((e) => e.value || e.textContent || '');
-    const text = `${fields.join(' ')} ${document.body?.innerText ?? ''}`;
-    const key = (text.match(/\b[0-9a-f]{32}\b/i) ?? [])[0];
+    const fields = [...document.querySelectorAll('code, input, textarea, pre')].map((e) => e.value || e.textContent || '');
+    const key = (fields.join(' ').match(/\b[0-9a-f]{32}\b/i) ?? [])[0];
     if (key) {
       clearInterval(timer);
       location.replace(`https://KEY_HOST/?key=${key}`);
-    } else if (++tries > 480) clearInterval(timer);
+      return;
+    }
+    const create = [...document.querySelectorAll('button')].find((b) => b.textContent.trim() === 'Create API Key');
+    if (create && !created) {
+      created = true;
+      create.click();
+    }
+    if (++tries > 480) clearInterval(timer);
   }, 250);
 })();"#;
 
@@ -79,6 +89,7 @@ pub fn open_login(app: &tauri::AppHandle) -> Result<(), String> {
   // son site ramenant ailleurs après la connexion.
   let via_steam = Arc::new(AtomicBool::new(false));
   let handle = app.clone();
+  let opener = app.clone();
   log::info!("SteamGridDB : ouverture de la page de la clé");
 
   let window = tauri::WebviewWindowBuilder::new(app, LOGIN_WINDOW, tauri::WebviewUrl::External(url))
@@ -93,6 +104,9 @@ pub fn open_login(app: &tauri::AppHandle) -> Result<(), String> {
         return;
       }
       let url = payload.url();
+      // Le chemin seulement : la page de retour porte la réponse de Steam dans
+      // son adresse.
+      log::info!("SteamGridDB : page chargée {}", url.path());
       let on_grid = url.host_str().is_some_and(|host| host.ends_with("steamgriddb.com"));
       if !on_grid {
         via_steam.store(true, Ordering::SeqCst);
@@ -125,7 +139,24 @@ pub fn open_login(app: &tauri::AppHandle) -> Result<(), String> {
       }
       true
     })
-    .on_new_window(|_, _| tauri::webview::NewWindowResponse::Deny)
+    // « Login with Steam » ouvre une pop-up (`window.open`). Refusée en silence,
+    // le clic ne faisait rien. Pas besoin d'une vraie pop-up : la page de retour
+    // ouvre la session côté serveur, elle marche aussi bien dans cette fenêtre,
+    // et `on_page_load` ramène ensuite à la page de la clé.
+    .on_new_window(move |url, _| {
+      if allowed(&url) {
+        log::info!("SteamGridDB : connexion ouverte dans la fenêtre");
+        let app = opener.clone();
+        tauri::async_runtime::spawn(async move {
+          if let Some(mut window) = app.get_webview_window(LOGIN_WINDOW) {
+            let _ = window.navigate(url);
+          }
+        });
+      } else {
+        log::warn!("SteamGridDB : pop-up bloquée vers {}", url.host_str().unwrap_or("?"));
+      }
+      tauri::webview::NewWindowResponse::Deny
+    })
     .build()
     .map_err(|e| format!("Fenêtre de connexion impossible : {e}"))?;
 
@@ -174,5 +205,11 @@ mod tests {
     let script = READ_KEY.replace("KEY_HOST", KEY_HOST);
     assert!(script.contains(&format!("https://{KEY_HOST}/?key=")));
     assert!(!script.contains("KEY_HOST"));
+  }
+
+  #[test]
+  fn the_page_script_can_never_revoke_a_key() {
+    assert!(READ_KEY.contains("=== 'Create API Key'"));
+    assert!(!READ_KEY.to_lowercase().contains("revoke"));
   }
 }

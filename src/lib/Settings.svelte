@@ -7,6 +7,7 @@
 	import { epicAccount, epicAction, epicStatus } from './epicAccount.svelte.js';
 	import { steamAccount, steamStatus } from './steamAccount.svelte.js';
 	import { steamGridStatus } from './steamGrid.svelte.js';
+	import { soundChoice, type SoundSlot } from './sound';
 
 	let {
 		focused = true,
@@ -34,6 +35,8 @@
 		onRestoreGame,
 		onPickLayout,
 		onToggleSound,
+		sounds = { accept: '', move: '' },
+		onPickSound,
 		onCycleScreensaver,
 		onConnectSteam,
 		onForgetSteam,
@@ -78,6 +81,10 @@
 		/** Ouvre la liste des packs de touches, accrochée à sa ligne. */
 		onPickLayout: (anchor: HTMLElement | null) => void;
 		onToggleSound?: () => void;
+		/** Sons choisis pour le clic et le déplacement. */
+		sounds?: Record<SoundSlot, string>;
+		/** Ouvre la liste des sons, accrochée à sa ligne. */
+		onPickSound?: (slot: SoundSlot, anchor: HTMLElement | null) => void;
 		onCycleScreensaver?: () => void;
 		onConnectSteam?: () => void;
 		onForgetSteam?: () => void;
@@ -120,7 +127,7 @@
 			id: 'audio',
 			label: 'Audio',
 			icon: 'volume',
-			hint: 'Sons de l’interface et volume de chaque famille de sons.',
+			hint: 'Sons de l’interface, volume de chaque famille et choix des sons.',
 		},
 		{
 			id: 'system',
@@ -177,6 +184,23 @@
 	const screensaverLabel = $derived(
 		screensaverMinutes > 0 ? `${screensaverMinutes} min` : 'Jamais'
 	);
+
+	/** Le clic et le déplacement : une liste où l'on écoute avant de choisir. */
+	function soundRows(): Row[] {
+		const row = (slot: SoundSlot, title: string, desc: string, section?: string): Row => ({
+			section,
+			title,
+			desc,
+			control: { kind: 'value', text: soundChoice(slot, sounds[slot]).label },
+			accept: 'Choisir',
+			muted: !soundEnabled,
+			run: () => onPickSound?.(slot, scroller?.querySelector<HTMLElement>('.row.selected') ?? null),
+		});
+		return [
+			row('accept', 'Son de validation', 'Le son de la touche A', 'Sons'),
+			row('move', 'Son de déplacement', 'Le son quand la sélection change'),
+		];
+	}
 
 	/** Les trois comptes, avec leur état réel, les mêmes que dans la bienvenue. */
 	function accountRows(): Row[] {
@@ -307,6 +331,7 @@
 						// A fait le tour : +10 %, puis retour à 0 après 100 %.
 						run: () => onStepVolume?.(entry.key, volumes[entry.key] >= 100 ? -100 : 10),
 					})),
+					...soundRows(),
 				];
 			case 'system':
 				return [

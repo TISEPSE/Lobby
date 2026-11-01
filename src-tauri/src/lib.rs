@@ -309,6 +309,12 @@ pub struct UserSettings {
   /// ils s'ouvrent alors une fois.
   #[serde(default)]
   pub onboarding_done: bool,
+  /// Sons choisis pour le clic et le déplacement (`SOUND_CHOICES`, `sound.ts`). Vide
+  /// dans un fichier plus ancien : l'interface prend alors le son par défaut.
+  #[serde(default)]
+  pub sound_accept: String,
+  #[serde(default)]
+  pub sound_move: String,
 }
 
 fn default_volume() -> u32 {
@@ -472,6 +478,8 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     volume_launch: default_volume(),
     volume_video: default_volume(),
     onboarding_done: false,
+    sound_accept: String::new(),
+    sound_move: String::new(),
   })
 }
 

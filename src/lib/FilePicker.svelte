@@ -2,7 +2,7 @@
 	import { untrack } from 'svelte';
 	import { fly } from 'svelte/transition';
 	import { cubicOut } from 'svelte/easing';
-	import type { Action } from './gamepad';
+	import { isRepeat, type Action } from './gamepad';
 	import type { Game } from './types';
 	import Glyph from './Glyph.svelte';
 	import { imageUrl, releaseImage } from './images';
@@ -225,6 +225,9 @@
 	/** Touches de l'explorateur ; l'appelant les lui transmet tant qu'il est ouvert. */
 	export function handleAction(action: Action) {
 		if (loading) return;
+		// Changer de dossier est un geste à part : maintenue, la direction traverserait
+		// toute l'arborescence, jusqu'à refermer l'explorateur.
+		if (isRepeat() && (action === 'left' || action === 'right')) return;
 		// Dossier illisible (droits) : B ramène à celui qu'on regardait, sans remonter d'un cran.
 		if (error && (action === 'cancel' || action === 'left')) {
 			error = '';

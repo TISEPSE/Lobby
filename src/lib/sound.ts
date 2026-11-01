@@ -1,9 +1,10 @@
 /**
  * Retours sonores de l'interface.
  *
- * Les sons viennent de `public/assets/sounds/` (design PlayStation fourni avec
- * le projet). Ils sont décodés une fois puis rejoués depuis la mémoire : un
- * déplacement dans le carrousel ne doit pas attendre un chargement.
+ * Les sons viennent de `public/assets/sounds/`. Ils sont décodés une fois puis
+ * rejoués depuis la mémoire : un déplacement dans le carrousel ne doit pas
+ * attendre un chargement. Le clic et le déplacement se choisissent dans les
+ * Réglages (`SOUND_CHOICES`).
  *
  * Il reste une synthèse de secours — quelques lignes d'oscillateur — pour les
  * signaux sans fichier (l'erreur) et pour le cas où un fichier manque : mieux
@@ -13,11 +14,54 @@
 
 type Cue = 'move' | 'accept' | 'cancel' | 'error' | 'launch' | 'pad' | 'section';
 
-/** Fichier et volume de chaque signal. Sans fichier, on synthétise. */
-const CUES: Record<Cue, { file?: string; gain: number }> = {
+/**
+ * Un son et ses réglages. `skip` saute le silence au début du fichier, en
+ * secondes : le son doit partir avec le geste. Sans fichier, on synthétise.
+ */
+interface Sound {
+	file?: string;
+	gain: number;
+	skip?: number;
+}
+
+/** Signaux dont le son se choisit dans les Réglages. */
+export type SoundSlot = 'accept' | 'move';
+
+export interface SoundChoice extends Sound {
+	id: string;
+	label: string;
+	file: string;
+}
+
+/**
+ * Les sons proposés, le premier étant celui par défaut. Chaque gain est réglé sur
+ * le volume perçu du fichier : on peut passer de l'un à l'autre sans que l'un
+ * sorte trop fort. Le mesurer avant d'en ajouter un (durée, silence de début).
+ */
+export const SOUND_CHOICES: Record<SoundSlot, SoundChoice[]> = {
+	accept: [
+		{ id: 'click-6', label: 'Clic 1', file: 'ui-click-6.mp3', gain: 0.21, skip: 0.03 },
+		{ id: 'click-7', label: 'Clic 2', file: 'ui-click-7.mp3', gain: 0.15, skip: 0.15 },
+		{ id: 'chime', label: 'Carillon', file: 'deep-ui-chime.mp3', gain: 0.43 },
+		{ id: 'playstation', label: 'PlayStation', file: 'ps5-selection-button.wav', gain: 0.7 },
+	],
+	move: [
+		// 0,12 s : il s'arrête quand la répétition d'une direction repart.
+		{ id: 'bong', label: 'Bong', file: 'kenney-bong.ogg', gain: 0.27 },
+		{ id: 'playstation', label: 'PlayStation', file: 'ps5-scroll.wav', gain: 0.45 },
+	],
+};
+
+/** Le son demandé, ou celui par défaut si ce réglage ne correspond plus à rien. */
+export function soundChoice(slot: SoundSlot, id: string): SoundChoice {
+	return SOUND_CHOICES[slot].find((choice) => choice.id === id) ?? SOUND_CHOICES[slot][0];
+}
+
+/** Fichier et volume de chaque signal. */
+const CUES: Record<Cue, Sound> = {
 	// Le déplacement s'entend cent fois par minute : court et discret.
-	move: { file: 'ps5-scroll.wav', gain: 0.45 },
-	accept: { file: 'ps5-selection-button.wav', gain: 0.7 },
+	move: SOUND_CHOICES.move[0],
+	accept: SOUND_CHOICES.accept[0],
 	cancel: { file: 'ps5-back-button.wav', gain: 0.6 },
 	// Pas de fichier d'erreur : on garde le signal grave de synthèse, qui ne
 	// ressemble à aucun autre son de l'interface.
@@ -68,10 +112,10 @@ function levelOf(cue: Cue): number {
 	return CUES[cue].gain * volumes.master * volumes[GROUP[cue]];
 }
 
-/** Sons décodés, prêts à rejouer. */
-const buffers = new Map<Cue, AudioBuffer>();
+/** Sons décodés, par fichier, prêts à rejouer. */
+const buffers = new Map<string, AudioBuffer>();
 /** Fichiers dont le chargement a échoué : inutile de réessayer à chaque appui. */
-const missing = new Set<Cue>();
+const missing = new Set<string>();
 
 /** Le contexte audio n'existe qu'après une interaction : on le crée à la demande. */
 function ensureContext(): AudioContext | null {
@@ -91,22 +135,21 @@ function ensureContext(): AudioContext | null {
  * Charge et décode un son. Le premier appui sur une touche peut donc être
  * muet ; `preload()` évite ce trou au démarrage.
  */
-async function load(cue: Cue): Promise<AudioBuffer | null> {
-	const { file } = CUES[cue];
+async function load(file: string | undefined): Promise<AudioBuffer | null> {
 	const ctx = ensureContext();
-	if (!file || !ctx || missing.has(cue)) return null;
-	const known = buffers.get(cue);
+	if (!file || !ctx || missing.has(file)) return null;
+	const known = buffers.get(file);
 	if (known) return known;
 
 	try {
 		const response = await fetch(`/assets/sounds/${file}`);
 		if (!response.ok) throw new Error(String(response.status));
 		const decoded = await ctx.decodeAudioData(await response.arrayBuffer());
-		buffers.set(cue, decoded);
+		buffers.set(file, decoded);
 		return decoded;
 	} catch {
 		// Fichier absent ou illisible : on retombera sur la synthèse.
-		missing.add(cue);
+		missing.add(file);
 		return null;
 	}
 }
@@ -114,7 +157,25 @@ async function load(cue: Cue): Promise<AudioBuffer | null> {
 /** Décode tous les sons d'avance, pour que le premier appui sonne déjà juste. */
 export function preloadSounds() {
 	if (!enabled) return;
-	for (const cue of Object.keys(CUES) as Cue[]) void load(cue);
+	for (const cue of Object.keys(CUES) as Cue[]) void load(CUES[cue].file);
+}
+
+/** Applique le son choisi dans les Réglages. */
+export function useSound(slot: SoundSlot, id: string) {
+	const choice = soundChoice(slot, id);
+	if (CUES[slot] === choice) return;
+	CUES[slot] = choice;
+	void load(choice.file);
+}
+
+/** Fait entendre un son de la liste, au volume où il jouerait, sans l'appliquer. */
+export async function previewSound(slot: SoundSlot, id: string) {
+	const ctx = ensureContext();
+	if (!ctx) return;
+	if (ctx.state === 'suspended') void ctx.resume();
+	const { file, gain, skip } = soundChoice(slot, id);
+	const buffer = await load(file);
+	if (buffer) playBuffer(ctx, slot, buffer, gain * volumes.master * volumes[GROUP[slot]], skip);
 }
 
 /** Joue un signal. Sans sortie audio, ne fait rien — jamais d'erreur visible. */
@@ -131,29 +192,43 @@ export function play(cue: Cue) {
 		return;
 	}
 
-	const buffer = buffers.get(cue);
+	const { file, skip } = CUES[cue];
+	const buffer = file ? buffers.get(file) : undefined;
 	if (buffer) {
-		playBuffer(ctx, buffer, levelOf(cue));
+		playBuffer(ctx, cue, buffer, levelOf(cue), skip);
 		return;
 	}
 
 	// Pas encore décodé : on émet le repli tout de suite et on charge pour la
 	// prochaine fois. Attendre le fichier ferait un son en retard sur le geste.
-	if (!missing.has(cue) && CUES[cue].file) {
-		void load(cue).then((loaded) => {
-			if (!loaded) return;
-		});
-	}
+	void load(file);
 	playTone(ctx, cue);
 }
 
-function playBuffer(ctx: AudioContext, buffer: AudioBuffer, gain: number) {
+/** Fondu d'un son coupé : inaudible comme tel, mais il évite un claquement. */
+const CUT_FADE = 0.03;
+
+/** Son en train de jouer, par signal : le même signal ne s'empile jamais sur lui-même. */
+const voices = new Map<Cue, { source: AudioBufferSourceNode; volume: GainNode }>();
+
+function playBuffer(ctx: AudioContext, cue: Cue, buffer: AudioBuffer, gain: number, skip = 0) {
+	const previous = voices.get(cue);
+	if (previous) {
+		const end = ctx.currentTime + CUT_FADE;
+		previous.volume.gain.setValueAtTime(previous.volume.gain.value, ctx.currentTime);
+		previous.volume.gain.linearRampToValueAtTime(0, end);
+		previous.source.stop(end);
+	}
 	const source = ctx.createBufferSource();
 	source.buffer = buffer;
 	const volume = ctx.createGain();
 	volume.gain.value = gain;
 	source.connect(volume).connect(ctx.destination);
-	source.start();
+	voices.set(cue, { source, volume });
+	source.onended = () => {
+		if (voices.get(cue)?.source === source) voices.delete(cue);
+	};
+	source.start(0, skip);
 }
 
 /**
@@ -216,6 +291,7 @@ export function setSoundEnabled(value: boolean) {
 		void context.close();
 		context = null;
 		buffers.clear();
+		voices.clear();
 	}
 }
 

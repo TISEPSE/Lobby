@@ -6,6 +6,7 @@
 import type { SelectOption, UserSettings, VolumeKey } from './types';
 import { padLayout, setLayoutChoice } from './gamepad';
 import { glyphPreview, type GlyphFamily } from './glyphs';
+import { SOUND_CHOICES, type SoundSlot } from './sound';
 
 export const VOLUME_KEYS: VolumeKey[] = ['volume_master', 'volume_menu', 'volume_alerts', 'volume_launch', 'volume_video'];
 
@@ -42,6 +43,8 @@ export const settings = $state<UserSettings>({
 	// Vrai hors application : un onglet de navigateur (captures) ne passe pas
 	// par la bienvenue. Dans l'application, c'est le disque qui décide.
 	onboarding_done: true,
+	sound_accept: SOUND_CHOICES.accept[0].id,
+	sound_move: SOUND_CHOICES.move[0].id,
 });
 
 export async function initSettings() {
@@ -65,6 +68,8 @@ export async function initSettings() {
 				settings.library_sort = loaded.library_sort || 'title';
 				for (const key of VOLUME_KEYS) settings[key] = clampVolume(loaded[key] ?? 100);
 				settings.onboarding_done = loaded.onboarding_done ?? false;
+				settings.sound_accept = loaded.sound_accept || settings.sound_accept;
+				settings.sound_move = loaded.sound_move || settings.sound_move;
 				return;
 			}
 		} catch (e) {
@@ -164,6 +169,12 @@ export function setHomeOrder(order: 'recent' | 'title') {
 /** Bienvenue terminée : elle ne se rouvre plus d'elle-même. */
 export function setOnboardingDone(done: boolean) {
 	settings.onboarding_done = done;
+	saveSettings();
+}
+
+/** Son choisi pour le clic ou le déplacement. */
+export function setSoundChoice(slot: SoundSlot, id: string) {
+	settings[slot === 'accept' ? 'sound_accept' : 'sound_move'] = id;
 	saveSettings();
 }
 

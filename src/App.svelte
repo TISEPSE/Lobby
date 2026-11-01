@@ -13,7 +13,17 @@
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads, downloads } from './lib/downloads.svelte.js';
-	import { play as playSound, setSoundEnabled as applySound, preloadSounds, setVolumes } from './lib/sound';
+	import {
+		play as playSound,
+		previewSound,
+		setSoundEnabled as applySound,
+		preloadSounds,
+		setVolumes,
+		soundChoice,
+		SOUND_CHOICES,
+		useSound,
+		type SoundSlot,
+	} from './lib/sound';
 	import Settings from './lib/Settings.svelte';
 	import Stats from './lib/Stats.svelte';
 	import Profile from './lib/Profile.svelte';
@@ -93,6 +103,7 @@
 		setHomeOrder,
 		setLibraryView,
 		setOnboardingDone,
+		setSoundChoice,
 		stepVolume,
 		setSteamGridKey,
 		addGameFolder,
@@ -230,6 +241,12 @@
 			alerts: settings.volume_alerts / 100,
 			launch: settings.volume_launch / 100,
 		});
+	});
+
+	// Les sons choisis dans les Réglages, dès le chargement et à chaque changement.
+	$effect(() => {
+		useSound('accept', settings.sound_accept);
+		useSound('move', settings.sound_move);
 	});
 
 	let clock = $state(formatClock());
@@ -668,6 +685,25 @@
 		};
 	}
 
+	/**
+	 * Le choix d'un son : parcourir la liste les fait entendre, A garde celui qu'on
+	 * écoute, B laisse tout comme avant.
+	 */
+	function openSoundMenu(slot: SoundSlot, anchor: HTMLElement | null) {
+		const current = settings[slot === 'accept' ? 'sound_accept' : 'sound_move'];
+		selectRequest = {
+			title: slot === 'accept' ? 'Son de validation' : 'Son de déplacement',
+			options: SOUND_CHOICES[slot].map(({ id, label }) => ({ id, label })),
+			value: soundChoice(slot, current).id,
+			anchor,
+			onPreview: (id) => void previewSound(slot, id),
+			onPick: (id) => {
+				setSoundChoice(slot, id);
+				void previewSound(slot, id);
+			},
+		};
+	}
+
 	/** Tous les packs de touches, avec leur aperçu. */
 	function openLayoutMenu(anchor: HTMLElement | null) {
 		selectRequest = {
@@ -904,13 +940,15 @@
 		}
 
 		// Un seul endroit décide du son : les écrans n'ont pas à y penser.
-		if (action === 'accept') playSound('accept');
+		// Dans la liste des sons, on entend le son écouté, pas celui de l'interface.
+		const listening = !!selectRequest?.onPreview;
+		if (action === 'accept' && !listening) playSound('accept');
 		else if (action === 'cancel') playSound('cancel');
 
 		// Une direction ne sonne que si la sélection a vraiment bougé : buter
 		// contre le bord d'une rangée ou descendre depuis une tuile de l'accueil
 		// ne doit rien faire entendre.
-		const move = action === 'up' || action === 'down' || action === 'left' || action === 'right';
+		const move = !listening && (action === 'up' || action === 'down' || action === 'left' || action === 'right');
 		const before = move ? selectionKey() : null;
 		dispatch(action);
 		if (move) {
@@ -1615,6 +1653,8 @@
 			onRestoreGame={restoreGame}
 			onPickLayout={openLayoutMenu}
 			soundEnabled={settings.sound_enabled}
+			sounds={{ accept: settings.sound_accept, move: settings.sound_move }}
+			onPickSound={openSoundMenu}
 			volumes={{
 				volume_master: settings.volume_master,
 				volume_menu: settings.volume_menu,
