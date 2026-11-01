@@ -677,7 +677,7 @@
 		border-radius: var(--settings-radius);
 		background: var(--settings-row-bg);
 		text-align: left;
-		transition: background var(--fast) var(--ease);
+		transition: background var(--normal) var(--ease);
 	}
 
 	.row:hover {

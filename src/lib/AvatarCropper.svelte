@@ -176,7 +176,7 @@
 		display: grid;
 		place-items: center;
 		background: var(--files-veil);
-		backdrop-filter: blur(var(--files-blur));
+		backdrop-filter: var(--files-backdrop);
 		animation: appear var(--fast) var(--ease) both;
 	}
 

@@ -164,7 +164,7 @@
 		font-size: 19px;
 		font-weight: 600;
 		text-align: left;
-		transition: background var(--fast) var(--ease);
+		transition: background var(--normal) var(--ease);
 	}
 
 	.option.selected {

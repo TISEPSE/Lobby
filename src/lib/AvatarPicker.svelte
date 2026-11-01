@@ -46,11 +46,10 @@
 	const cells = $derived([IMPORT, ...(current && !AVATARS.includes(current) ? [current] : []), ...AVATARS]);
 	const onImportCell = $derived(cells[focusedIndex] === IMPORT);
 
+	// On part d'« Importer » : un seul appui pour sa propre photo. La photo
+	// actuelle reste repérée par son contour.
 	$effect(() => {
-		if (open) {
-			const found = cells.indexOf(current);
-			focusedIndex = found >= 0 ? found : 0;
-		}
+		if (open) focusedIndex = 0;
 	});
 
 	function choose(cell: string) {
@@ -131,7 +130,7 @@
 		display: grid;
 		place-items: center;
 		background: var(--files-veil);
-		backdrop-filter: blur(var(--files-blur));
+		backdrop-filter: var(--files-backdrop);
 		animation: fade-in 180ms var(--ease);
 	}
 

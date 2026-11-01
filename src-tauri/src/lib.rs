@@ -265,6 +265,7 @@ mod images;
 mod played;
 mod secure_store;
 mod steam_library;
+mod steamgriddb;
 
 use scanner::ScannedGame;
 
@@ -472,6 +473,61 @@ fn load_user_settings(app: tauri::AppHandle) -> Result<UserSettings, String> {
     volume_video: default_volume(),
     onboarding_done: false,
   })
+}
+
+/// Ouvre la page de la clé SteamGridDB. Asynchrone : sous Windows, créer une
+/// fenêtre depuis une commande synchrone peut bloquer l'application.
+#[tauri::command]
+async fn steamgriddb_login(app: tauri::AppHandle) -> Result<(), String> {
+  steamgriddb::open_login(&app)
+}
+
+/// Batterie de la première manette XInput : `wired`, `empty`, `low`, `medium` ou
+/// `full`. XInput ne donne que ces niveaux, pas de pourcentage. `None` hors Windows,
+/// sans manette XInput, ou quand elle ne le dit pas.
+#[tauri::command]
+fn pad_battery() -> Option<&'static str> {
+  #[cfg(windows)]
+  {
+    use windows_sys::Win32::UI::Input::XboxController::{
+      XInputGetBatteryInformation, BATTERY_DEVTYPE_GAMEPAD, BATTERY_LEVEL_EMPTY, BATTERY_LEVEL_FULL, BATTERY_LEVEL_LOW,
+      BATTERY_TYPE_DISCONNECTED, BATTERY_TYPE_UNKNOWN, BATTERY_TYPE_WIRED, XINPUT_BATTERY_INFORMATION,
+    };
+    for user in 0..4 {
+      let mut battery = XINPUT_BATTERY_INFORMATION { BatteryType: 0, BatteryLevel: 0 };
+      // SAFETY: `battery` est une structure valide, écrite seulement pendant l'appel.
+      if unsafe { XInputGetBatteryInformation(user, BATTERY_DEVTYPE_GAMEPAD, &mut battery) } != 0 {
+        continue;
+      }
+      match battery.BatteryType {
+        BATTERY_TYPE_DISCONNECTED | BATTERY_TYPE_UNKNOWN => continue,
+        BATTERY_TYPE_WIRED => return Some("wired"),
+        _ => {}
+      }
+      return Some(match battery.BatteryLevel {
+        BATTERY_LEVEL_EMPTY => "empty",
+        BATTERY_LEVEL_LOW => "low",
+        BATTERY_LEVEL_FULL => "full",
+        _ => "medium",
+      });
+    }
+    None
+  }
+  #[cfg(not(windows))]
+  {
+    None
+  }
+}
+
+#[cfg(test)]
+mod pad_tests {
+  /// `cargo test --lib dump_pad_battery -- --ignored --nocapture` montre ce que
+  /// XInput dit de la manette branchée.
+  #[test]
+  #[ignore]
+  fn dump_pad_battery() {
+    println!("batterie : {:?}", super::pad_battery());
+  }
 }
 
 /// Le dossier Images de l'utilisateur : le départ de l'import d'une photo.
@@ -2101,6 +2157,8 @@ pub fn run() {
       is_running,
       running_programs,
       played_elsewhere,
+      steamgriddb_login,
+      pad_battery,
       pictures_dir,
       read_image,
       save_avatar,

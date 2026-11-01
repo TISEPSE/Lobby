@@ -208,7 +208,7 @@
 	   ne doit plus deviner ce qu'il y a derrière. Fond flouté et très sombre,
 	   panneau et lignes opaques. */
 	--files-veil: rgba(2, 3, 5, 0.86);
-	--files-blur: 18px;
+	--files-backdrop: blur(18px);
 	--files-panel: #15171c;
 	--files-row-bg: #22252c;
 	--files-row-focus: #2f333c;
@@ -315,6 +315,13 @@ button {
 	color: inherit;
 	border: none;
 	background: none;
+}
+
+/* Sans carte graphique, pas de flou (`main.ts`) : il diviserait les images par six.
+   Le fond plus sombre garde la fenêtre aussi lisible. */
+:root[data-no-blur] {
+	--files-veil: rgba(2, 3, 5, 0.94);
+	--files-backdrop: none;
 }
 
 /* Halo de sélection, unique dans toute l'interface. */

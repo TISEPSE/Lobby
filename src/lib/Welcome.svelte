@@ -436,7 +436,7 @@
 			</div>
 
 			<div class="rows" bind:this={list} style="--row: {current}">
-				<span class="glider focus-ring" class:primary={rows[current]?.primary}></span>
+				<span class="glider focus-ring"></span>
 				{#each rows as entry, i (entry.id)}
 					<button
 						type="button"
@@ -744,17 +744,11 @@
 		height: var(--welcome-row);
 		--glide-y: calc(var(--row) * (var(--welcome-row) + var(--welcome-row-gap)));
 		border-radius: var(--welcome-radius);
-		background: var(--surface-strong);
 	}
 
-	/* Sur le bouton de l'étape, le cadre porte lui-même l'aplat : un seul bloc,
-	   sans anneau décollé autour. */
-	.glider.primary {
-		background: var(--accent);
-	}
-
-	/* C'est le cadre qui marque la sélection : la ligne le laisse transparaître.
-	   Pas d'`opacity` ni de `transform` ici, elle repasserait sous lui. */
+	/* Le cadre ne glisse qu'avec son contour, sans fond : il passe au-dessus des
+	   lignes, et un voile clair aurait éclairci le vert du bouton. Chaque ligne se
+	   colore elle-même, sur place. */
 	.row {
 		flex: none;
 		display: flex;
@@ -766,7 +760,10 @@
 		border-radius: var(--welcome-radius);
 		background: var(--settings-row-bg);
 		text-align: left;
-		transition: background var(--fast) var(--ease);
+		/* À la vitesse du cadre : la couleur arrive avec lui, ni avant ni après. */
+		transition:
+			background var(--normal) var(--ease),
+			color var(--normal) var(--ease);
 	}
 
 	.row:hover {
@@ -774,7 +771,7 @@
 	}
 
 	.row.selected {
-		background: transparent;
+		background: var(--settings-row-hover);
 	}
 
 	/* Le bouton de l'étape porte l'accent, sélectionné ou non : c'est la suite. */
@@ -783,8 +780,10 @@
 		background: var(--accent-soft);
 	}
 
+	/* Le vert reste sur le bouton et se fond sur place : posé sur le cadre, un bloc
+	   plein traversait les lignes et le texte virait au sombre avant son arrivée. */
 	.row.primary.selected {
-		background: transparent;
+		background: var(--accent);
 		color: var(--on-accent);
 	}
 

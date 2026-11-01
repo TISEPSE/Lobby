@@ -9,6 +9,7 @@
 	import Detail from './lib/Detail.svelte';
 	import HelpBar from './lib/HelpBar.svelte';
 	import QuickMenu from './lib/QuickMenu.svelte';
+	import SidePanel from './lib/SidePanel.svelte';
 	import DownloadBar from './lib/DownloadBar.svelte';
 	import ScreenSaver from './lib/ScreenSaver.svelte';
 	import { watchDownloads, downloads } from './lib/downloads.svelte.js';
@@ -51,6 +52,7 @@
 		logoutEpic,
 		refreshEpicAccount,
 	} from './lib/epicAccount.svelte.js';
+	import { checkSteamGridKey, initSteamGrid, loginSteamGrid } from './lib/steamGrid.svelte.js';
 	import { gameProcesses, play, watchRunningGames } from './lib/launcher';
 	import {
 		games,
@@ -147,6 +149,12 @@
 	/** Saisie du pseudo, ouverte depuis le Profil (A sur le pseudo). */
 	let nameKeyboardOpen = $state(false);
 	let nameKeyboard: { handleAction: (action: Action) => void } | null = $state(null);
+	/** Saisie de la clé SteamGridDB, si la connexion ne la trouve pas. */
+	let keyKeyboardOpen = $state(params.get('modal') === 'keyboard');
+	let keyKeyboard: { handleAction: (action: Action) => void } | null = $state(null);
+	/** Panneau de droite (bouton Menu). `?side=1` l'ouvre (capture). */
+	let sidePanelOpen = $state(params.get('side') === '1');
+	let sideComponent: { show: () => Promise<void> } | null = $state(null);
 	/** Fiche : boutons de la présentation, ou grille des médias en dessous. */
 	let detailZone = $state<'actions' | 'media'>(params.get('media') ? 'media' : 'actions');
 	let mediaIndex = $state(Number(params.get('slide') ?? 0));
@@ -286,8 +294,6 @@
 
 	let settingsComponent: {
 		handleAction: (action: Action) => void;
-		isKeyboardActive?: () => boolean;
-		checkSteamGridKey?: (key: string) => Promise<string>;
 		selectionKey?: () => string | null;
 		hints?: () => [GlyphButton, string][];
 	} | null = $state(null);
@@ -326,6 +332,33 @@
 
 	function connectEpic() {
 		loginEpic().catch((e) => notify(`Connexion Epic impossible : ${e}`, false));
+	}
+
+	async function disconnectSteam() {
+		await forgetSteamLibrary();
+		notify('Compte Steam déconnecté : seuls les jeux installés restent.');
+	}
+
+	async function disconnectEpic() {
+		await logoutEpic();
+		notify('Compte Epic Games déconnecté.');
+	}
+
+	function connectSteamGrid() {
+		loginSteamGrid().catch((e) => notify(`Connexion SteamGridDB impossible : ${e}`, false));
+	}
+
+	/**
+	 * Enregistre la clé, puis l'essaie tout de suite : une faute de copie se voit
+	 * ici plutôt qu'au prochain jeu sans jaquette.
+	 */
+	async function saveSteamGridKey(key: string) {
+		setSteamGridKey(key);
+		if (!key) return notify('Clé SteamGridDB retirée.');
+		const result = await checkSteamGridKey(key);
+		if (result === 'ok') notify('Clé SteamGridDB valide.');
+		else if (result === 'unauthorized') notify('Clé refusée par SteamGridDB : vérifie la copie.', false);
+		else notify('Clé enregistrée, mais SteamGridDB est injoignable.', false);
 	}
 
 	async function toggleAutostart() {
@@ -727,6 +760,12 @@
 		playSound('section');
 	}
 
+	function openSidePanel() {
+		void sideComponent?.show();
+		sidePanelOpen = true;
+		playSound('section');
+	}
+
 	async function powerAction(action: PowerAction) {
 		const outcome = await runPower(action);
 		notify(outcome);
@@ -889,9 +928,11 @@
 		if (selectRequest) return selectComponent?.selectionKey() ?? null;
 		if (cropPath || avatarPickerOpen || scanModalOpen || artPickerOpen) return null;
 		if (quickOpen) return quickComponent?.selectionKey() ?? null;
+		// Le panneau de droite n'a rien à parcourir : une direction ne sonne pas.
+		if (sidePanelOpen) return '';
 		if (filePickerOpen) return filePickerComponent?.selectionKey() ?? null;
 		if (searchOpen) return searchComponent?.selectionKey?.() ?? null;
-		if (nameKeyboardOpen) return null;
+		if (keyboardOpen) return null;
 		if (welcomeOpen) return welcomeComponent?.selectionKey() ?? null;
 		const settingsKey = section === 'settings' ? (settingsComponent?.selectionKey?.() ?? null) : '';
 		if (settingsKey === null) return null;
@@ -929,19 +970,23 @@
 		if (cropPath) return cropComponent?.handleAction(action);
 		if (gameMenuOpen) return handleGameMenu(action);
 		if (quickOpen) return quickComponent?.handleAction(action);
+		if (sidePanelOpen) {
+			if (action === 'menu' || action === 'cancel') sidePanelOpen = false;
+			return;
+		}
 		if (avatarPickerOpen) return avatarPickerComponent?.handleAction(action);
 		if (scanModalOpen) return scanModalComponent?.handleAction(action);
 		if (artPickerOpen) return artPickerComponent?.handleAction(action);
 		if (filePickerOpen) return filePickerComponent?.handleAction(action);
 		if (searchOpen) return searchComponent?.handleAction(action);
 		if (nameKeyboardOpen) return nameKeyboard?.handleAction(action);
+		if (keyKeyboardOpen) return keyKeyboard?.handleAction(action);
 		// Ses fenêtres (pseudo, photo, dossier) d'abord, puis la bienvenue, seule
 		// à l'écran : ni menu, ni recherche, ni dock pendant ce temps.
 		if (welcomeOpen) return welcomeComponent?.handleAction(action);
-		if (section === 'settings' && settingsComponent?.isKeyboardActive?.()) {
-			return settingsComponent.handleAction(action);
-		}
-		if (action === 'menu') return openQuickMenu();
+		// Les deux petits boutons du centre : chacun ouvre le panneau de son côté.
+		if (action === 'view') return openQuickMenu();
+		if (action === 'menu') return openSidePanel();
 		// Y : la recherche, depuis n'importe quel écran (hors fenêtres).
 		if (action === 'search' && !menuOptionsOpen && !viewerOpen) {
 			return openSearch();
@@ -1209,6 +1254,7 @@
 			else if (message === 'connexion annulée') notify('Connexion Epic annulée.');
 			else notify(`Connexion Epic impossible : ${message}`, false);
 		});
+		void initSteamGrid(saveSteamGridKey, (message) => notify(`SteamGridDB : ${message}.`));
 	}
 
 	onMount(() => {
@@ -1265,6 +1311,7 @@
 		}
 		// Capture : `?launch=demo` montre l'écran de lancement du jeu sélectionné.
 		if (params.get('launch') === 'demo') launching = selected ?? null;
+		if (sidePanelOpen) void sideComponent?.show();
 		window.addEventListener('error', onError);
 		window.addEventListener('unhandledrejection', onRejection);
 		const timer = setInterval(() => {
@@ -1384,10 +1431,7 @@
 		if (id !== 'favorite') menuOptionsOpen = false;
 	}
 
-	const keyboardOpen = $derived(
-		nameKeyboardOpen ||
-			(section === 'settings' && (settingsComponent?.isKeyboardActive?.() ?? false))
-	);
+	const keyboardOpen = $derived(nameKeyboardOpen || keyKeyboardOpen);
 
 	/** Aide du bas : ce que font les boutons sur l'écran ou la fenêtre du moment. */
 	const help = $derived.by(() => {
@@ -1404,6 +1448,8 @@
 		if (gameMenuOpen) return list();
 		// Le menu rapide affiche ses propres touches.
 		if (quickOpen) return list();
+		// Le panneau de droite aussi.
+		if (sidePanelOpen) return list();
 		if (avatarPickerOpen) return list(['a', 'Choisir'], ['b', 'Fermer']);
 		if (artPickerOpen) return list(['a', 'Choisir cette image'], ['b', 'Fermer']);
 		// L'explorateur affiche ses propres touches.
@@ -1436,25 +1482,27 @@
 				['a', 'Ouvrir'],
 				['x', 'Options'],
 				['y', 'Recherche'],
-				['menu', 'Menu'],
+				['view', 'Menu'],
+				['menu', 'Panneau'],
 				['b', 'Accueil']
 			);
 		}
 		if (section === 'profile' && statsOpen) return list(['a', 'Ouvrir'], ['r2', 'Période'], ['b', 'Retour']);
-		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['menu', 'Menu'], ['b', 'Accueil']);
-		if (section === 'settings') return list(...(settingsComponent?.hints?.() ?? []), ['menu', 'Menu']);
+		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau'], ['b', 'Accueil']);
+		if (section === 'settings') return list(...(settingsComponent?.hints?.() ?? []), ['view', 'Menu'], ['menu', 'Panneau']);
 		if (homeZone === 'row' && homeGames.length === 0 && !resumeGame) {
-			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche'], ['menu', 'Menu']);
+			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau']);
 		}
 		if (homeZone === 'panels') {
 			const what = panelIndex === 0 ? 'Bibliothèque' : panelIndex === 1 ? 'Statistiques' : 'Voir le jeu';
-			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche'], ['menu', 'Menu']);
+			return list(['a', what], ['dpad', 'Jeux'], ['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau']);
 		}
 		return list(
 			['a', homeIndex < 0 ? 'Reprendre' : 'Ouvrir'],
 			['x', homeIndex < 0 && isRunning ? 'Quitter le jeu' : 'Options'],
 			['y', 'Recherche'],
-			['menu', 'Menu']
+			['view', 'Menu'],
+			['menu', 'Panneau']
 		);
 	});
 </script>
@@ -1526,10 +1574,7 @@
 			epicPending={epicAccount.pending}
 			steamLibraryCount={Object.keys(steamAccount.owned).length}
 			onSteamLibraryLogin={connectSteam}
-			onSteamLibraryForget={async () => {
-				await forgetSteamLibrary();
-				notify('Compte Steam déconnecté : seuls les jeux installés restent.');
-			}}
+			onSteamLibraryForget={disconnectSteam}
 			onEditName={() => (nameKeyboardOpen = true)}
 			onChangeAvatar={() => (avatarPickerOpen = true)}
 			onEpicLogin={connectEpic}
@@ -1537,10 +1582,7 @@
 				await refreshEpicAccount();
 				notify(epicAccount.error ? `Epic : ${epicAccount.error}` : 'Temps de jeu Epic actualisé.', !epicAccount.error);
 			}}
-			onEpicLogout={async () => {
-				await logoutEpic();
-				notify('Compte Epic Games déconnecté.');
-			}}
+			onEpicLogout={disconnectEpic}
 			onOpenStats={() => transition(() => (statsOpen = true))}
 			onBack={() => goToSection('home')}
 		/>
@@ -1594,7 +1636,6 @@
 				notify(`Accueil trié par ${HOME_ORDER_LABELS[next].toLowerCase()}.`);
 			}}
 			screensaverMinutes={settings.screensaver_minutes}
-			steamGridKey={settings.steamgriddb_key}
 			initialCategory={params.get('cat') ?? 'games'}
 			initialRow={Number(params.get('row') ?? -1)}
 			{fullscreen}
@@ -1602,19 +1643,12 @@
 			{autostart}
 			onToggleAutostart={toggleAutostart}
 			onRestartWelcome={restartWelcome}
-			initialKeyboard={params.get('modal') === 'keyboard'}
-			onChangeSteamGridKey={async (key) => {
-				setSteamGridKey(key);
-				if (!key) return notify('Clé SteamGridDB retirée.');
-
-				// La clé est essayée tout de suite : une faute de copie se voit
-				// ici plutôt qu'au prochain jeu sans jaquette.
-				const result = await settingsComponent?.checkSteamGridKey?.(key);
-				if (result === 'ok') notify('Clé SteamGridDB valide.');
-				else if (result === 'unauthorized') {
-					notify('Clé refusée par SteamGridDB : vérifie la copie.', false);
-				} else notify('Clé enregistrée, mais SteamGridDB est injoignable.', false);
-			}}
+			onConnectSteam={connectSteam}
+			onForgetSteam={disconnectSteam}
+			onConnectEpic={connectEpic}
+			onLogoutEpic={disconnectEpic}
+			onConnectSteamGrid={connectSteamGrid}
+			onEditSteamGridKey={() => (keyKeyboardOpen = true)}
 			onCycleScreensaver={() => {
 				const steps = [0, 5, 10, 20];
 				const at = steps.indexOf(settings.screensaver_minutes);
@@ -1658,6 +1692,20 @@
 		notify(`Pseudo mis à jour : ${name}`);
 	}}
 	onClose={() => (nameKeyboardOpen = false)}
+/>
+
+<VirtualKeyboard
+	bind:this={keyKeyboard}
+	open={keyKeyboardOpen}
+	title="Clé SteamGridDB"
+	subtitle="Colle ta clé (steamgriddb.com > Preferences > API). Elle reste sur cette machine."
+	initialValue={settings.steamgriddb_key}
+	maxLength={64}
+	onConfirm={(value) => {
+		keyKeyboardOpen = false;
+		void saveSteamGridKey(value.trim());
+	}}
+	onClose={() => (keyKeyboardOpen = false)}
 />
 
 {#if opened && viewerOpen && detailMedia.length > 0}
@@ -1706,6 +1754,8 @@
 	onPickLayout={openLayoutMenu}
 	onPower={powerAction}
 />
+
+<SidePanel bind:this={sideComponent} open={sidePanelOpen} {clock} onClose={() => (sidePanelOpen = false)} />
 
 <AvatarPicker
 	bind:this={avatarPickerComponent}
@@ -1798,6 +1848,8 @@
 		onUseSteamProfile={useSteamProfile}
 		onSteamLogin={connectSteam}
 		onEpicLogin={connectEpic}
+		onSteamGridLogin={connectSteamGrid}
+		onEditSteamGridKey={() => (keyKeyboardOpen = true)}
 		onScan={() => {
 			welcomeScanned = true;
 			void runSync(true);

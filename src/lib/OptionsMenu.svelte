@@ -181,7 +181,7 @@
 		background: var(--xbox-row);
 		animation: row-in var(--normal) var(--ease) backwards;
 		animation-delay: calc(var(--i) * 30ms);
-		transition: background var(--fast) var(--ease);
+		transition: background var(--normal) var(--ease);
 	}
 
 	.row.selected {
