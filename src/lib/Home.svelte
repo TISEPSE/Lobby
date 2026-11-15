@@ -8,6 +8,12 @@
 	import Glyph from './Glyph.svelte';
 	import type { DownloadStatus } from './downloads.svelte.js';
 	import type { SessionRecord } from './types';
+	import { fly } from 'svelte/transition';
+	import { cubicOut } from 'svelte/easing';
+
+	/** Entrée d'un jeu qui arrive (durée de `--normal`, glissement léger). */
+	const ARRIVE = 260;
+	const ARRIVE_SHIFT = 14;
 
 	/**
 	 * Accueil : artwork plein écran, rangée horizontale de jaquettes. La tuile
@@ -28,6 +34,8 @@
 		downloads = [],
 		focusedPanel = -1,
 		steamSyncedAt = 0,
+		ghosts = 0,
+		arriving = false,
 	}: {
 		games: Game[];
 		index: number;
@@ -47,6 +55,13 @@
 		/** Panneau sélectionné (0 à 2), ou -1 quand la sélection est dans la rangée. */
 		focusedPanel?: number;
 		steamSyncedAt?: number;
+		/**
+		 * Premier lancement : tuiles fantômes à la suite des jeux déjà arrivés,
+		 * le temps de chercher les autres. Elles ne se sélectionnent pas.
+		 */
+		ghosts?: number;
+		/** Les jeux sont en train d'arriver : chacun entre en glissant. */
+		arriving?: boolean;
 	} = $props();
 
 	const onResume = $derived(index < 0 && resume !== null);
@@ -80,9 +95,13 @@
 			<h1>{selected.title}</h1>
 			<p class="facts">{facts(selected)}</p>
 		</div>
+	{:else if ghosts > 0}
+		<div class="headline">
+			<p class="searching"><span class="spinner active"></span>Recherche de tes jeux…</p>
+		</div>
 	{/if}
 
-	{#if games.length === 0 && !resume}
+	{#if games.length === 0 && !resume && ghosts === 0}
 		<!-- PC neuf : aucun jeu encore. A mène à la détection (Réglages → Jeux). -->
 		<div class="empty" class:selected={focused}>
 			<span class="empty-title">Aucun jeu pour l'instant</span>
@@ -118,10 +137,14 @@
 				class:selected={focused && i === index}
 				style="--i: {i}"
 				aria-current={i === index}
+				in:fly={{ y: ARRIVE_SHIFT, duration: arriving ? ARRIVE : 0, easing: cubicOut }}
 			>
 				<Cover {game} />
 				<span class="caption">{game.title}</span>
 			</button>
+		{/each}
+		{#each { length: ghosts } as _, i}
+			<span class="ghost" style="--i: {i}"></span>
 		{/each}
 	</div>
 
@@ -158,6 +181,22 @@
 		margin: 8px 0 0;
 		font-size: 19px;
 		color: var(--text-dim);
+	}
+
+	.searching {
+		display: flex;
+		align-items: center;
+		gap: 16px;
+		margin: 0;
+		font-size: var(--ghost-text);
+		font-weight: 700;
+	}
+
+	/* Fantôme : la place d'une jaquette (le reste vient de `.ghost`, app.css). */
+	.ghost {
+		flex: 0 0 var(--tile);
+		width: var(--tile);
+		aspect-ratio: 2 / 3;
 	}
 
 	@keyframes rise {

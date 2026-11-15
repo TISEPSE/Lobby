@@ -81,6 +81,7 @@
 		isHidden,
 		restoreGame,
 		syncLibrary,
+		revealGames,
 		setGameExecutable,
 		FILTERS,
 		SORTS,
@@ -619,7 +620,8 @@
 		}
 		// Aucun jeu (PC neuf) : A ouvre Réglages → Jeux, où se lance la détection.
 		if (homeGames.length === 0 && !resumeGame) {
-			if (action === 'accept') leaveFor('settings');
+			// Pendant la recherche du premier lancement, il n'y a rien à détecter de plus.
+			if (action === 'accept' && arriving === null) leaveFor('settings');
 			return;
 		}
 		if (action === 'left') homeIndex = Math.max(resumeGame ? -1 : 0, homeIndex - 1);
@@ -812,6 +814,36 @@
 	let syncing = $state(false);
 
 	/**
+	 * Premier lancement : la bibliothèque est vide le temps de chercher les jeux,
+	 * et l'écran restait vide lui aussi — on croyait que rien ne marchait. Des
+	 * tuiles fantômes tiennent la place, puis les jeux les remplacent un par un.
+	 * `null` : rien à montrer ; `-1` : recherche en cours ; sinon, le nombre de
+	 * jeux qui restent à faire apparaître. Une bibliothèque déjà remplie ne
+	 * montre rien : la recherche du démarrage y reste discrète.
+	 */
+	let arriving = $state<number | null>(null);
+	/** De quoi remplir la rangée de l'accueil. */
+	const HOME_GHOSTS = 7;
+
+	/** Fantômes à dessiner, pour un écran qui a `room` places libres. */
+	function ghostsFor(room: number): number {
+		if (arriving === null) return 0;
+		return Math.max(0, arriving < 0 ? room : Math.min(arriving, room));
+	}
+	const homeGhosts = $derived(ghostsFor(HOME_GHOSTS - homeGames.length - (resumeGame ? 1 : 0)));
+	const libraryGhosts = $derived(ghostsFor(2 * COLUMNS - libraryGames.length));
+
+	// `?loading=demo` : le premier lancement, rejoué avec les jeux de démonstration.
+	if (params.get('loading') === 'demo' && !(window as any).__TAURI_INTERNALS__) {
+		const demo = games.splice(0, games.length);
+		arriving = -1;
+		setTimeout(async () => {
+			await revealGames(demo, { order: settings.home_order, onRemaining: (left) => (arriving = left) });
+			arriving = null;
+		}, 2500);
+	}
+
+	/**
 	 * Resynchronise la bibliothèque avec le disque : nouveaux jeux ajoutés,
 	 * dossiers déplacés suivis, jeux disparus retirés. Sans fenêtre de
 	 * validation — c'est un geste rapide, le bilan s'affiche en bas.
@@ -824,10 +856,22 @@
 	 */
 	async function scanAndSync(): Promise<string> {
 		const { invoke } = await import('@tauri-apps/api/core');
-		const scanned = await invoke<Game[]>('scan_installed_games', {
-			customFolders: settings.game_folders,
-		});
-		const report = await syncLibrary(scanned, (paths) => invoke<boolean[]>('paths_exist', { paths }));
+		// Bibliothèque vide : c'est le premier lancement, on montre qu'on cherche.
+		const first = games.length === 0;
+		if (first) arriving = -1;
+		let report;
+		try {
+			const scanned = await invoke<Game[]>('scan_installed_games', {
+				customFolders: settings.game_folders,
+			});
+			report = await syncLibrary(
+				scanned,
+				(paths) => invoke<boolean[]>('paths_exist', { paths }),
+				first ? { order: settings.home_order, onRemaining: (left) => (arriving = left) } : undefined
+			);
+		} finally {
+			if (first) arriving = null;
+		}
 		return [
 			report.added && `${report.added} ajouté${report.added > 1 ? 's' : ''}`,
 			report.updated && `${report.updated} mis à jour`,
@@ -1529,6 +1573,7 @@
 		if (section === 'profile') return list(['a', 'Modifier'], ['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau'], ['b', 'Accueil']);
 		if (section === 'settings') return list(...(settingsComponent?.hints?.() ?? []), ['view', 'Menu'], ['menu', 'Panneau']);
 		if (homeZone === 'row' && homeGames.length === 0 && !resumeGame) {
+			if (arriving !== null) return list(['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau']);
 			return list(['a', 'Détecter mes jeux'], ['y', 'Recherche'], ['view', 'Menu'], ['menu', 'Panneau']);
 		}
 		if (homeZone === 'panels') {
@@ -1586,6 +1631,8 @@
 			downloads={downloads.list}
 			focusedPanel={homeZone === 'panels' ? panelIndex : -1}
 			steamSyncedAt={steamLibrary.fetchedAt}
+			ghosts={homeGhosts}
+			arriving={arriving !== null}
 		/>
 	{:else if section === 'library'}
 		<Library
@@ -1593,6 +1640,8 @@
 			games={libraryGames}
 			index={libraryIndex}
 			{syncing}
+			ghosts={libraryGhosts}
+			arriving={arriving !== null}
 			zone={libraryZone}
 			{headerIndex}
 			{filter}

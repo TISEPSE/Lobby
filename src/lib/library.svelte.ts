@@ -260,22 +260,24 @@ export interface SyncReport {
  */
 export async function syncLibrary(
 	scanned: Game[],
-	exists: (paths: string[]) => Promise<boolean[]>
+	exists: (paths: string[]) => Promise<boolean[]>,
+	reveal?: Reveal
 ): Promise<SyncReport> {
 	const report: SyncReport = { added: 0, updated: 0, removed: 0 };
 	const matched = new Set<string>();
+	// Les nouveaux jeux attendent la fin : ils entrent d'un bloc, ou un par un.
+	const fresh: Game[] = [];
 
 	for (const found of scanned) {
 		if (isHidden(found)) continue;
 		const key = cleanTitle(found.title);
-		const known = games.find(
-			(g) =>
-				g.id === found.id ||
-				(found.appid && g.appid === found.appid) ||
-				(key && cleanTitle(g.title) === key)
-		);
+		const same = (g: Game) =>
+			g.id === found.id ||
+			(found.appid && g.appid === found.appid) ||
+			(key && cleanTitle(g.title) === key);
+		const known = games.find(same) ?? fresh.find(same);
 		if (!known) {
-			games.push({ ...found });
+			fresh.push({ ...found });
 			matched.add(found.id);
 			report.added += 1;
 			continue;
@@ -318,8 +320,40 @@ export async function syncLibrary(
 		games.push(...kept);
 	}
 
+	if (reveal) await revealGames(fresh, reveal);
+	else games.push(...fresh);
+
 	if (report.added || report.updated || report.removed) await saveLibrary();
 	return report;
+}
+
+/** Arrivée des jeux un par un : l'ordre de la rangée, et le compte à rebours. */
+export interface Reveal {
+	order: HomeOrder;
+	onRemaining: (remaining: number) => void;
+}
+
+/** Un jeu de plus toutes les 70 ms… */
+const REVEAL_STEP = 70;
+/** … mais jamais plus de 2,5 s en tout : au-delà, ils arrivent par groupes. */
+const REVEAL_MAX = 2500;
+
+/**
+ * Fait entrer des jeux dans la bibliothèque **un par un**, au lieu de les
+ * faire surgir d'un coup : au premier lancement, chacun remplace une tuile
+ * fantôme. Ils arrivent dans l'ordre de la rangée d'accueil, pour se poser à
+ * la suite du précédent plutôt que de s'intercaler.
+ */
+export async function revealGames(fresh: Game[], reveal: Reveal) {
+	const queue = [...fresh].sort(reveal.order === 'recent' ? byRecent : byTitle);
+	const ticks = Math.min(queue.length, Math.floor(REVEAL_MAX / REVEAL_STEP));
+	const each = Math.ceil(queue.length / Math.max(1, ticks));
+	reveal.onRemaining(queue.length);
+	while (queue.length > 0) {
+		await new Promise((done) => setTimeout(done, REVEAL_STEP));
+		games.push(...queue.splice(0, each));
+		reveal.onRemaining(queue.length);
+	}
 }
 
 /**

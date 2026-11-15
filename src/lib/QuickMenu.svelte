@@ -212,7 +212,7 @@
 
 <section class="panel" class:open aria-hidden={!open}>
 	<nav class="tabs" class:locked={confirming}>
-		<Glyph button="l1" size="var(--dock-glyph)" />
+		<Glyph button="l1" size="var(--quick-glyph)" />
 		<div class="tab-list" style="--tab: {tab}; --tabs: {TABS.length}">
 			<span class="tab-pill"></span>
 			{#each TABS as entry, i (entry.label)}
@@ -227,7 +227,7 @@
 				</button>
 			{/each}
 		</div>
-		<Glyph button="r1" size="var(--dock-glyph)" />
+		<Glyph button="r1" size="var(--quick-glyph)" />
 	</nav>
 
 	<header>
@@ -332,7 +332,8 @@
 	.tabs {
 		display: flex;
 		align-items: center;
-		gap: 6px;
+		justify-content: center;
+		gap: 10px;
 		padding: 14px 14px 0;
 		transition: opacity var(--fast) var(--ease);
 	}
@@ -346,9 +347,9 @@
 	   l'autre : le contour reste réservé à la sélection, dans la liste. */
 	.tab-list {
 		position: relative;
-		flex: 1;
+		flex: none;
 		display: grid;
-		grid-template-columns: repeat(var(--tabs), 1fr);
+		grid-template-columns: repeat(var(--tabs), var(--quick-tab-width));
 		isolation: isolate;
 	}
 

@@ -112,11 +112,24 @@
 	--cover-plain-pad: 14px;
 	--quick-width: 480px;
 	--quick-inset: 24px;
-	--quick-tab: 52px;
+	/* Onglets à la taille des glyphes LB / RB qui les encadrent : étirés sur
+	   toute la largeur (91 × 52 px), ils les faisaient paraître minuscules. */
+	--quick-tab: 44px;
+	--quick-tab-width: 64px;
+	--quick-glyph: 44px;
 	--quick-icon: 24px;
 	--quick-avatar: 64px;
 	--quick-title: 28px;
 	--quick-veil: rgba(0, 0, 0, 0.55);
+	/* Tuiles fantômes et rond de chargement (premier lancement). */
+	--ghost-bg: rgba(255, 255, 255, 0.09);
+	--ghost-line: rgba(255, 255, 255, 0.07);
+	--ghost-duration: 1400ms;
+	--ghost-stagger: 140ms;
+	--ghost-text: 30px;
+	--spinner-size: 26px;
+	--spinner-line: 4px;
+	--spinner-turn: 800ms;
 	/* Panneau de droite (`SidePanel.svelte`). */
 	--side-width: 400px;
 	--side-gap: 14px;
@@ -322,6 +335,45 @@ button {
 :root[data-no-blur] {
 	--files-veil: rgba(2, 3, 5, 0.94);
 	--files-backdrop: none;
+}
+
+/* Rond qui tourne : quelque chose se charge. Éteint, il attend. */
+.spinner {
+	flex: none;
+	width: var(--spinner-size);
+	height: var(--spinner-size);
+	border-radius: 50%;
+	border: var(--spinner-line) solid var(--surface-strong);
+	opacity: 0.4;
+}
+
+.spinner.active {
+	border-top-color: var(--accent);
+	opacity: 1;
+	animation: spinner-turn var(--spinner-turn) linear infinite;
+}
+
+@keyframes spinner-turn {
+	to {
+		transform: rotate(360deg);
+	}
+}
+
+/* Tuile fantôme : la place d'un jeu qu'on cherche encore (premier lancement).
+   Une pulsation d'opacité qui court d'une tuile à l'autre (`--i`), pas un
+   dégradé qui défile : l'opacité reste fluide sans carte graphique. */
+.ghost {
+	border-radius: var(--radius);
+	background: var(--ghost-bg);
+	border: 1px solid var(--ghost-line);
+	animation: ghost-pulse var(--ghost-duration) ease-in-out infinite;
+	animation-delay: calc(var(--i, 0) * var(--ghost-stagger));
+}
+
+@keyframes ghost-pulse {
+	50% {
+		opacity: 0.35;
+	}
 }
 
 /* Halo de sélection, unique dans toute l'interface. */

@@ -2,6 +2,10 @@
 	import type { Game } from './types';
 	import Cover from './Cover.svelte';
 	import Glyph from './Glyph.svelte';
+	import { fade } from 'svelte/transition';
+
+	/** Fondu d'un jeu qui arrive (durée de `--normal`). */
+	const ARRIVE = 260;
 	import { FILTERS, FILTER_LABELS, SORT_LABELS, isFavorite, type Filter, type Sort } from './library.svelte.js';
 
 	/**
@@ -17,6 +21,8 @@
 		columns,
 		focused = true,
 		syncing = false,
+		ghosts = 0,
+		arriving = false,
 		zone = 'grid',
 		headerIndex = 0,
 	}: {
@@ -29,6 +35,10 @@
 		focused?: boolean;
 		/** Synchronisation avec le disque en cours (touche X). */
 		syncing?: boolean;
+		/** Premier lancement : tuiles fantômes le temps de chercher les jeux. */
+		ghosts?: number;
+		/** Les jeux sont en train d'arriver : chacun entre en fondu. */
+		arriving?: boolean;
 		/** Grille de jaquettes, ou boutons de l'en-tête (Trier, Synchroniser). */
 		zone?: 'grid' | 'header';
 		/** Bouton sélectionné dans l'en-tête : 0 = Trier, 1 = Synchroniser. */
@@ -136,7 +146,11 @@
 			{/each}
 			<span class="trigger"><Glyph button="r2" size="32px" /></span>
 		</div>
-		<p class="count">{games.length} jeux</p>
+		{#if ghosts > 0}
+			<p class="count searching"><span class="spinner active"></span>Recherche de tes jeux…</p>
+		{:else}
+			<p class="count">{games.length} jeux</p>
+		{/if}
 		<!-- De vrais boutons, atteints en montant depuis la première rangée :
 		     X reste aux options du jeu sélectionné, comme sur l'accueil. -->
 		<div class="actions">
@@ -163,6 +177,7 @@
 					class="tile"
 					class:selected={focused && zone === 'grid' && i === index}
 					class:absent={game.installed === false}
+					in:fade={{ duration: arriving ? ARRIVE : 0 }}
 				>
 					<Cover {game} near={near(i)} />
 					{#if game.installed === false}
@@ -175,6 +190,9 @@
 					<span class="caption">{game.title}</span>
 				</button>
 			{/each}
+			{#each { length: ghosts } as _, i}
+				<span class="ghost" style="--i: {i}"></span>
+			{/each}
 			{#if hasMore}
 				<!-- Lot suivant : il arrive quand la sélection approche du bas. -->
 				<div class="more">
@@ -185,7 +203,7 @@
 		</div>
 	</div>
 
-	{#if games.length === 0}
+	{#if games.length === 0 && ghosts === 0}
 		<p class="empty">Aucun jeu dans ce filtre.</p>
 	{/if}
 </section>
@@ -335,18 +353,15 @@
 		color: var(--text-dim);
 	}
 
-	.more .spinner {
-		width: 26px;
-		height: 26px;
-		border-radius: 50%;
-		border: 4px solid var(--surface-strong);
-		opacity: 0.4;
+	.count.searching {
+		display: flex;
+		align-items: center;
+		gap: 12px;
 	}
 
-	.more .spinner.active {
-		border-top-color: var(--accent);
-		opacity: 1;
-		animation: spin 800ms linear infinite;
+	/* Fantôme : la place d'une jaquette (le reste vient de `.ghost`, app.css). */
+	.ghost {
+		aspect-ratio: 2 / 3;
 	}
 
 	.tile {
