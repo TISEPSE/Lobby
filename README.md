@@ -1,49 +1,129 @@
-# Prototype web — Interface Console
+<p align="center">
+  <img src="public/assets/logo.png" alt="Lobby" width="120">
+</p>
 
-Prototype de comparaison : même interface, en web (Svelte + Vite) dans une
-coquille **Tauri**. Le projet Godot à la racine n'est pas touché.
+<h1 align="center">Lobby</h1>
 
-## À quoi ça sert
+<p align="center">
+  Transforme ton PC en console de jeux.<br>
+  Tous tes jeux Steam et Epic au même endroit, sur ta TV, et tout se fait à la manette.<br>
+  Fonctionne sur Windows et Linux.
+</p>
 
-Juger si le web tient la promesse « design plus rapide à faire évoluer » :
-ici, un dégradé, une ombre, une animation ou un centrage se changent dans un
-fichier CSS, sans recompiler.
+<p align="center">
+  <a href="https://github.com/TISEPSE/Lobby/releases/latest"><img src="https://img.shields.io/github/v/release/TISEPSE/Lobby" alt="Dernière version"></a>
+  <a href="https://github.com/TISEPSE/Lobby/actions/workflows/release.yml"><img src="https://github.com/TISEPSE/Lobby/actions/workflows/release.yml/badge.svg" alt="Release"></a>
+</p>
 
-## Lancer
+## Captures d'écran
 
-```
+<p align="center">
+  <img src="docs/captures/accueil.jpg" alt="L'accueil : la rangée de jeux, l'artwork du jeu sélectionné en fond" width="100%">
+</p>
+
+Au premier lancement, tout se configure à la manette, puis tes jeux sont réunis dans la bibliothèque :
+
+<p align="center">
+  <img src="docs/captures/bienvenue.jpg" alt="Écran de bienvenue" width="49%">
+  <img src="docs/captures/bibliotheque.jpg" alt="Bibliothèque en grille" width="49%">
+</p>
+
+| | |
+|:---:|:---:|
+| ![Menu rapide](docs/captures/menu-rapide.jpg) | ![Options d'un jeu](docs/captures/options.jpg) |
+| Menu rapide | Options d'un jeu |
+| ![Recherche au clavier virtuel](docs/captures/recherche.jpg) | ![Statistiques](docs/captures/statistiques.jpg) |
+| Recherche au clavier virtuel | Statistiques de jeu |
+
+Les captures montrent une bibliothèque et des statistiques de démonstration.
+
+## Télécharger
+
+Prends la dernière version pour ton système sur la
+[page des releases](https://github.com/TISEPSE/Lobby/releases/latest).
+
+| Système | Formats |
+|---------|---------|
+| Windows | `.exe` (x64) |
+| Linux | `.deb`, `.AppImage` |
+
+L'installeur n'est pas signé : Windows peut afficher un avertissement
+SmartScreen au premier lancement.
+
+## Fonctionnalités
+
+- **Navigation 100 % manette** : croix ou stick, A valider, B retour, X options,
+  Y recherche. Glyphes Xbox ou PlayStation selon la manette branchée
+- **Détection des jeux** : Steam, Epic Games, raccourcis du Bureau et tes propres
+  dossiers, sur tous les disques
+- **Comptes Steam et Epic** : toute ta bibliothèque, même les jeux non installés,
+  avec ton temps de jeu. Connexion par la page officielle, sans clé d'API
+- **Accueil vivant** : reprendre le dernier jeu en un appui, temps de jeu de la
+  semaine, mises à jour Steam en cours
+- **Fiche de chaque jeu** : résumé, note, captures et bandes-annonces
+- **Lancement propre** : un écran de chargement cache le bureau, Lobby se met de
+  côté pendant la partie et revient quand elle se termine
+- **Menu en jeu** (View + Menu maintenus) pour revenir à Lobby ou quitter le jeu
+- **Statistiques** : calendrier d'activité, jeux les plus joués, séries record
+- **Jaquettes au choix** : Steam, Lutris ou SteamGridDB, pour la tuile comme pour
+  le fond
+- Menu rapide, recherche au clavier virtuel, écran de veille, sons d'interface
+  réglables
+- Lancement au démarrage de Windows, ou session Linux dédiée façon Steam Deck
+  (Gamescope + systemd, voir [`system/`](system/))
+
+Côté vie privée : Lobby ne contient aucune clé d'API. Les sessions Steam et Epic
+sont chiffrées sur le disque, et la seule clé facultative (SteamGridDB) reste
+dans tes réglages.
+
+## Développement
+
+Lobby est construit avec Tauri 2 (Rust + Svelte 5 + TypeScript).
+
+### Prérequis
+
+- Node.js 22 ou plus
+- Rust (stable)
+- Les dépendances système de Tauri ([voir la doc Tauri](https://v2.tauri.app/start/prerequisites/))
+
+### Démarrer
+
+```bash
+git clone https://github.com/TISEPSE/Lobby.git
+cd Lobby
 npm install
-npm run dev            # dans le navigateur, http://localhost:5177
-npm run tauri dev      # en application plein écran (compile la partie Rust)
+npm run tauri dev
 ```
 
-## Ce qui est branché
+### Dans le navigateur
 
-- **Tes vrais jeux Steam** : `src/lib/data/games.json` est généré depuis les
-  `appmanifest_*.acf` de ta bibliothèque, les images viennent du CDN public de
-  Steam (aucune clé d'API).
-- **Manette** : API Gamepad, seuils asymétriques (engagement 0,65 / relâchement
-  0,40) et répétition au maintien — même logique que l'`InputManager` de Godot.
-  Clavier également : flèches, Entrée, Échap.
-- **Transition accueil → fiche** : `view-transition-name` sur la jaquette. Le
-  navigateur anime le déplacement lui-même ; pas de jaquette fantôme à
-  positionner à la main.
-- **Lancement d'un jeu** : commande Rust `launch_game` (`steam -applaunch`), et
-  `is_running` pour savoir quand la partie se termine.
-
-## Outil de capture
-
-`?screen=detail&index=4` ouvre directement un écran, comme `--capture` côté
-Godot :
-
-```
-chrome --headless=new --window-size=1920,1080 --virtual-time-budget=9000 \
-  --screenshot=out.png "http://localhost:5177/?screen=detail&index=4"
+```bash
+npm run dev              # http://localhost:5177
 ```
 
-## Ce qui reste à faire si on garde cette voie
+L'interface tourne dans le navigateur avec une bibliothèque de démonstration,
+sans backend Rust. Des paramètres d'adresse ouvrent directement un écran, ce qui
+sert aux captures :
 
-- Bibliothèque en grille, réglages, panneau latéral, vidéo de démarrage.
-- Portage de la détection de jeux (Steam, Epic, `.lnk`) en Rust.
-- Session Gamescope : la coquille Tauri remplace l'export Godot, le reste du
-  dossier `system/` ne bouge pas.
+```bash
+google-chrome --headless=new --window-size=1920,1080 --virtual-time-budget=12000 \
+  --screenshot=out.png "http://localhost:5177/?nopad&screen=library"
+```
+
+### Commandes utiles
+
+```bash
+npm run tauri dev                          # lancer l'application
+npx svelte-check --threshold error         # vérifier les composants
+npx tsc --noEmit -p tsconfig.app.json      # vérifier les fichiers .ts
+npm run tauri build                        # construire l'installeur
+```
+
+Pour publier une version, pousser un tag `vX.Y.Z` : GitHub compile l'installeur
+Windows et les paquets Linux, puis les publie dans une release.
+
+## Limites connues
+
+- Interface en français seulement
+- Pas de version macOS
+- Manettes en mapping « standard » seulement
