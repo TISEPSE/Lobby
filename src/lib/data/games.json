@@ -43,16 +43,16 @@
 		"id": "steam-3664010",
 		"appid": "3664010",
 		"title": "Drift Legends 2",
-		"cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/3664010/library_600x900_2x.jpg",
-		"hero": "https://cdn.cloudflare.steamstatic.com/steam/apps/3664010/library_hero.jpg",
+		"cover": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/3664010/732888d7fec608baa907587bea6703ca926f9f36/library_600x900_2x.jpg",
+		"hero": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/3664010/bdb78b4ab5bfb6f694c639141a8f512619fb8f88/library_hero.jpg",
 		"logo": "https://cdn.cloudflare.steamstatic.com/steam/apps/3664010/logo.png"
 	},
 	{
 		"id": "steam-3124540",
 		"appid": "3124540",
 		"title": "Far Far West",
-		"cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/3124540/library_600x900_2x.jpg",
-		"hero": "https://cdn.cloudflare.steamstatic.com/steam/apps/3124540/library_hero.jpg",
+		"cover": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/3124540/b24c32ebbee7032db69c4e374617fde75c6abe42/library_capsule_2x.jpg",
+		"hero": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/3124540/4faec44dbc0b62c37a6bc182b95eb2cbb25fc3ee/library_hero.jpg",
 		"logo": "https://cdn.cloudflare.steamstatic.com/steam/apps/3124540/logo.png"
 	},
 	{
@@ -99,8 +99,8 @@
 		"id": "steam-2250500",
 		"appid": "2250500",
 		"title": "Rhythia",
-		"cover": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/library_600x900_2x.jpg",
-		"hero": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/library_hero.jpg",
+		"cover": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/2250500/3ca0c4c89320b66095c6cd0531c4d74bc1114e3d/library_capsule_2x.jpg",
+		"hero": "https://shared.cloudflare.steamstatic.com/store_item_assets/steam/apps/2250500/a395cbc0fa7ef40fb4fcd98a9a698680e2629b81/library_hero.jpg",
 		"logo": "https://cdn.cloudflare.steamstatic.com/steam/apps/2250500/logo.png"
 	}
 ]
